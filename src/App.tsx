@@ -424,62 +424,92 @@ function App() {
     <div className="w-full h-screen bg-[#0b1120] text-slate-300 font-sans overflow-hidden flex flex-col">
 
       {/* ═══ MOBILE HEADER ═══ */}
-      <header className={`md:hidden shrink-0 px-4 py-3 z-50 relative rounded-b-2xl transition-colors duration-500 backdrop-blur-md
-        ${tsunamiAlert ? 'bg-red-950/95 border-b border-red-900/50' : 'bg-[#0f172a]/95 border-b border-slate-800/50'}`}>
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${tsunamiAlert ? 'bg-red-500/20' : 'bg-indigo-500/20'}`}>
-              <Shield className={`w-5 h-5 ${tsunamiAlert ? 'text-red-400' : 'text-indigo-400'}`} />
+      <header className={`md:hidden shrink-0 px-4 py-3 z-50 relative transition-colors duration-500 backdrop-blur-md
+        ${tsunamiAlert ? 'bg-red-950/95 border-b border-red-900/50' : 'bg-[#0a1020]/95 border-b border-slate-800/60'}`}>
+        <div className="flex items-center justify-between gap-2">
+          {/* Brand */}
+          <div className="flex items-center gap-2.5">
+            <div className={`w-9 h-9 rounded-xl flex items-center justify-center shrink-0 ${tsunamiAlert ? 'bg-red-500/20 border border-red-500/30' : 'bg-indigo-500/20 border border-indigo-500/30'}`}>
+              <Shield className={`w-4 h-4 ${tsunamiAlert ? 'text-red-400' : 'text-indigo-400'}`} />
             </div>
             <div>
-              <h1 className="text-white font-black text-base tracking-tight leading-tight">TES SKRIPSI</h1>
-              <p className="text-[10px] text-slate-500 font-medium">Sistem Evakuasi Kota Palu</p>
+              <h1 className="text-white font-black text-sm tracking-widest leading-none">AEGIS RESPONSE</h1>
+              <p className="text-[9px] text-slate-600 font-mono mt-0.5">Sistem Evakuasi · {terminalId}</p>
             </div>
           </div>
-          <button
-            onClick={() => tsunamiAlert ? deactivateTsunamiAlert() : setShowTsunamiConfirm(true)}
-            className={`flex items-center gap-2 px-4 py-2.5 rounded-xl font-bold text-xs transition-all
-              ${tsunamiAlert ? 'bg-red-500/30 text-red-200 border border-red-500/50' : 'bg-red-600 hover:bg-red-500 text-white'}`}>
-            <div className={`w-2 h-2 rounded-full shrink-0 ${tsunamiAlert ? 'bg-red-400 animate-pulse' : 'bg-red-300'}`} />
-            <span className="leading-tight text-center">SIMULASI<br/>TSUNAMI</span>
-          </button>
+          {/* Status indicators */}
+          <div className="flex items-center gap-1.5 mx-auto">
+            <div className={`flex items-center gap-1 px-2 py-1 rounded-full text-[9px] font-bold border ${tsunamiAlert ? 'bg-red-900/50 border-red-700/50 text-red-300' : 'bg-emerald-900/30 border-emerald-700/30 text-emerald-400'}`}>
+              <Radio className={`w-2.5 h-2.5 ${tsunamiAlert ? 'animate-pulse' : ''}`}/>
+              <span>SENSOR</span>
+            </div>
+            <div className={`flex items-center gap-1 px-2 py-1 rounded-full text-[9px] font-bold border ${gpsTracking ? 'bg-indigo-900/50 border-indigo-700/50 text-indigo-300' : 'bg-slate-800/50 border-slate-700/50 text-slate-500'}`}>
+              <Satellite className={`w-2.5 h-2.5 ${gpsTracking ? 'animate-pulse' : ''}`}/>
+              <span>{gpsTracking ? 'GPS' : 'OFFLINE'}</span>
+            </div>
+          </div>
+          {/* Avatar + Tsunami btn */}
+          <div className="flex items-center gap-2 shrink-0">
+            <button
+              onClick={() => tsunamiAlert ? deactivateTsunamiAlert() : setShowTsunamiConfirm(true)}
+              className={`flex items-center gap-1.5 px-3 py-2 rounded-xl font-bold text-[10px] transition-all
+                ${tsunamiAlert ? 'bg-red-500/30 text-red-200 border border-red-500/50' : 'bg-red-600 hover:bg-red-500 text-white'}`}>
+              <div className={`w-1.5 h-1.5 rounded-full shrink-0 ${tsunamiAlert ? 'bg-red-400 animate-pulse' : 'bg-red-300'}`} />
+              <span className="leading-tight text-center">{tsunamiAlert ? 'STOP' : 'SIMULASI'}</span>
+            </button>
+            <div className="w-8 h-8 rounded-full bg-indigo-500/20 border border-indigo-500/40 flex items-center justify-center shrink-0">
+              <Shield className="w-4 h-4 text-indigo-400"/>
+            </div>
+          </div>
         </div>
       </header>
 
       {/* ═══ DESKTOP HEADER ═══ */}
       <header className={`hidden md:flex h-[60px] shrink-0 border-b items-center justify-between px-6 z-50 relative transition-colors duration-500
-        ${tsunamiAlert ? 'bg-red-950 border-red-900/50' : 'bg-[#0f172a] border-slate-800'}`}>
-        <div className="flex items-center gap-3 w-[200px]">
-          <button onClick={() => setShowLeftSidebar(!showLeftSidebar)} className="p-1 hover:bg-slate-800 rounded-md text-slate-400 hover:text-white transition-colors">
-            <Menu className="w-5 h-5" />
+        ${tsunamiAlert ? 'bg-red-950 border-red-900/50' : 'bg-[#0a1020] border-slate-800/60'}`}>
+        {/* Left: brand */}
+        <div className="flex items-center gap-3">
+          <button onClick={() => setShowLeftSidebar(!showLeftSidebar)} className="p-1.5 hover:bg-slate-800 rounded-lg text-slate-500 hover:text-white transition-colors">
+            <Menu className="w-4 h-4" />
           </button>
-          <Shield className={`w-6 h-6 ${tsunamiAlert ? 'text-red-500' : 'text-indigo-500'}`} />
-          <h1 className="text-white font-black text-xl tracking-tighter">TES SKRIPSI</h1>
+          <div className={`w-8 h-8 rounded-xl flex items-center justify-center ${tsunamiAlert ? 'bg-red-500/20 border border-red-500/30' : 'bg-indigo-500/20 border border-indigo-500/30'}`}>
+            <Shield className={`w-4 h-4 ${tsunamiAlert ? 'text-red-400' : 'text-indigo-400'}`} />
+          </div>
+          <div>
+            <h1 className="text-white font-black text-sm tracking-widest leading-none">AEGIS RESPONSE</h1>
+            <p className="text-[9px] text-slate-600 font-mono">TES SKRIPSI · Kota Palu</p>
+          </div>
         </div>
-        <div className="flex items-center gap-6">
-          <div className="hidden md:flex items-center gap-3 mr-2">
-            <div className="flex items-center gap-2" title="Sensor Status">
-              <div className={`p-1.5 rounded-md ${tsunamiAlert ? 'bg-red-500/20 text-red-400' : 'bg-emerald-500/10 text-emerald-400'}`}>
-                <Radio className={`w-4 h-4 ${tsunamiAlert ? 'animate-pulse' : ''}`} />
-              </div>
-              <div className="hidden lg:flex flex-col">
-                <span className="text-[9px] text-slate-500 font-bold uppercase tracking-wider leading-none mb-0.5">Sensor</span>
-                <span className={`text-[10px] font-bold uppercase tracking-widest leading-none ${tsunamiAlert ? 'text-red-400' : 'text-emerald-400'}`}>Active</span>
-              </div>
+        {/* Center: status indicators */}
+        <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2" title="Sensor Seismik">
+            <div className={`p-1.5 rounded-lg ${tsunamiAlert ? 'bg-red-500/20 text-red-400' : 'bg-emerald-500/10 text-emerald-400'}`}>
+              <Radio className={`w-3.5 h-3.5 ${tsunamiAlert ? 'animate-pulse' : ''}`} />
             </div>
-            <div className="w-px h-6 bg-slate-800 mx-1" />
-            <div className="flex items-center gap-2" title="GPS">
-              <div className={`p-1.5 rounded-md ${gpsTracking ? 'bg-indigo-500/20 text-indigo-400' : 'bg-emerald-500/10 text-emerald-400'}`}>
-                <Satellite className={`w-4 h-4 ${gpsTracking ? 'animate-pulse' : ''}`} />
-              </div>
-              <div className="hidden lg:flex flex-col">
-                <span className="text-[9px] text-slate-500 font-bold uppercase tracking-wider leading-none mb-0.5">Sat-Link</span>
-                <span className={`text-[10px] font-bold uppercase tracking-widest leading-none ${gpsTracking ? 'text-indigo-400' : 'text-emerald-400'}`}>
-                  {gpsTracking ? 'Tracking' : 'Linked'}
-                </span>
-              </div>
+            <div className="hidden lg:flex flex-col">
+              <span className="text-[8px] text-slate-600 font-bold uppercase tracking-wider leading-none mb-0.5">Sensor</span>
+              <span className={`text-[9px] font-bold uppercase leading-none ${tsunamiAlert ? 'text-red-400' : 'text-emerald-400'}`}>{tsunamiAlert ? 'ALERT' : 'Active'}</span>
             </div>
           </div>
+          <div className="w-px h-5 bg-slate-800"/>
+          <div className="flex items-center gap-2" title="GPS Satelit">
+            <div className={`p-1.5 rounded-lg ${gpsTracking ? 'bg-indigo-500/20 text-indigo-400' : 'bg-slate-800 text-slate-500'}`}>
+              <Satellite className={`w-3.5 h-3.5 ${gpsTracking ? 'animate-pulse' : ''}`} />
+            </div>
+            <div className="hidden lg:flex flex-col">
+              <span className="text-[8px] text-slate-600 font-bold uppercase tracking-wider leading-none mb-0.5">Sat-Link</span>
+              <span className={`text-[9px] font-bold uppercase leading-none ${gpsTracking ? 'text-indigo-400' : 'text-slate-500'}`}>{gpsTracking ? 'Tracking' : 'Standby'}</span>
+            </div>
+          </div>
+          <div className="w-px h-5 bg-slate-800"/>
+          {/* Terminal ID chip */}
+          <div className="hidden lg:flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-slate-800/60 border border-slate-700/40">
+            <div className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"/>
+            <span className="text-[9px] font-mono text-slate-400 font-bold">{terminalId}</span>
+          </div>
+        </div>
+        {/* Right: actions + avatar */}
+        <div className="flex items-center gap-3">
           <button
             onClick={() => tsunamiAlert ? deactivateTsunamiAlert() : setShowTsunamiConfirm(true)}
             className={`flex items-center gap-2 px-4 py-1.5 rounded-lg font-bold text-sm transition-all
@@ -487,6 +517,9 @@ function App() {
             <AlertTriangle className={`w-4 h-4 ${tsunamiAlert ? 'animate-pulse text-red-400' : ''}`} />
             {tsunamiAlert ? 'HENTIKAN SIMULASI' : 'SIMULASI TSUNAMI'}
           </button>
+          <div className="w-9 h-9 rounded-full bg-indigo-500/20 border border-indigo-500/40 flex items-center justify-center shrink-0" title="User Profile">
+            <Shield className="w-4 h-4 text-indigo-400"/>
+          </div>
         </div>
       </header>
 
@@ -575,7 +608,7 @@ function App() {
           </div>
 
           {/* Map */}
-          <MapContainer center={[-0.8917, 119.8577]} zoom={14} className="w-full h-full" zoomControl={false}>
+          <MapContainer center={[-0.8917, 119.8577]} zoom={14} minZoom={10} maxZoom={20} className="w-full h-full" zoomControl={false}>
             <TileLayer url={mapTileUrl} key={mapTileKey}
               attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
             />
@@ -946,19 +979,64 @@ function App() {
               <h2 className="text-3xl font-black text-white tracking-tight leading-none">EVACUATION<br/>HISTORY</h2>
             </div>
 
-            {/* Avg Response card */}
+            {/* Avg Response card + Visual Gauge */}
             <div className="px-5 pb-4 shrink-0">
-              <div className="p-4 rounded-2xl border border-slate-700/40 flex items-center justify-between" style={{ background: '#0f1a2e' }}>
-                <div>
-                  <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-1">Avg. Response</p>
-                  {avgResponse
-                    ? <p className="text-4xl font-black text-white">{avgResponse}<span className="text-xl text-slate-400 font-bold ml-1">m</span></p>
-                    : <p className="text-xl font-black text-slate-600">— m</p>
-                  }
+              <div className="p-4 rounded-2xl border border-slate-700/40" style={{ background: '#0f1a2e' }}>
+                <div className="flex items-center justify-between mb-3">
+                  <div>
+                    <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-1">Avg. Response Time</p>
+                    {avgResponse
+                      ? <p className="text-4xl font-black text-white">{avgResponse}<span className="text-xl text-slate-400 font-bold ml-1">m</span></p>
+                      : <p className="text-xl font-black text-slate-600">— m</p>
+                    }
+                  </div>
+                  <div className="w-12 h-12 rounded-xl bg-indigo-500/20 border border-indigo-500/20 flex items-center justify-center">
+                    <Activity className="w-6 h-6 text-indigo-400"/>
+                  </div>
                 </div>
-                <div className="w-12 h-12 rounded-xl bg-indigo-500/20 flex items-center justify-center">
-                  <Activity className="w-6 h-6 text-indigo-400"/>
-                </div>
+                {/* Visual Gauge - KPI performance bar */}
+                {avgResponse && (() => {
+                  const val = parseFloat(avgResponse)
+                  const target = 30 // 30 menit = target ideal
+                  const pct = Math.min(val / target * 100, 100)
+                  const color = val <= 20 ? '#22c55e' : val <= 35 ? '#f59e0b' : '#ef4444'
+                  const label = val <= 20 ? 'EXCELLENT' : val <= 35 ? 'GOOD' : 'NEEDS IMPROVEMENT'
+                  return (
+                    <div>
+                      <div className="flex justify-between text-[9px] font-bold uppercase tracking-widest mb-1.5">
+                        <span className="text-slate-600">Performance KPI</span>
+                        <span style={{ color }}>{label}</span>
+                      </div>
+                      <div className="w-full h-2 rounded-full bg-slate-800 overflow-hidden">
+                        <div className="h-full rounded-full transition-all duration-700" style={{ width: `${pct}%`, background: color }}/>
+                      </div>
+                      <div className="flex justify-between text-[8px] text-slate-600 mt-1">
+                        <span>0m</span>
+                        <span className="text-slate-500">Target ≤ {target}m</span>
+                        <span>{target}m+</span>
+                      </div>
+                      {/* Trend bars — last 5 logs */}
+                      {evacuationHistory.length > 1 && (
+                        <div className="mt-3 pt-3 border-t border-slate-800/60">
+                          <p className="text-[8px] text-slate-600 uppercase tracking-widest mb-1.5 font-bold">Last {Math.min(evacuationHistory.length, 6)} Sessions</p>
+                          <div className="flex items-end gap-1 h-8">
+                            {evacuationHistory.slice(0, 6).reverse().map((r, i) => {
+                              const t = r.walkingTime ?? 0
+                              const h = Math.max(Math.min(t / 60 * 100, 100), 10)
+                              const c = t <= 20 ? '#22c55e' : t <= 35 ? '#f59e0b' : '#ef4444'
+                              return (
+                                <div key={i} className="flex-1 rounded-sm transition-all" style={{ height: `${h}%`, background: c, opacity: 0.7 }}/>
+                              )
+                            })}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  )
+                })()}
+                {!avgResponse && (
+                  <p className="text-[10px] text-slate-600">Jalankan simulasi untuk melihat statistik performa.</p>
+                )}
               </div>
             </div>
 
