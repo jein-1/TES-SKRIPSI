@@ -7,7 +7,7 @@ import {
   AlertTriangle, Shield, MapPin, Info, ChevronRight, X, Locate,
   Volume2, Menu, Radio, Satellite, Map as MapIcon, HelpCircle, Cpu,
   Plus, Minus, Crosshair, ArrowRight, History, Bell, Vibrate,
-  SlidersHorizontal, Trash2, Navigation2, Lock, RefreshCw, Activity, Clock
+  SlidersHorizontal, Trash2, Navigation2, Lock, RefreshCw, Activity, Clock, Check
 } from 'lucide-react'
 import { motion, AnimatePresence } from 'motion/react'
 
@@ -147,6 +147,16 @@ function MapFlyTo({ position, zoom, onComplete }: {
     onComplete()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []) // intentionally empty — new key prop forces fresh mount
+  return null
+}
+
+// MapResizer: fix blank white area — Leaflet needs invalidateSize() when container changes
+function MapResizer({ showPanel, showLeftSidebar }: { showPanel: boolean; showLeftSidebar: boolean }) {
+  const map = useMap()
+  useEffect(() => {
+    const t = setTimeout(() => { map.invalidateSize() }, 200)
+    return () => clearTimeout(t)
+  }, [showPanel, showLeftSidebar, map])
   return null
 }
 
@@ -614,6 +624,8 @@ function App() {
             />
             <CustomMapControls userPosition={userPosition} onLocateClick={() => { if (!gpsTracking) startGpsTracking() }} />
             <LocationMarker onLocationSet={handleLocationSet} />
+            {/* Fix blank white area when panel resizes map container */}
+            <MapResizer showPanel={showPanel} showLeftSidebar={showLeftSidebar} />
 
             {/* FIX: key forces fresh mount per unique position; onComplete resets flyToPos */}
             {flyToPos && (
@@ -1279,27 +1291,41 @@ function App() {
 
                 {/* Cartography Theme */}
                 <p className="text-[9px] text-slate-600 uppercase tracking-widest font-bold mb-2">Cartography Theme</p>
-                <div className="grid grid-cols-3 gap-2 mb-5">
+                <div className="grid grid-cols-3 gap-3 mb-5">
                   {([
-                    { id: 'standard'      as const, label: 'Standard',      bg: '#1a3358', Icon: MapIcon    },
-                    { id: 'tactical-dark' as const, label: 'Tactical Dark', bg: '#070d1a', Icon: MapIcon    },
-                    { id: 'satellite-hud' as const, label: 'Satellite HUD', bg: '#0d1a0d', Icon: Satellite  },
-                  ]).map(theme => (
-                    <button key={theme.id} onClick={() => setSettings(s => ({ ...s, cartographyTheme: theme.id }))}
-                      className={`rounded-xl overflow-hidden border-2 transition-all
-                        ${settings.cartographyTheme === theme.id ? 'border-indigo-500' : 'border-slate-700/40 hover:border-slate-600'}`}>
-                      <div className="h-12 flex items-center justify-center" style={{ background: theme.bg }}>
-                        <theme.Icon className={`w-5 h-5 ${
-                          theme.id === 'satellite-hud' ? 'text-emerald-400'
-                          : theme.id === 'tactical-dark' ? 'text-slate-300'
-                          : 'text-blue-400'
-                        }`}/>
-                      </div>
-                      <div className="py-1.5 text-center" style={{ background: '#0a0f1a' }}>
-                        <p className="text-[8px] font-bold text-slate-400 uppercase tracking-wide leading-tight px-1">{theme.label}</p>
-                      </div>
-                    </button>
-                  ))}
+                    { id: 'standard'      as const, label: 'Standard',      previewBg: 'linear-gradient(135deg,#1a3a6e,#2a5298)', iconColor: 'text-blue-300',    Icon: MapIcon   },
+                    { id: 'tactical-dark' as const, label: 'Tact. Dark',    previewBg: 'linear-gradient(135deg,#0a0e1a,#111827)', iconColor: 'text-slate-300',  Icon: MapIcon   },
+                    { id: 'satellite-hud' as const, label: 'Satellite',     previewBg: 'linear-gradient(135deg,#0e2210,#1a3a1a)', iconColor: 'text-emerald-400', Icon: Satellite },
+                  ]).map(theme => {
+                    const isActive = settings.cartographyTheme === theme.id
+                    return (
+                      <button key={theme.id} onClick={() => setSettings(s => ({ ...s, cartographyTheme: theme.id }))}
+                        className={`relative rounded-xl overflow-hidden transition-all duration-200 ${
+                          isActive
+                            ? 'ring-2 ring-indigo-500 ring-offset-1 ring-offset-[#0c1525] shadow-[0_0_16px_rgba(99,102,241,0.35)]'
+                            : 'ring-1 ring-slate-700/50 hover:ring-slate-600'
+                        }`}>
+                        {/* Preview box */}
+                        <div className="h-14 flex items-center justify-center relative" style={{ background: theme.previewBg }}>
+                          <theme.Icon className={`w-5 h-5 ${theme.iconColor} ${isActive ? 'drop-shadow-[0_0_6px_rgba(255,255,255,0.5)]' : 'opacity-70'}`}/>
+                          {/* Checkmark badge */}
+                          {isActive && (
+                            <div className="absolute top-1.5 right-1.5 w-4 h-4 bg-indigo-500 rounded-full flex items-center justify-center shadow">
+                              <Check className="w-2.5 h-2.5 text-white"/>
+                            </div>
+                          )}
+                        </div>
+                        {/* Label */}
+                        <div className={`py-1.5 text-center transition-colors ${
+                          isActive ? 'bg-indigo-600/30' : 'bg-[#070c18]'
+                        }`}>
+                          <p className={`text-[8px] font-bold uppercase tracking-wide leading-tight px-1 ${
+                            isActive ? 'text-indigo-200' : 'text-slate-500'
+                          }`}>{theme.label}</p>
+                        </div>
+                      </button>
+                    )
+                  })}
                 </div>
 
                 {/* Safe Zone Radius */}
