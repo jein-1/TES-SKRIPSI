@@ -1,100 +1,22 @@
 import { useState, useCallback, useEffect, useRef } from 'react'
-import { MapContainer, TileLayer, Marker, Popup, Polyline, Polygon, useMap, useMapEvents } from 'react-leaflet'
-import L from 'leaflet'
+import { MapContainer, TileLayer, Marker, Popup, Polyline, Polygon, Circle, useMap, useMapEvents } from 'react-leaflet'
 import 'leaflet/dist/leaflet.css'
+// ── Modules ──────────────────────────────────────────────────────
 import { shelters, hazardZones, findOptimalEvacuationRoutes, type RouteResult } from './lib/evacuation'
+import { TILE_NORMAL, TILE_DARK, TILE_SATELLITE, routeColors, routeBadgeColors } from './constants/mapConfig'
+import { shelterIcon, userIcon, userIconAlert } from './components/map/icons'
+import { FlyToController, MapResizer, CustomMapControls } from './components/map/MapComponents'
+import type { ActivePage, HistoryFilter, EvacuationRecord, AppSettings } from './types'
+import { DEFAULT_SETTINGS } from './types'
+// ── UI Libraries ─────────────────────────────────────────────────
 import {
   AlertTriangle, Shield, MapPin, Info, ChevronRight, X, Locate,
   Volume2, Menu, Radio, Satellite, Map as MapIcon, HelpCircle, Cpu,
-  Plus, Minus, Crosshair, ArrowRight, History, Bell, Vibrate,
-  SlidersHorizontal, Trash2, Navigation2, Lock, RefreshCw, Activity, Clock, Check
+  ArrowRight, History, Bell, Vibrate, Crosshair,
+  SlidersHorizontal, Trash2, Navigation2, Lock, RefreshCw, Activity, Clock, Check, CheckCircle2
 } from 'lucide-react'
 import { motion, AnimatePresence } from 'motion/react'
 
-// ═══════════════════════════════════════════════════════════════
-// TYPES
-// ═══════════════════════════════════════════════════════════════
-type ActivePage = 'map' | 'history' | 'settings'
-type HistoryFilter = 'all' | 'real' | 'simulation'
-
-interface EvacuationRecord {
-  id: string
-  timestamp: Date
-  type: 'simulation' | 'real'
-  eventName: string
-  routeName: string
-  distance: number | null
-  walkingTime: number | null
-  algorithm: string
-  userLat: number
-  userLng: number
-}
-
-interface AppSettings {
-  algorithm: 'dijkstra' | 'haversine'
-  sensorSensitivity: number       // 0–100
-  soundAlert: boolean
-  vibrationAlert: boolean
-  pushAlerts: boolean
-  cartographyTheme: 'standard' | 'tactical-dark' | 'satellite-hud'
-  safeZoneRadius: number          // km
-  autoStartGPS: boolean
-  showHazardZones: boolean
-}
-
-const DEFAULT_SETTINGS: AppSettings = {
-  algorithm: 'dijkstra',
-  sensorSensitivity: 75,
-  soundAlert: true,
-  vibrationAlert: false,
-  pushAlerts: true,
-  cartographyTheme: 'standard',
-  safeZoneRadius: 2.5,
-  autoStartGPS: true,
-  showHazardZones: true,
-}
-
-// ═══════════════════════════════════════════════════════════════
-// MAP TILE URLS
-// ═══════════════════════════════════════════════════════════════
-const TILE_NORMAL    = 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png'
-const TILE_DARK      = 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png'
-const TILE_SATELLITE = 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}'
-
-// ═══════════════════════════════════════════════════════════════
-// LEAFLET ICON SETUP
-// ═══════════════════════════════════════════════════════════════
-delete (L.Icon.Default.prototype as any)._getIconUrl
-L.Icon.Default.mergeOptions({
-  iconRetinaUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/images/marker-icon-2x.png',
-  iconUrl:       'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/images/marker-icon.png',
-  shadowUrl:     'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/images/marker-shadow.png',
-})
-
-const shelterIcon = new L.Icon({
-  iconUrl:       'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/images/marker-icon.png',
-  iconRetinaUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/images/marker-icon-2x.png',
-  shadowUrl:     'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/images/marker-shadow.png',
-  iconSize: [25, 41], iconAnchor: [12, 41], popupAnchor: [1, -34], shadowSize: [41, 41],
-  className: 'shelter-marker',
-})
-
-const userIcon = new L.DivIcon({
-  html: `<div style="width:20px;height:20px;background:linear-gradient(135deg,#6366f1,#8b5cf6);border:3px solid white;border-radius:50%;box-shadow:0 0 12px rgba(99,102,241,0.7),0 0 24px rgba(99,102,241,0.3);animation:userPulse 2s infinite;"></div>
-  <style>@keyframes userPulse{0%,100%{box-shadow:0 0 12px rgba(99,102,241,0.7);}50%{box-shadow:0 0 24px rgba(99,102,241,1),0 0 48px rgba(99,102,241,0.5);}}</style>`,
-  className: '', iconSize: [20, 20], iconAnchor: [10, 10],
-})
-
-const userIconAlert = new L.DivIcon({
-  html: `<div style="width:36px;height:36px;display:flex;align-items:center;justify-content:center;filter:drop-shadow(0 0 8px rgba(239,68,68,0.8));animation:navPulse 1s infinite;">
-    <svg viewBox="0 0 24 24" width="32" height="32" xmlns="http://www.w3.org/2000/svg">
-      <path d="M12 2L22 21L12 17L2 21L12 2Z" fill="white" stroke="white" stroke-width="1.5" stroke-linejoin="round"/>
-      <path d="M12 4L19.5 19.5L12 16.5L4.5 19.5L12 4Z" fill="#ef4444"/>
-    </svg>
-  </div>
-  <style>@keyframes navPulse{0%,100%{transform:scale(1) translateY(0);filter:drop-shadow(0 0 8px rgba(239,68,68,0.6));}50%{transform:scale(1.1) translateY(-2px);filter:drop-shadow(0 0 20px rgba(239,68,68,1));}}</style>`,
-  className: '', iconSize: [36, 36], iconAnchor: [18, 18],
-})
 
 // ═══════════════════════════════════════════════════════════════
 // ALARM SOUND
@@ -150,38 +72,6 @@ function MapFlyTo({ position, zoom, onComplete }: {
   return null
 }
 
-// MapResizer: fix blank white area — Leaflet needs invalidateSize() when container changes
-function MapResizer({ showPanel, showLeftSidebar }: { showPanel: boolean; showLeftSidebar: boolean }) {
-  const map = useMap()
-  useEffect(() => {
-    const t = setTimeout(() => { map.invalidateSize() }, 200)
-    return () => clearTimeout(t)
-  }, [showPanel, showLeftSidebar, map])
-  return null
-}
-
-function CustomMapControls({ userPosition, onLocateClick }: {
-  userPosition: [number, number] | null; onLocateClick: () => void
-}) {
-  const map = useMap()
-  return (
-    <div className="absolute left-3 md:left-6 top-[140px] md:top-[180px] z-[1000] flex flex-col gap-2 pointer-events-auto">
-      <button onClick={() => map.zoomIn()} title="Zoom In"
-        className="w-9 h-9 bg-[#1e293b]/90 backdrop-blur-md hover:bg-slate-700 rounded-xl flex items-center justify-center text-slate-300 shadow-[0_4px_20px_rgba(0,0,0,0.5)] border border-slate-700 transition-colors">
-        <Plus className="w-5 h-5" />
-      </button>
-      <button onClick={() => map.zoomOut()} title="Zoom Out"
-        className="w-9 h-9 bg-[#1e293b]/90 backdrop-blur-md hover:bg-slate-700 rounded-xl flex items-center justify-center text-slate-300 shadow-[0_4px_20px_rgba(0,0,0,0.5)] border border-slate-700 transition-colors">
-        <Minus className="w-5 h-5" />
-      </button>
-      <button onClick={() => { onLocateClick(); if (userPosition) map.flyTo(userPosition, 14, { duration: 1.5 }) }}
-        title="My Location"
-        className="w-9 h-9 mt-2 bg-[#1e293b]/90 backdrop-blur-md hover:bg-slate-700 rounded-xl flex items-center justify-center text-slate-300 shadow-[0_4px_20px_rgba(0,0,0,0.5)] border border-slate-700 transition-colors">
-        <Crosshair className="w-5 h-5" />
-      </button>
-    </div>
-  )
-}
 
 // ═══════════════════════════════════════════════════════════════
 // MINI ROUTE MAP — decorative SVG for history log cards
@@ -235,6 +125,9 @@ function fmtDate(d: Date) {
 // ═══════════════════════════════════════════════════════════════
 // APP
 // ═══════════════════════════════════════════════════════════════
+// ── Arrival detection radius (metres) — same ballpark as Google Maps
+const ARRIVAL_RADIUS_METERS = 50
+
 function App() {
   // ── Map state ──────────────────────────────────────────────
   const [userPosition, setUserPosition] = useState<[number, number] | null>(null)
@@ -243,6 +136,8 @@ function App() {
   const [showPanel, setShowPanel] = useState(false)
   const [isCalculating, setIsCalculating] = useState(false)
   const [flyToPos, setFlyToPos] = useState<[number, number] | null>(null)
+  const [gpsAccuracy, setGpsAccuracy] = useState<number | null>(null)   // metres
+  const [arrivedShelterId, setArrivedShelterId] = useState<string | null>(null)
 
   // ── GPS & Alert state ──────────────────────────────────────
   const [gpsTracking, setGpsTracking] = useState(false)
@@ -293,6 +188,10 @@ function App() {
   const alarmRef = useRef(createAlarmSound())
   const gpsWatchRef = useRef<number | null>(null)
   const gpsAutoStartedRef = useRef(false)
+  // FIX: track if user manually closed the panel so GPS updates don't reopen it
+  const panelUserClosedRef = useRef(false)
+  // FIX: only fly to GPS position on first fix to prevent map shaking
+  const hasFirstGPSFixRef = useRef(false)
 
   // Persist
   useEffect(() => { localStorage.setItem('appSettings', JSON.stringify(settings)) }, [settings])
@@ -338,15 +237,46 @@ function App() {
       navigator.geolocation.clearWatch(gpsWatchRef.current)
       gpsWatchRef.current = null
     }
+    // Reset flags when GPS is freshly started
+    panelUserClosedRef.current = false
+    hasFirstGPSFixRef.current = false
     setGpsTracking(true); setGpsError(null); setIsCalculating(true)
     gpsWatchRef.current = navigator.geolocation.watchPosition(
       (pos) => {
+        // Show accuracy badge but don't filter — let all positions through
+        setGpsAccuracy(pos.coords.accuracy)
         const newPos: [number, number] = [pos.coords.latitude, pos.coords.longitude]
         setUserPosition(newPos)
-        setFlyToPos(newPos)
+        // Only fly to position on the FIRST GPS fix to prevent map shaking
+        if (!hasFirstGPSFixRef.current) {
+          hasFirstGPSFixRef.current = true
+          setFlyToPos(newPos)
+        }
         const routeResults = findOptimalEvacuationRoutes(newPos[0], newPos[1])
-        setRoutes(routeResults); setSelectedRoute(0); setShowPanel(true); setIsCalculating(false)
+        setRoutes(routeResults)
+        setSelectedRoute(0)
+        setIsCalculating(false)
+        // Only open panel if user hasn't manually closed it
+        if (!panelUserClosedRef.current) {
+          setShowPanel(true)
+        }
         saveHistoryRecord(routeResults, tsunamiAlert ? 'simulation' : 'real', newPos)
+
+        // ── Arrival detection: check if within ARRIVAL_RADIUS_METERS of any shelter ──
+        // `shelters` already imported at top-level — no dynamic import needed
+        const toRad = (d: number) => d * (Math.PI / 180)
+        const arrived = shelters.find(sh => {
+          const R = 6371000 // metres
+          const dLat = toRad(sh.lat - newPos[0])
+          const dLng = toRad(sh.lng - newPos[1])
+          const a =
+            Math.sin(dLat / 2) ** 2 +
+            Math.cos(toRad(newPos[0])) * Math.cos(toRad(sh.lat)) *
+            Math.sin(dLng / 2) ** 2
+          const dist = R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a))
+          return dist <= ARRIVAL_RADIUS_METERS
+        })
+        setArrivedShelterId(arrived ? arrived.id : null)
       },
       (err) => {
         setIsCalculating(false)
@@ -354,7 +284,8 @@ function App() {
         setGpsTracking(false)
         if (gpsWatchRef.current !== null) { navigator.geolocation.clearWatch(gpsWatchRef.current); gpsWatchRef.current = null }
       },
-      { enableHighAccuracy: true, timeout: 20000, maximumAge: 5000 }
+      // ⚠️ JANGAN DIUBAH — GPS optimal: fresh position, high accuracy, no filter
+      { enableHighAccuracy: true, timeout: 20000, maximumAge: 0 }
     )
   }, [saveHistoryRecord, tsunamiAlert])
 
@@ -416,6 +347,14 @@ function App() {
 
   const mapTileKey = tsunamiAlert ? 'tsunami-dark' : settings.cartographyTheme
 
+  // FIX: maxNativeZoom prevents blank tiles when zoomed past the tile provider's max zoom
+  // Tiles will stretch instead of going blank
+  const mapMaxNativeZoom = (tsunamiAlert || settings.cartographyTheme === 'tactical-dark')
+    ? 20   // CartoDB dark supports up to zoom 20
+    : settings.cartographyTheme === 'satellite-hud'
+    ? 19   // ArcGIS World Imagery native (safe cap)
+    : 19   // OpenStreetMap max native zoom
+
   const routeColors = tsunamiAlert ? ['#ef4444', '#f59e0b', '#22c55e'] : ['#6366f1', '#f59e0b', '#10b981']
   const routeBadgeColors = ['bg-indigo-500', 'bg-amber-500', 'bg-emerald-500']
 
@@ -431,46 +370,56 @@ function App() {
   // RENDER
   // ════════════════════════════════════════════════════════════
   return (
-    <div className="w-full h-screen bg-[#0b1120] text-slate-300 font-sans overflow-hidden flex flex-col">
+    <div className="w-full h-full bg-[#0b1120] text-slate-300 font-sans overflow-hidden flex flex-col">
 
-      {/* ═══ MOBILE HEADER ═══ */}
-      <header className={`md:hidden shrink-0 px-4 py-3 z-50 relative transition-colors duration-500 backdrop-blur-md
+      {/* ═══ MOBILE HEADER — 2-row compact layout for all screen sizes ═══ */}
+      <header className={`md:hidden shrink-0 z-50 relative transition-colors duration-500 backdrop-blur-md
         ${tsunamiAlert ? 'bg-red-950/95 border-b border-red-900/50' : 'bg-[#0a1020]/95 border-b border-slate-800/60'}`}>
-        <div className="flex items-center justify-between gap-2">
+
+        {/* Row 1: Brand + SIMULASI button */}
+        <div className="flex items-center justify-between gap-2 px-3 pt-2 pb-1">
           {/* Brand */}
-          <div className="flex items-center gap-2.5">
-            <div className={`w-9 h-9 rounded-xl flex items-center justify-center shrink-0 ${tsunamiAlert ? 'bg-red-500/20 border border-red-500/30' : 'bg-indigo-500/20 border border-indigo-500/30'}`}>
+          <div className="flex items-center gap-2 min-w-0">
+            <div className={`w-8 h-8 rounded-xl flex items-center justify-center shrink-0 ${tsunamiAlert ? 'bg-red-500/20 border border-red-500/30' : 'bg-indigo-500/20 border border-indigo-500/30'}`}>
               <Shield className={`w-4 h-4 ${tsunamiAlert ? 'text-red-400' : 'text-indigo-400'}`} />
             </div>
-            <div>
+            <div className="min-w-0">
               <h1 className="text-white font-black text-sm tracking-widest leading-none">AEGIS RESPONSE</h1>
-              <p className="text-[9px] text-slate-600 font-mono mt-0.5">Sistem Evakuasi · {terminalId}</p>
+              <p className="text-[9px] text-slate-600 font-mono mt-0.5 truncate">Sistem Evakuasi · {terminalId}</p>
             </div>
           </div>
-          {/* Status indicators */}
-          <div className="flex items-center gap-1.5 mx-auto">
-            <div className={`flex items-center gap-1 px-2 py-1 rounded-full text-[9px] font-bold border ${tsunamiAlert ? 'bg-red-900/50 border-red-700/50 text-red-300' : 'bg-emerald-900/30 border-emerald-700/30 text-emerald-400'}`}>
-              <Radio className={`w-2.5 h-2.5 ${tsunamiAlert ? 'animate-pulse' : ''}`}/>
-              <span>SENSOR</span>
-            </div>
-            <div className={`flex items-center gap-1 px-2 py-1 rounded-full text-[9px] font-bold border ${gpsTracking ? 'bg-indigo-900/50 border-indigo-700/50 text-indigo-300' : 'bg-slate-800/50 border-slate-700/50 text-slate-500'}`}>
-              <Satellite className={`w-2.5 h-2.5 ${gpsTracking ? 'animate-pulse' : ''}`}/>
-              <span>{gpsTracking ? 'GPS' : 'OFFLINE'}</span>
-            </div>
+          {/* SIMULASI button */}
+          <button
+            onClick={() => tsunamiAlert ? deactivateTsunamiAlert() : setShowTsunamiConfirm(true)}
+            className={`shrink-0 flex items-center gap-1.5 px-3 py-1.5 rounded-xl font-bold text-[10px] transition-all min-h-0
+              ${tsunamiAlert ? 'bg-red-500/30 text-red-200 border border-red-500/50' : 'bg-red-600 text-white'}`}>
+            <div className={`w-1.5 h-1.5 rounded-full shrink-0 ${tsunamiAlert ? 'bg-red-400 animate-pulse' : 'bg-red-300'}`} />
+            {tsunamiAlert ? 'STOP SIMULASI' : 'SIMULASI'}
+          </button>
+        </div>
+
+        {/* Row 2: Status chips */}
+        <div className="flex items-center gap-2 px-3 pb-2 flex-wrap">
+          <div className={`flex items-center gap-1 px-2 py-0.5 rounded-full text-[9px] font-bold border
+            ${tsunamiAlert ? 'bg-red-900/50 border-red-700/50 text-red-300' : 'bg-emerald-900/30 border-emerald-700/30 text-emerald-400'}`}>
+            <Radio className={`w-2.5 h-2.5 ${tsunamiAlert ? 'animate-pulse' : ''}`}/>
+            <span>SENSOR AKTIF</span>
           </div>
-          {/* Avatar + Tsunami btn */}
-          <div className="flex items-center gap-2 shrink-0">
-            <button
-              onClick={() => tsunamiAlert ? deactivateTsunamiAlert() : setShowTsunamiConfirm(true)}
-              className={`flex items-center gap-1.5 px-3 py-2 rounded-xl font-bold text-[10px] transition-all
-                ${tsunamiAlert ? 'bg-red-500/30 text-red-200 border border-red-500/50' : 'bg-red-600 hover:bg-red-500 text-white'}`}>
-              <div className={`w-1.5 h-1.5 rounded-full shrink-0 ${tsunamiAlert ? 'bg-red-400 animate-pulse' : 'bg-red-300'}`} />
-              <span className="leading-tight text-center">{tsunamiAlert ? 'STOP' : 'SIMULASI'}</span>
-            </button>
-            <div className="w-8 h-8 rounded-full bg-indigo-500/20 border border-indigo-500/40 flex items-center justify-center shrink-0">
-              <Shield className="w-4 h-4 text-indigo-400"/>
-            </div>
+          <div className={`flex items-center gap-1 px-2 py-0.5 rounded-full text-[9px] font-bold border
+            ${gpsTracking ? 'bg-indigo-900/50 border-indigo-700/50 text-indigo-300' : 'bg-slate-800/50 border-slate-700/50 text-slate-500'}`}>
+            <Satellite className={`w-2.5 h-2.5 ${gpsTracking ? 'animate-pulse' : ''}`}/>
+            <span>{gpsTracking ? 'GPS AKTIF' : 'GPS OFFLINE'}</span>
           </div>
+          {/* GPS accuracy badge */}
+          {gpsAccuracy !== null && (
+            <div className={`flex items-center gap-1 px-2 py-0.5 rounded-full text-[9px] font-bold border
+              ${gpsAccuracy <= 20 ? 'bg-emerald-900/30 border-emerald-700/30 text-emerald-400'
+              : gpsAccuracy <= 50 ? 'bg-amber-900/30 border-amber-700/30 text-amber-400'
+              : 'bg-red-900/30 border-red-700/30 text-red-400'}`}>
+              <Crosshair className="w-2.5 h-2.5" />
+              <span>±{Math.round(gpsAccuracy)}m</span>
+            </div>
+          )}
         </div>
       </header>
 
@@ -602,6 +551,42 @@ function App() {
             )}
           </div>
 
+          {/* Mobile floating LIHAT RUTE button */}
+          <AnimatePresence>
+            {routes.length > 0 && !showPanel && isMobile && (
+              <motion.button
+                initial={{ y: 20, opacity: 0 }}
+                animate={{ y: 0, opacity: 1 }}
+                exit={{ y: 20, opacity: 0 }}
+                transition={{ type: 'spring', damping: 20, stiffness: 300 }}
+                onClick={() => { panelUserClosedRef.current = false; setShowPanel(true) }}
+                className="md:hidden fixed bottom-[68px] left-1/2 -translate-x-1/2 z-[1800] flex items-center gap-2 px-5 py-3 rounded-2xl font-bold text-sm bg-indigo-600 text-white shadow-[0_4px_24px_rgba(99,102,241,0.6)] border border-indigo-400/30 active:scale-95 transition-transform"
+              >
+                <ArrowRight className="w-4 h-4" />
+                LIHAT RUTE EVAKUASI
+                <ChevronRight className="w-4 h-4" />
+              </motion.button>
+            )}
+          </AnimatePresence>
+
+          {/* Desktop floating LIHAT RUTE button */}
+          <AnimatePresence>
+            {routes.length > 0 && !showPanel && !isMobile && (
+              <motion.button
+                initial={{ x: 20, opacity: 0 }}
+                animate={{ x: 0, opacity: 1 }}
+                exit={{ x: 20, opacity: 0 }}
+                transition={{ type: 'spring', damping: 20, stiffness: 300 }}
+                onClick={() => { panelUserClosedRef.current = false; setShowPanel(true) }}
+                className="hidden md:flex absolute bottom-6 right-6 z-[600] items-center gap-2 px-5 py-3 rounded-2xl font-bold text-sm bg-indigo-600 hover:bg-indigo-500 text-white shadow-[0_4px_24px_rgba(99,102,241,0.5)] border border-indigo-400/30 transition-all"
+              >
+                <ArrowRight className="w-4 h-4" />
+                LIHAT RUTE EVAKUASI
+                <ChevronRight className="w-4 h-4" />
+              </motion.button>
+            )}
+          </AnimatePresence>
+
           {/* Desktop GPS controls */}
           <div className="hidden md:flex absolute top-4 left-4 gap-2 z-[1000]">
             <button onClick={() => gpsTracking ? stopGpsTracking() : startGpsTracking()}
@@ -621,6 +606,8 @@ function App() {
           <MapContainer center={[-0.8917, 119.8577]} zoom={14} minZoom={10} maxZoom={20} className="w-full h-full" zoomControl={false}>
             <TileLayer url={mapTileUrl} key={mapTileKey}
               attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+              maxNativeZoom={mapMaxNativeZoom}
+              maxZoom={20}
             />
             <CustomMapControls userPosition={userPosition} onLocateClick={() => { if (!gpsTracking) startGpsTracking() }} />
             <LocationMarker onLocationSet={handleLocationSet} />
@@ -671,6 +658,26 @@ function App() {
               </Marker>
             ))}
 
+            {/* Arrival radius circles — shown around all shelters, pulse on target */}
+            {shelters.map((sh) => {
+              const isTarget = routes.length > 0 && routes[selectedRoute]?.shelterName === sh.name
+              const isArrived = arrivedShelterId === sh.id
+              return (
+                <Circle
+                  key={`arrival-${sh.id}`}
+                  center={[sh.lat, sh.lng]}
+                  radius={ARRIVAL_RADIUS_METERS}
+                  pathOptions={{
+                    color: isArrived ? '#22c55e' : isTarget ? '#6366f1' : '#64748b',
+                    fillColor: isArrived ? '#22c55e' : isTarget ? '#6366f1' : '#64748b',
+                    fillOpacity: isArrived ? 0.25 : isTarget ? 0.12 : 0.05,
+                    weight: isArrived ? 3 : isTarget ? 2 : 1,
+                    dashArray: isArrived ? undefined : '6 4',
+                  }}
+                />
+              )
+            })}
+
             {/* User position */}
             {userPosition && (
               <Marker position={userPosition} icon={tsunamiAlert ? userIconAlert : userIcon} zIndexOffset={1000}>
@@ -695,7 +702,7 @@ function App() {
               <motion.div
                 initial={{ y: '100%' }} animate={{ y: 0 }} exit={{ y: '100%' }}
                 transition={{ type: 'spring', damping: 30, stiffness: 300 }}
-                className="absolute bottom-0 left-0 right-0 z-[500] max-h-[65vh] flex flex-col bg-[#0f172a]/98 backdrop-blur-xl rounded-t-2xl border-t border-slate-700/50 shadow-[0_-10px_40px_rgba(0,0,0,0.7)]"
+                className="fixed bottom-[60px] left-0 right-0 z-[500] max-h-[65vh] flex flex-col bg-[#0f172a]/98 backdrop-blur-xl rounded-t-2xl border-t border-slate-700/50 shadow-[0_-10px_40px_rgba(0,0,0,0.7)]"
               >
                 <div className="flex justify-center pt-2 pb-1">
                   <div className="w-10 h-1 rounded-full bg-slate-700" />
@@ -712,11 +719,14 @@ function App() {
                       </p>
                     </div>
                   </div>
-                  <button onClick={() => setShowPanel(false)} className="p-1.5 text-slate-500 hover:text-white">
+                  <button
+                    onClick={() => { setShowPanel(false); panelUserClosedRef.current = true }}
+                    className="w-9 h-9 rounded-xl bg-slate-700/80 hover:bg-slate-600 active:bg-red-900/50 flex items-center justify-center text-slate-300 hover:text-white active:text-red-400 transition-colors shrink-0"
+                  >
                     <X className="w-5 h-5" />
                   </button>
                 </div>
-                <div className="flex-1 overflow-y-auto px-4 pb-2 space-y-2.5 custom-scrollbar">
+                <div className="flex-1 overflow-y-auto px-4 pb-4 space-y-2.5 custom-scrollbar">
                   {routes.map((route, i) => (
                     <button key={i}
                       onClick={() => {
@@ -756,11 +766,10 @@ function App() {
                       Rute dihitung menggunakan <span className="text-indigo-300 italic">Algoritma {settings.algorithm.charAt(0).toUpperCase() + settings.algorithm.slice(1)}</span> berdasarkan jaringan jalan dan jarak <span className="text-indigo-300 italic">Haversine</span>.
                     </p>
                   </div>
-                  <button onClick={() => setShowPanel(false)}
-                    className="w-full py-3 bg-[#1e293b] hover:bg-slate-700 border border-slate-700 text-white rounded-xl text-sm font-bold tracking-wide transition-colors">
+                  <button onClick={() => { setShowPanel(false); panelUserClosedRef.current = true }}
+                    className="w-full py-3.5 bg-[#1e293b] hover:bg-slate-700 border border-slate-700 text-white rounded-xl text-sm font-bold tracking-wide transition-colors touch-manipulation">
                     TUTUP PANEL
                   </button>
-                  <div className="h-2" />
                 </div>
               </motion.div>
             )}
@@ -849,16 +858,21 @@ function App() {
         </AnimatePresence>
       </div>
 
-      {/* ═══ MOBILE BOTTOM NAV ═══ */}
-      <nav className={`md:hidden shrink-0 flex items-center justify-around py-3 border-t z-[600] transition-colors duration-500 backdrop-blur-md
-        ${tsunamiAlert ? 'bg-red-950/95 border-red-900/50' : 'bg-[#0f172a]/95 border-slate-800/50'}`}>
+      {/* ═══ MOBILE BOTTOM NAV — fixed bottom-0 untuk PASTI muncul di semua HP ═══ */}
+      <nav className={`md:hidden fixed bottom-0 left-0 right-0 flex items-center justify-around border-t z-[1900] transition-colors duration-500 backdrop-blur-md
+        ${tsunamiAlert ? 'bg-red-950/95 border-red-900/50' : 'bg-[#0f172a]/95 border-slate-800/50'}`}
+        style={{ paddingBottom: 'env(safe-area-inset-bottom)', height: '60px' }}>
         {([
           { page: 'map'      as ActivePage, Icon: MapIcon,          label: 'MAP'      },
           { page: 'history'  as ActivePage, Icon: History,           label: 'HISTORY'  },
           { page: 'settings' as ActivePage, Icon: SlidersHorizontal, label: 'SETTINGS' },
         ]).map(({ page, Icon, label }) => (
           <button key={page} onClick={() => setActivePage(page)}
-            className={`flex flex-col items-center gap-1 transition-colors ${activePage === page ? 'text-indigo-400' : 'text-slate-600 active:text-slate-400'}`}>
+            className={`flex flex-col items-center gap-1 py-2 px-6 transition-colors ${
+              activePage === page
+                ? tsunamiAlert ? 'text-red-400' : 'text-indigo-400'
+                : 'text-slate-600 active:text-slate-400'
+            }`}>
             <div className="relative">
               <Icon className="w-5 h-5"/>
               {page === 'history' && evacuationHistory.length > 0 && (
@@ -963,6 +977,58 @@ function App() {
           </div>
         </div>
       )}
+
+      {/* ══ ARRIVAL BANNER — muncul ketika dalam radius 50m dari titik evakuasi ══ */}
+      <AnimatePresence>
+        {arrivedShelterId && (() => {
+          const sh = shelters.find(s => s.id === arrivedShelterId)
+          return sh ? (
+            <motion.div
+              key="arrival-banner"
+              initial={{ y: -80, opacity: 0, scale: 0.9 }}
+              animate={{ y: 0, opacity: 1, scale: 1 }}
+              exit={{ y: -80, opacity: 0, scale: 0.9 }}
+              transition={{ type: 'spring', damping: 20, stiffness: 260 }}
+              className="fixed top-4 left-1/2 -translate-x-1/2 z-[2100] w-[calc(100%-2rem)] max-w-sm"
+            >
+              <div className="relative overflow-hidden rounded-2xl border border-emerald-500/50 shadow-[0_8px_40px_rgba(34,197,94,0.4)] bg-[#0a1f0f]">
+                {/* Glow sweep animation */}
+                <div className="absolute inset-0 pointer-events-none">
+                  <div className="absolute -inset-1 bg-gradient-to-r from-transparent via-emerald-400/10 to-transparent animate-[shimmer_2.5s_infinite] -skew-x-12" />
+                </div>
+                <div className="flex items-center gap-4 p-4">
+                  {/* Icon */}
+                  <div className="relative shrink-0">
+                    <div className="w-14 h-14 rounded-2xl bg-emerald-500/20 border border-emerald-500/40 flex items-center justify-center">
+                      <CheckCircle2 className="w-7 h-7 text-emerald-400" />
+                    </div>
+                    {/* Pulse ring */}
+                    <div className="absolute inset-0 rounded-2xl border-2 border-emerald-400 animate-ping opacity-40" />
+                  </div>
+                  {/* Text */}
+                  <div className="flex-1 min-w-0">
+                    <p className="text-[10px] font-bold text-emerald-400 tracking-widest uppercase mb-0.5">Titik Evakuasi Tercapai</p>
+                    <h3 className="text-base font-black text-white leading-tight truncate">{sh.name}</h3>
+                    <p className="text-[11px] text-emerald-300/70 mt-0.5 flex items-center gap-1">
+                      <MapPin className="w-3 h-3" />
+                      Dalam radius {ARRIVAL_RADIUS_METERS}m · Kapasitas {sh.capacity.toLocaleString('id-ID')} orang
+                    </p>
+                  </div>
+                  {/* Dismiss */}
+                  <button
+                    onClick={() => setArrivedShelterId(null)}
+                    className="shrink-0 w-7 h-7 rounded-full bg-slate-800/80 hover:bg-slate-700 flex items-center justify-center text-slate-400 hover:text-white transition-colors"
+                  >
+                    <X className="w-4 h-4" />
+                  </button>
+                </div>
+                {/* Bottom strip */}
+                <div className="h-1 w-full bg-gradient-to-r from-emerald-600 via-emerald-400 to-emerald-600" />
+              </div>
+            </motion.div>
+          ) : null
+        })()}
+      </AnimatePresence>
 
       {/* ══════════════════════════════════════════════════════════ */}
       {/* HISTORY PAGE — "TACTICAL ARCHIVE"                        */}

@@ -9,6 +9,12 @@
   box-sizing: border-box;
 }
 
+html, body {
+  height: 100%;
+  margin: 0;
+  padding: 0;
+}
+
 body {
   font-family: 'Inter', sans-serif;
   margin: 0;
@@ -18,10 +24,29 @@ body {
   color: #e2e8f0;
 }
 
+/* Use dynamic viewport height — correctly handles mobile browser URL bar show/hide */
+#root {
+  height: 100dvh;
+  height: 100vh; /* fallback for older browsers */
+  overflow: hidden;
+}
+
+/* Remove 300ms tap delay on all interactive elements — makes app feel native */
+a, button, [role="button"], input, select, textarea {
+  touch-action: manipulation;
+}
+
 .leaflet-container {
   height: 100%;
   width: 100%;
   border-radius: 0;
+  /* FIX: override default white background — blank areas show dark instead of white */
+  background: #0f172a !important;
+}
+
+/* FIX: tile pane background also dark so overzoomed / not-yet-loaded tiles show dark */
+.leaflet-tile-pane {
+  background: #0f172a;
 }
 
 /* Tsunami dark mode filter for map tiles */
@@ -49,4 +74,10 @@ body {
 @keyframes borderFlash {
   0%, 100% { border-color: rgba(239, 68, 68, 0.6); }
   50% { border-color: rgba(239, 68, 68, 1); }
+}
+
+/* Arrival banner shimmer sweep */
+@keyframes shimmer {
+  0%   { transform: translateX(-120%) skewX(-12deg); }
+  100% { transform: translateX(220%)  skewX(-12deg); }
 }
