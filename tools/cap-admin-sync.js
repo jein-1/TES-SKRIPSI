@@ -1,40 +1,60 @@
 /**
  * cap-admin-sync.js
- * Swap capacitor.config.ts ↔ capacitor.admin.config.ts sementara,
- * jalankan "cap sync android-admin", lalu kembalikan config semula.
- * Juga salin dist-admin ke android-admin assets.
+ * Sync dist-admin ke android-admin secara manual (tanpa cap CLI)
+ * karena Capacitor hanya kenal platform "android" / "ios".
+ *
+ * Yang dilakukan:
+ *  1. Copy dist-admin/* ke android-admin/app/src/main/assets/public/
+ *  2. Generate capacitor.config.json (dari capacitor.admin.config.ts) ke android-admin assets
+ *  3. Copy node_modules plugin native sources jika diperlukan
  */
-import { execSync } from 'child_process'
-import { copyFileSync, cpSync, existsSync, mkdirSync } from 'fs'
+import { cpSync, existsSync, mkdirSync, writeFileSync, rmSync } from 'fs'
 import { join, dirname } from 'path'
 import { fileURLToPath } from 'url'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const root = join(__dirname, '..')
 
-const mainCfg   = join(root, 'capacitor.config.ts')
-const adminCfg  = join(root, 'capacitor.admin.config.ts')
-const backupCfg = join(root, 'capacitor.config.ts.bak')
+const distAdmin   = join(root, 'dist-admin')
+const destAssets  = join(root, 'android-admin', 'app', 'src', 'main', 'assets', 'public')
+const destCfgJson = join(root, 'android-admin', 'app', 'src', 'main', 'assets', 'capacitor.config.json')
 
-console.log('🔄 Swapping capacitor config to admin...')
-copyFileSync(mainCfg, backupCfg)       // backup main config
-copyFileSync(adminCfg, mainCfg)        // replace with admin config
-
-try {
-  // Copy dist-admin web assets to android-admin
-  const destAssets = join(root, 'android-admin', 'app', 'src', 'main', 'assets', 'public')
-  if (!existsSync(destAssets)) mkdirSync(destAssets, { recursive: true })
-  cpSync(join(root, 'dist-admin'), destAssets, { recursive: true })
-  console.log('✅ Copied dist-admin → android-admin assets')
-
-  // Also copy capacitor.config.json
-  const capJson = join(root, 'android-admin', 'app', 'src', 'main', 'assets', 'capacitor.config.json')
-  execSync('npx cap sync android-admin', { cwd: root, stdio: 'inherit' })
-  console.log('✅ cap sync android-admin done')
-} catch (e) {
-  console.error('❌ Sync failed:', e.message)
-} finally {
-  // Always restore main config
-  copyFileSync(backupCfg, mainCfg)
-  console.log('✅ Restored main capacitor config')
+// ── 1. Validasi dist-admin ada ────────────────────────────────
+if (!existsSync(distAdmin)) {
+  console.error('❌ dist-admin tidak ditemukan. Jalankan: npm run build:admin')
+  process.exit(1)
 }
+
+// ── 2. Bersihkan lalu copy web assets ─────────────────────────
+console.log('📦 Copying web assets dist-admin → android-admin...')
+if (existsSync(destAssets)) rmSync(destAssets, { recursive: true })
+mkdirSync(destAssets, { recursive: true })
+cpSync(distAdmin, destAssets, { recursive: true })
+console.log('✅ Web assets copied')
+
+// ── 3. Generate capacitor.config.json untuk android-admin ─────
+const capConfig = {
+  appId:   'com.dimsstsu.admin',
+  appName: 'AEGIS ADMIN',
+  webDir:  'dist-admin',
+  android: { path: 'android-admin' },
+  plugins: {
+    SplashScreen: {
+      launchShowDuration: 2000,
+      launchAutoHide: true,
+      backgroundColor: '#0a1020',
+    },
+    StatusBar: {
+      style: 'Dark',
+      backgroundColor: '#0a1020',
+    },
+  },
+}
+writeFileSync(destCfgJson, JSON.stringify(capConfig, null, 2), 'utf-8')
+console.log('✅ capacitor.config.json generated')
+
+// ── 4. Selesai ────────────────────────────────────────────────
+console.log('')
+console.log('🎉 android-admin siap!')
+console.log('   Buka Android Studio: npm run cap:open:admin')
+console.log('   Lalu: Build → Generate Signed APK → pilih release')
