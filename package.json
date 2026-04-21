@@ -8,8 +8,12 @@
     "dev:server": "node server.js",
     "dev:full": "concurrently \"node server.js\" \"vite\"",
     "build": "tsc && vite build",
+    "build:admin": "tsc && vite build --mode admin --outDir dist-admin",
     "cap:sync": "npm run build && npx cap sync android",
+    "cap:sync:admin": "npm run build:admin && node tools/cap-admin-sync.js",
     "cap:open": "npx cap open android",
+    "cap:open:admin": "node tools/cap-admin-open.js",
+    "cap:add:admin": "node tools/cap-admin-sync.js",
     "start": "node server.js",
     "lint": "eslint . --ext ts,tsx --report-unused-disable-directives --max-warnings 0",
     "preview": "vite preview"

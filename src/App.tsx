@@ -183,6 +183,8 @@ function App() {
   // Admin mode: URL contains ?admin OR ?key=aegis2024 OR hash #admin
   // User mode:  any other URL (default â€” no login required)
   const isAdminURL = (() => {
+    // APK Admin build: env var set at build time via .env.admin
+    if (import.meta.env.VITE_ADMIN_APP === 'true') return true
     const p = new URLSearchParams(window.location.search)
     return p.has('admin') || p.get('key') === 'aegis2024' || window.location.hash === '#admin'
   })()
