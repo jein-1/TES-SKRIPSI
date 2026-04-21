@@ -138,6 +138,8 @@ function App() {
   const [flyToPos, setFlyToPos] = useState<[number, number] | null>(null)
   const [gpsAccuracy, setGpsAccuracy] = useState<number | null>(null)   // metres
   const [arrivedShelterId, setArrivedShelterId] = useState<string | null>(null)
+  // Arrival modal state — stores snapshot at time of arrival
+  const [arrivalSummary, setArrivalSummary] = useState<{ shelter: (typeof shelters)[0]; distanceKm: number; walkingMin: number } | null>(null)
 
   // ── GPS & Alert state ──────────────────────────────────────
   const [gpsTracking, setGpsTracking] = useState(false)
@@ -192,6 +194,8 @@ function App() {
   const panelUserClosedRef = useRef(false)
   // FIX: only fly to GPS position on first fix to prevent map shaking
   const hasFirstGPSFixRef = useRef(false)
+  // Prevent arrival from firing more than once per session
+  const arrivedFiredRef = useRef(false)
 
   // Persist
   useEffect(() => { localStorage.setItem('appSettings', JSON.stringify(settings)) }, [settings])
@@ -240,6 +244,9 @@ function App() {
     // Reset flags when GPS is freshly started
     panelUserClosedRef.current = false
     hasFirstGPSFixRef.current = false
+    arrivedFiredRef.current = false
+    setArrivedShelterId(null)
+    setArrivalSummary(null)
     setGpsTracking(true); setGpsError(null); setIsCalculating(true)
     gpsWatchRef.current = navigator.geolocation.watchPosition(
       (pos) => {
@@ -263,20 +270,45 @@ function App() {
         saveHistoryRecord(routeResults, tsunamiAlert ? 'simulation' : 'real', newPos)
 
         // ── Arrival detection: check if within ARRIVAL_RADIUS_METERS of any shelter ──
-        // `shelters` already imported at top-level — no dynamic import needed
-        const toRad = (d: number) => d * (Math.PI / 180)
-        const arrived = shelters.find(sh => {
-          const R = 6371000 // metres
-          const dLat = toRad(sh.lat - newPos[0])
-          const dLng = toRad(sh.lng - newPos[1])
-          const a =
-            Math.sin(dLat / 2) ** 2 +
-            Math.cos(toRad(newPos[0])) * Math.cos(toRad(sh.lat)) *
-            Math.sin(dLng / 2) ** 2
-          const dist = R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a))
-          return dist <= ARRIVAL_RADIUS_METERS
-        })
-        setArrivedShelterId(arrived ? arrived.id : null)
+        // Only fires once per GPS session (arrivedFiredRef prevents repeat triggers)
+        if (!arrivedFiredRef.current) {
+          const toRad = (d: number) => d * (Math.PI / 180)
+          const arrived = shelters.find(sh => {
+            const R = 6371000 // metres
+            const dLat = toRad(sh.lat - newPos[0])
+            const dLng = toRad(sh.lng - newPos[1])
+            const a =
+              Math.sin(dLat / 2) ** 2 +
+              Math.cos(toRad(newPos[0])) * Math.cos(toRad(sh.lat)) *
+              Math.sin(dLng / 2) ** 2
+            const dist = R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a))
+            return dist <= ARRIVAL_RADIUS_METERS
+          })
+          if (arrived) {
+            arrivedFiredRef.current = true
+            // ── STOP EVERYTHING — like Google Maps ending navigation ──
+            // 1. Stop GPS watch
+            if (gpsWatchRef.current !== null) {
+              navigator.geolocation.clearWatch(gpsWatchRef.current)
+              gpsWatchRef.current = null
+            }
+            // 2. Stop alarm & deactivate tsunami alert
+            alarmRef.current.stop()
+            setGpsTracking(false)
+            setTsunamiAlert(false)
+            setShowPanel(false)
+            // 3. Haptic feedback (arrived!)
+            if ('vibrate' in navigator) navigator.vibrate([200, 100, 200, 100, 400])
+            // 4. Show arrival state
+            setArrivedShelterId(arrived.id)
+            const bestRoute = routeResults[0]
+            setArrivalSummary({
+              shelter: arrived,
+              distanceKm: bestRoute?.totalDistance === Infinity ? 0 : (bestRoute?.totalDistance ?? 0),
+              walkingMin: bestRoute?.walkingTime ?? 0,
+            })
+          }
+        }
       },
       (err) => {
         setIsCalculating(false)
@@ -978,56 +1010,119 @@ function App() {
         </div>
       )}
 
-      {/* ══ ARRIVAL BANNER — muncul ketika dalam radius 50m dari titik evakuasi ══ */}
+      {/* ══ ARRIVAL MODAL — full-screen, muncul ketika simulasi selesai (dalam radius) ══ */}
       <AnimatePresence>
-        {arrivedShelterId && (() => {
-          const sh = shelters.find(s => s.id === arrivedShelterId)
-          return sh ? (
+        {arrivalSummary && (
+          <motion.div
+            key="arrival-modal"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-[2200] flex flex-col items-center justify-center bg-black/85 backdrop-blur-md p-4"
+          >
             <motion.div
-              key="arrival-banner"
-              initial={{ y: -80, opacity: 0, scale: 0.9 }}
-              animate={{ y: 0, opacity: 1, scale: 1 }}
-              exit={{ y: -80, opacity: 0, scale: 0.9 }}
-              transition={{ type: 'spring', damping: 20, stiffness: 260 }}
-              className="fixed top-4 left-1/2 -translate-x-1/2 z-[2100] w-[calc(100%-2rem)] max-w-sm"
+              initial={{ scale: 0.85, opacity: 0, y: 40 }}
+              animate={{ scale: 1, opacity: 1, y: 0 }}
+              exit={{ scale: 0.85, opacity: 0, y: 40 }}
+              transition={{ type: 'spring', damping: 22, stiffness: 280 }}
+              className="w-full max-w-sm relative"
             >
-              <div className="relative overflow-hidden rounded-2xl border border-emerald-500/50 shadow-[0_8px_40px_rgba(34,197,94,0.4)] bg-[#0a1f0f]">
-                {/* Glow sweep animation */}
-                <div className="absolute inset-0 pointer-events-none">
-                  <div className="absolute -inset-1 bg-gradient-to-r from-transparent via-emerald-400/10 to-transparent animate-[shimmer_2.5s_infinite] -skew-x-12" />
+              {/* Card */}
+              <div className="relative overflow-hidden rounded-3xl border border-emerald-500/40 bg-[#071410] shadow-[0_20px_80px_rgba(34,197,94,0.35)]">
+
+                {/* Shimmer sweep */}
+                <div className="absolute inset-0 pointer-events-none overflow-hidden rounded-3xl">
+                  <div className="absolute -inset-2 bg-gradient-to-r from-transparent via-emerald-400/8 to-transparent animate-[shimmer_3s_infinite] -skew-x-12" />
                 </div>
-                <div className="flex items-center gap-4 p-4">
-                  {/* Icon */}
-                  <div className="relative shrink-0">
-                    <div className="w-14 h-14 rounded-2xl bg-emerald-500/20 border border-emerald-500/40 flex items-center justify-center">
-                      <CheckCircle2 className="w-7 h-7 text-emerald-400" />
+
+                {/* Top accent bar */}
+                <div className="h-1.5 w-full bg-gradient-to-r from-emerald-700 via-emerald-400 to-emerald-700" />
+
+                <div className="p-6">
+                  {/* Icon + pulse */}
+                  <div className="flex justify-center mb-5">
+                    <div className="relative">
+                      <div className="w-20 h-20 rounded-3xl bg-emerald-500/15 border border-emerald-500/30 flex items-center justify-center">
+                        <CheckCircle2 className="w-10 h-10 text-emerald-400" />
+                      </div>
+                      <div className="absolute inset-0 rounded-3xl border-2 border-emerald-400/60 animate-ping" />
+                      <div className="absolute inset-0 rounded-3xl border border-emerald-400/30 animate-ping" style={{ animationDelay: '0.4s' }} />
                     </div>
-                    {/* Pulse ring */}
-                    <div className="absolute inset-0 rounded-2xl border-2 border-emerald-400 animate-ping opacity-40" />
                   </div>
-                  {/* Text */}
-                  <div className="flex-1 min-w-0">
-                    <p className="text-[10px] font-bold text-emerald-400 tracking-widest uppercase mb-0.5">Titik Evakuasi Tercapai</p>
-                    <h3 className="text-base font-black text-white leading-tight truncate">{sh.name}</h3>
-                    <p className="text-[11px] text-emerald-300/70 mt-0.5 flex items-center gap-1">
-                      <MapPin className="w-3 h-3" />
-                      Dalam radius {ARRIVAL_RADIUS_METERS}m · Kapasitas {sh.capacity.toLocaleString('id-ID')} orang
-                    </p>
+
+                  {/* Title */}
+                  <p className="text-center text-[10px] font-bold text-emerald-400 tracking-[0.2em] uppercase mb-1">Navigasi Selesai</p>
+                  <h2 className="text-center text-2xl font-black text-white mb-1 leading-tight">ANDA TELAH TIBA</h2>
+                  <p className="text-center text-sm text-emerald-300/70 mb-6">di titik evakuasi aman</p>
+
+                  {/* Shelter name */}
+                  <div className="mb-5 p-4 rounded-2xl bg-emerald-950/60 border border-emerald-800/40">
+                    <div className="flex items-start gap-3">
+                      <div className="w-9 h-9 rounded-xl bg-emerald-500/20 flex items-center justify-center shrink-0 mt-0.5">
+                        <MapPin className="w-4.5 h-4.5 text-emerald-400" />
+                      </div>
+                      <div className="min-w-0">
+                        <p className="text-[10px] text-emerald-400/70 font-bold uppercase tracking-wider mb-0.5">Lokasi Evakuasi</p>
+                        <p className="text-white font-bold text-sm leading-snug">{arrivalSummary.shelter.name}</p>
+                        <p className="text-[11px] text-emerald-300/50 mt-0.5">Kapasitas {arrivalSummary.shelter.capacity.toLocaleString('id-ID')} orang</p>
+                      </div>
+                    </div>
                   </div>
-                  {/* Dismiss */}
-                  <button
-                    onClick={() => setArrivedShelterId(null)}
-                    className="shrink-0 w-7 h-7 rounded-full bg-slate-800/80 hover:bg-slate-700 flex items-center justify-center text-slate-400 hover:text-white transition-colors"
-                  >
-                    <X className="w-4 h-4" />
-                  </button>
+
+                  {/* Stats row */}
+                  <div className="grid grid-cols-2 gap-3 mb-6">
+                    <div className="p-3 rounded-xl bg-slate-900/60 border border-slate-700/40 text-center">
+                      <p className="text-[9px] text-slate-500 uppercase tracking-widest font-bold mb-1">Jarak Tempuh</p>
+                      <p className="text-xl font-black text-white">
+                        {arrivalSummary.distanceKm > 0 ? arrivalSummary.distanceKm.toFixed(2) : '—'}
+                        <span className="text-xs font-bold text-slate-400 ml-1">km</span>
+                      </p>
+                    </div>
+                    <div className="p-3 rounded-xl bg-slate-900/60 border border-slate-700/40 text-center">
+                      <p className="text-[9px] text-slate-500 uppercase tracking-widest font-bold mb-1">Waktu Estimasi</p>
+                      <p className="text-xl font-black text-white">
+                        {arrivalSummary.walkingMin > 0 ? arrivalSummary.walkingMin : '—'}
+                        <span className="text-xs font-bold text-slate-400 ml-1">min</span>
+                      </p>
+                    </div>
+                  </div>
+
+                  {/* Radius info */}
+                  <p className="text-center text-[10px] text-slate-500 mb-5 flex items-center justify-center gap-1.5">
+                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 inline-block" />
+                    GPS berhenti otomatis · dalam radius {ARRIVAL_RADIUS_METERS}m
+                  </p>
+
+                  {/* Actions */}
+                  <div className="flex flex-col gap-2.5">
+                    <button
+                      onClick={() => {
+                        setArrivalSummary(null)
+                        setArrivedShelterId(null)
+                        setActivePage('history')
+                      }}
+                      className="w-full py-3.5 bg-emerald-600 hover:bg-emerald-500 active:bg-emerald-700 text-white rounded-2xl font-bold text-sm tracking-wide transition-colors flex items-center justify-center gap-2"
+                    >
+                      <History className="w-4 h-4" />
+                      Lihat Riwayat Evakuasi
+                    </button>
+                    <button
+                      onClick={() => {
+                        setArrivalSummary(null)
+                        setArrivedShelterId(null)
+                        setUserPosition(null)
+                        setRoutes([])
+                      }}
+                      className="w-full py-3 bg-slate-800/80 hover:bg-slate-700 active:bg-slate-900 text-slate-300 rounded-2xl font-bold text-sm tracking-wide transition-colors"
+                    >
+                      Kembali ke Peta
+                    </button>
+                  </div>
                 </div>
-                {/* Bottom strip */}
-                <div className="h-1 w-full bg-gradient-to-r from-emerald-600 via-emerald-400 to-emerald-600" />
               </div>
             </motion.div>
-          ) : null
-        })()}
+          </motion.div>
+        )}
       </AnimatePresence>
 
       {/* ══════════════════════════════════════════════════════════ */}
