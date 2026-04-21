@@ -1,7 +1,7 @@
 apply plugin: 'com.android.application'
 
 android {
-    namespace = "com.dimsstsu.admin"
+    namespace = "com.dimsstsu.app"    // harus sama dengan folder Java
     compileSdk = rootProject.ext.compileSdkVersion
     defaultConfig {
         applicationId "com.dimsstsu.admin"

@@ -3,10 +3,16 @@
 // Connects to /api/events and provides helper functions
 // Works cross-device on Railway deployment
 // ═══════════════════════════════════════════════════════════════
-import { useEffect, useRef, useCallback } from 'react'
+import { useEffect, useRef } from 'react'
+import { Capacitor } from '@capacitor/core'
 
-// Detect API base URL — same origin in production, relative path works
-const API_BASE = ''
+// Detect API base URL:
+// - Native APK (Capacitor): gunakan Railway URL dari env var
+// - Web (Railway/browser): relative path '' (same origin)
+const IS_NATIVE = Capacitor.isNativePlatform()
+const API_BASE: string = IS_NATIVE
+  ? (import.meta.env.VITE_API_URL ?? '')   // Set VITE_API_URL di .env.admin / .env.production
+  : ''                                       // Web: same-origin (Railway serve frontend+backend)
 
 export type SyncEventHandler = (event: AegisSyncEvent) => void
 
