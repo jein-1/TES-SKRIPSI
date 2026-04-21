@@ -16,11 +16,17 @@ export interface AegisSyncEvent {
 }
 
 // ── API helpers ───────────────────────────────────────────────
-async function apiPost(path: string, body: object) {
+async function apiPost(path: string, body: object, isAdmin = false) {
   try {
+    const headers: Record<string, string> = { 'Content-Type': 'application/json' }
+    if (isAdmin) {
+      // Admin key disimpan di sessionStorage setelah login
+      const key = sessionStorage.getItem('aegisAdminKey') ?? 'aegis2024'
+      headers['X-Admin-Key'] = key
+    }
     await fetch(`${API_BASE}${path}`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers,
       body: JSON.stringify(body),
     })
   } catch (err) {
@@ -30,7 +36,7 @@ async function apiPost(path: string, body: object) {
 
 export const aegisApi = {
   /** Admin: activate or deactivate tsunami alert */
-  setTsunami: (active: boolean) => apiPost('/api/tsunami', { active }),
+  setTsunami: (active: boolean) => apiPost('/api/tsunami', { active }, true),
 
   /** When A scans B's QR, notify B so it adds A */
   notifyFamilyJoin: (fromId: string, fromName: string, toId: string) =>
