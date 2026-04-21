@@ -21,6 +21,7 @@ import NavigatePage  from './components/pages/NavigatePage'
 import FamilyPage    from './components/pages/FamilyPage'
 import GuidesPage    from './components/pages/GuidesPage'
 import { useAegisSync, aegisApi } from './lib/useAegisSync'
+import { requestNotifPermission, sendTsunamiNotification } from './lib/useTsunamiAlert'
 // â”€â”€ UI Libraries â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 import {
   AlertTriangle, Shield, MapPin, Info, ChevronRight, ChevronLeft, X, Locate,
@@ -515,14 +516,24 @@ function App() {
         setActivePage('navigate')
         if ('vibrate' in navigator) navigator.vibrate([500, 200, 500, 200, 500])
         if (settings.soundAlert) alarmRef.current.start()
+        // Kirim local notification ke HP — muncul bahkan saat app di background
+        sendTsunamiNotification(true)
       } else {
         setTsunamiAlert(false)
         alarmRef.current.stop()
+        sendTsunamiNotification(false)
       }
     }
   })
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  useEffect(() => { aegisApi.getTsunami().then(({ active }) => { if (active) { setTsunamiAlert(true); setActivePage('navigate') } }) }, [])
+  useEffect(() => {
+    // Request notif permission saat app pertama kali buka
+    requestNotifPermission()
+    // Cek status tsunami saat app dibuka (kalau sudah aktif sebelumnya)
+    aegisApi.getTsunami().then(({ active }) => {
+      if (active) { setTsunamiAlert(true); setActivePage('navigate') }
+    })
+  }, [])
 
   // â”€â”€ PUBLIC USER layout â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   // Pages use fixed inset-0 z-[1800]; nav uses fixed z-[1900]

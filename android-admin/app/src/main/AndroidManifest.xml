@@ -8,7 +8,8 @@
         android:roundIcon="@mipmap/ic_launcher_round"
         android:supportsRtl="true"
         android:theme="@style/AppTheme"
-        android:usesCleartextTraffic="false">
+        android:usesCleartextTraffic="false"
+        android:showOnLockScreen="true">
 
         <activity
             android:configChanges="orientation|keyboardHidden|keyboard|screenSize|locale|smallestScreenSize|screenLayout|uiMode|navigation|density"
@@ -42,6 +43,14 @@
 
     <!-- Internet — wajib untuk SSE Railway server -->
     <uses-permission android:name="android.permission.INTERNET" />
+    <!-- Notifikasi — wajib Android 13+ -->
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <!-- Full-screen alert — agar app muncul otomatis di layar kunci -->
+    <uses-permission android:name="android.permission.USE_FULL_SCREEN_INTENT" />
+    <!-- Foreground service — agar SSE tetap hidup di background -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <!-- Disable battery optimization -->
+    <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
 
     <!-- GPS / Lokasi — untuk navigasi evakuasi real-time -->
