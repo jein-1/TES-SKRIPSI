@@ -2,7 +2,7 @@ import { useState, useCallback, useEffect, useRef } from 'react'
 import { MapContainer, TileLayer, Marker, Popup, Polyline, Polygon, Circle, useMap, useMapEvents } from 'react-leaflet'
 import 'leaflet/dist/leaflet.css'
 import 'leaflet-rotate'
-// ── Modules ──────────────────────────────────────────────────────
+// â”€â”€ Modules â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 import { shelters, hazardZones, findOptimalEvacuationRoutes, type RouteResult } from './lib/evacuation'
 import { TILE_NORMAL, TILE_DARK, TILE_SATELLITE, routeColors, routeBadgeColors } from './constants/mapConfig'
 import { shelterIcon, userIcon, userIconAlert } from './components/map/icons'
@@ -10,17 +10,17 @@ import { FlyToController, MapResizer, CustomMapControls } from './components/map
 import { CompassWidget } from './components/map/MapRotation'
 import type { ActivePage, HistoryFilter, EvacuationRecord, AppSettings, AppUserRole } from './types'
 import { DEFAULT_SETTINGS } from './types'
-// ── Auth ───────────────────────────────────────────────────────────
+// â”€â”€ Auth â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 import LoginPage from './components/pages/LoginPage'
 import FirstVisitModal from './components/modals/FirstVisitModal'
 import type { UserRole } from './types'
-// ── New Pages ─────────────────────────────────────────────────────
+// â”€â”€ New Pages â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 import SensorsPage   from './components/pages/SensorsPage'
 import StatusPage    from './components/pages/StatusPage'
 import NavigatePage  from './components/pages/NavigatePage'
 import FamilyPage    from './components/pages/FamilyPage'
 import GuidesPage    from './components/pages/GuidesPage'
-// ── UI Libraries ─────────────────────────────────────────────────
+// â”€â”€ UI Libraries â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 import {
   AlertTriangle, Shield, MapPin, Info, ChevronRight, ChevronLeft, X, Locate,
   Volume2, Menu, Radio, Satellite, Map as MapIcon, HelpCircle, Cpu,
@@ -31,9 +31,9 @@ import {
 import { motion, AnimatePresence } from 'motion/react'
 
 
-// ═══════════════════════════════════════════════════════════════
+// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 // ALARM SOUND
-// ═══════════════════════════════════════════════════════════════
+// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 function createAlarmSound(): { start: () => void; stop: () => void } {
   let audioCtx: AudioContext | null = null
   let osc1: OscillatorNode | null = null
@@ -63,9 +63,9 @@ function createAlarmSound(): { start: () => void; stop: () => void } {
   }
 }
 
-// ═══════════════════════════════════════════════════════════════
+// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 // MAP CHILD COMPONENTS
-// ═══════════════════════════════════════════════════════════════
+// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 function LocationMarker({ onLocationSet }: { onLocationSet: (lat: number, lng: number) => void }) {
   useMapEvents({ click(e) { onLocationSet(e.latlng.lat, e.latlng.lng) } })
   return null
@@ -81,14 +81,14 @@ function MapFlyTo({ position, zoom, onComplete }: {
     map.flyTo(position, zoom ?? 15, { duration: 1.2 })
     onComplete()
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []) // intentionally empty — new key prop forces fresh mount
+  }, []) // intentionally empty â€” new key prop forces fresh mount
   return null
 }
 
 
-// ═══════════════════════════════════════════════════════════════
-// MINI ROUTE MAP — decorative SVG for history log cards
-// ═══════════════════════════════════════════════════════════════
+// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+// MINI ROUTE MAP â€” decorative SVG for history log cards
+// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 function MiniRouteMap({ type, seed }: { type: 'real' | 'simulation'; seed?: number }) {
   const col  = type === 'simulation' ? '#6366f1' : '#ef4444'
   const glow = type === 'simulation' ? 'rgba(99,102,241,0.25)' : 'rgba(239,68,68,0.25)'
@@ -126,22 +126,22 @@ function MiniRouteMap({ type, seed }: { type: 'real' | 'simulation'; seed?: numb
   )
 }
 
-// ═══════════════════════════════════════════════════════════════
+// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 // HELPERS
-// ═══════════════════════════════════════════════════════════════
+// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 function fmtDate(d: Date) {
   return d.toLocaleDateString('id-ID', { day: '2-digit', month: 'short', year: 'numeric' })
-    + ' • '
+    + ' â€¢ '
     + d.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })
 }
 
-// ═══════════════════════════════════════════════════════════════
+// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 // APP
-// ═══════════════════════════════════════════════════════════════
-// ── Arrival detection radius (metres)
+// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+// â”€â”€ Arrival detection radius (metres)
 const ARRIVAL_RADIUS_METERS = 50
 
-// ── AdminBearingTracker — reads admin map rotation bearing ─────
+// â”€â”€ AdminBearingTracker â€” reads admin map rotation bearing â”€â”€â”€â”€â”€
 function AdminBearingTracker({ onBearing }: { onBearing: (b: number) => void }) {
   const map = useMap()
   useEffect(() => {
@@ -155,7 +155,7 @@ function AdminBearingTracker({ onBearing }: { onBearing: (b: number) => void }) 
 }
 
 function App() {
-  // ── Map state ──────────────────────────────────────────────
+  // â”€â”€ Map state â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   const [userPosition, setUserPosition] = useState<[number, number] | null>(null)
   const [routes, setRoutes] = useState<RouteResult[]>([])
   const [selectedRoute, setSelectedRoute] = useState(0)
@@ -164,10 +164,10 @@ function App() {
   const [flyToPos, setFlyToPos] = useState<[number, number] | null>(null)
   const [gpsAccuracy, setGpsAccuracy] = useState<number | null>(null)   // metres
   const [arrivedShelterId, setArrivedShelterId] = useState<string | null>(null)
-  // Arrival modal state — stores snapshot at time of arrival
+  // Arrival modal state â€” stores snapshot at time of arrival
   const [arrivalSummary, setArrivalSummary] = useState<{ shelter: (typeof shelters)[0]; distanceKm: number; walkingMin: number } | null>(null)
 
-  // ── GPS & Alert state ──────────────────────────────────────
+  // â”€â”€ GPS & Alert state â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   const [gpsTracking, setGpsTracking] = useState(false)
   const [gpsError, setGpsError] = useState<string | null>(null)
   const [tsunamiAlert, setTsunamiAlert] = useState(false)
@@ -178,20 +178,20 @@ function App() {
   const [adminMapBearing, setAdminMapBearing] = useState(0)
   const adminMapRef = useRef<L.Map | null>(null)
 
-  // ── URL-based Admin Detection ────────────────────────────────
+  // â”€â”€ URL-based Admin Detection â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   // Admin mode: URL contains ?admin OR ?key=aegis2024 OR hash #admin
-  // User mode:  any other URL (default — no login required)
+  // User mode:  any other URL (default â€” no login required)
   const isAdminURL = (() => {
     const p = new URLSearchParams(window.location.search)
     return p.has('admin') || p.get('key') === 'aegis2024' || window.location.hash === '#admin'
   })()
 
   const [userRole, setUserRole] = useState<AppUserRole>(() => {
-    if (!isAdminURL) return 'user' // Regular URL → instant user mode
+    if (!isAdminURL) return 'user' // Regular URL â†’ instant user mode
     return (sessionStorage.getItem('aegisRole') as AppUserRole) ?? null
   })
 
-  // User display name — stored in localStorage, set on first visit
+  // User display name â€” stored in localStorage, set on first visit
   const [userName, setUserName] = useState<string>(() =>
     localStorage.getItem('aegisUserName') ?? ''
   )
@@ -199,7 +199,7 @@ function App() {
     !isAdminURL && !localStorage.getItem('aegisUserName')
   )
 
-  // ── Navigation ─────────────────────────────────────────────
+  // â”€â”€ Navigation â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   // Admin starts on 'map', public user starts on 'status'
   const [activePage, setActivePage] = useState<ActivePage>(() => {
     if (!isAdminURL) return 'status'
@@ -208,7 +208,7 @@ function App() {
   })
   const [historyFilter, setHistoryFilter] = useState<HistoryFilter>('all')
 
-  // ── Persistent Terminal ID ─────────────────────────────────
+  // â”€â”€ Persistent Terminal ID â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   const [terminalId] = useState(() => {
     const s = localStorage.getItem('aegisTerminalId')
     if (s) return s
@@ -217,7 +217,7 @@ function App() {
     return id
   })
 
-  // ── History ────────────────────────────────────────────────
+  // â”€â”€ History â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   const [evacuationHistory, setEvacuationHistory] = useState<EvacuationRecord[]>(() => {
     try {
       const s = localStorage.getItem('evacuationHistory')
@@ -230,7 +230,7 @@ function App() {
     return []
   })
 
-  // ── Settings ───────────────────────────────────────────────
+  // â”€â”€ Settings â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   const [settings, setSettings] = useState<AppSettings>(() => {
     try {
       const s = localStorage.getItem('appSettings')
@@ -239,7 +239,7 @@ function App() {
     return DEFAULT_SETTINGS
   })
 
-  // ── Misc ───────────────────────────────────────────────────
+  // â”€â”€ Misc â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   const [isMobile, setIsMobile] = useState(false)
   const alarmRef = useRef(createAlarmSound())
   const gpsWatchRef = useRef<number | null>(null)
@@ -255,14 +255,14 @@ function App() {
   useEffect(() => { localStorage.setItem('appSettings', JSON.stringify(settings)) }, [settings])
   useEffect(() => { localStorage.setItem('evacuationHistory', JSON.stringify(evacuationHistory)) }, [evacuationHistory])
 
-  // Mobile detection — MUST be before any conditional returns (Rules of Hooks)
+  // Mobile detection â€” MUST be before any conditional returns (Rules of Hooks)
   useEffect(() => {
     const check = () => setIsMobile(window.innerWidth < 768)
     check(); window.addEventListener('resize', check)
     return () => window.removeEventListener('resize', check)
   }, [])
 
-  // ── Auth handlers ──────────────────────────────────────────
+  // â”€â”€ Auth handlers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   // Admin login (only called when isAdminURL)
   const handleLogin = (role: UserRole, name: string) => {
     sessionStorage.setItem('aegisRole', role ?? '')
@@ -271,7 +271,7 @@ function App() {
     setActivePage(role === 'user' ? 'status' : 'map')
   }
 
-  // Admin logout → back to admin login screen
+  // Admin logout â†’ back to admin login screen
   const handleLogout = () => {
     sessionStorage.removeItem('aegisRole')
     sessionStorage.removeItem('aegisUser')
@@ -288,9 +288,9 @@ function App() {
     setTimeout(() => startGpsTracking(), 800)
   }
 
-  // ── GPS ────────────────────────────────────────────────────
+  // â”€â”€ GPS â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
-  // ── Save history record ────────────────────────────────────
+  // â”€â”€ Save history record â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   const saveHistoryRecord = useCallback((
     routeResults: RouteResult[], type: 'simulation' | 'real', pos: [number, number]
   ) => {
@@ -315,7 +315,7 @@ function App() {
     setEvacuationHistory(prev => [record, ...prev].slice(0, 50))
   }, [settings.algorithm])
 
-  // ── GPS ────────────────────────────────────────────────────
+  // â”€â”€ GPS â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   const startGpsTracking = useCallback(() => {
     if (!navigator.geolocation) { setGpsError('GPS tidak didukung di browser ini'); return }
     // Clear any existing watch first to prevent duplicate watchers
@@ -332,7 +332,7 @@ function App() {
     setGpsTracking(true); setGpsError(null); setIsCalculating(true)
     gpsWatchRef.current = navigator.geolocation.watchPosition(
       (pos) => {
-        // Show accuracy badge but don't filter — let all positions through
+        // Show accuracy badge but don't filter â€” let all positions through
         setGpsAccuracy(pos.coords.accuracy)
         const newPos: [number, number] = [pos.coords.latitude, pos.coords.longitude]
         setUserPosition(newPos)
@@ -351,7 +351,7 @@ function App() {
         }
         saveHistoryRecord(routeResults, tsunamiAlert ? 'simulation' : 'real', newPos)
 
-        // ── Arrival detection: check if within ARRIVAL_RADIUS_METERS of any shelter ──
+        // â”€â”€ Arrival detection: check if within ARRIVAL_RADIUS_METERS of any shelter â”€â”€
         // Only fires once per GPS session (arrivedFiredRef prevents repeat triggers)
         if (!arrivedFiredRef.current) {
           const toRad = (d: number) => d * (Math.PI / 180)
@@ -368,7 +368,7 @@ function App() {
           })
           if (arrived) {
             arrivedFiredRef.current = true
-            // ── STOP EVERYTHING — like Google Maps ending navigation ──
+            // â”€â”€ STOP EVERYTHING â€” like Google Maps ending navigation â”€â”€
             // 1. Stop GPS watch
             if (gpsWatchRef.current !== null) {
               navigator.geolocation.clearWatch(gpsWatchRef.current)
@@ -398,7 +398,7 @@ function App() {
         setGpsTracking(false)
         if (gpsWatchRef.current !== null) { navigator.geolocation.clearWatch(gpsWatchRef.current); gpsWatchRef.current = null }
       },
-      // ⚠️ JANGAN DIUBAH — GPS optimal: fresh position, high accuracy, no filter
+      // âš ï¸ JANGAN DIUBAH â€” GPS optimal: fresh position, high accuracy, no filter
       { enableHighAccuracy: true, timeout: 20000, maximumAge: 0 }
     )
   }, [saveHistoryRecord, tsunamiAlert])
@@ -417,16 +417,24 @@ function App() {
     }
   }, [isMobile, settings.autoStartGPS, startGpsTracking])
 
-  // ── Tsunami ────────────────────────────────────────────────
+  // â”€â”€ Tsunami â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   const activateTsunamiAlert = useCallback(() => {
     setTsunamiAlert(true); setShowTsunamiConfirm(false)
     if (!alarmMuted && settings.soundAlert) alarmRef.current.start()
     if (settings.vibrationAlert && 'vibrate' in navigator) navigator.vibrate([500, 200, 500, 200, 500])
     startGpsTracking()
+    // â­ Broadcast to ALL other tabs/devices (user tabs listening via storage event)
+    localStorage.setItem('aegisTsunamiGlobal', JSON.stringify({ active: true, ts: Date.now() }))
+    // Dispatch manually so SAME tab also hears it (storage event only fires in OTHER tabs)
+    window.dispatchEvent(new StorageEvent('storage', { key: 'aegisTsunamiGlobal',
+      newValue: JSON.stringify({ active: true, ts: Date.now() }) }))
   }, [alarmMuted, settings.soundAlert, settings.vibrationAlert, startGpsTracking])
 
   const deactivateTsunamiAlert = useCallback(() => {
     setTsunamiAlert(false); alarmRef.current.stop()
+    localStorage.setItem('aegisTsunamiGlobal', JSON.stringify({ active: false, ts: Date.now() }))
+    window.dispatchEvent(new StorageEvent('storage', { key: 'aegisTsunamiGlobal',
+      newValue: JSON.stringify({ active: false, ts: Date.now() }) }))
   }, [])
 
   useEffect(() => {
@@ -441,7 +449,7 @@ function App() {
     if (gpsWatchRef.current !== null) navigator.geolocation.clearWatch(gpsWatchRef.current)
   }, [])
 
-  // ── Map click ──────────────────────────────────────────────
+  // â”€â”€ Map click â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   const handleLocationSet = useCallback((lat: number, lng: number) => {
     if (gpsTracking) return
     setUserPosition([lat, lng]); setIsCalculating(true)
@@ -452,7 +460,7 @@ function App() {
     }, 300)
   }, [gpsTracking, saveHistoryRecord])
 
-  // ── Derived ────────────────────────────────────────────────
+  // â”€â”€ Derived â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   const mapTileUrl = tsunamiAlert
     ? TILE_DARK
     : settings.cartographyTheme === 'satellite-hud' ? TILE_SATELLITE
@@ -480,11 +488,46 @@ function App() {
     ? evacuationHistory
     : evacuationHistory.filter(r => r.type === (historyFilter === 'real' ? 'real' : 'simulation'))
 
-  // ════════════════════════════════════════════════════════════
-  // RENDER — Split by role (no z-index conflicts)
-  // ════════════════════════════════════════════════════════════
+  // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+  // RENDER â€” Split by role (no z-index conflicts)
+  // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 
-  // ── PUBLIC USER layout ─────────────────────────────────────
+  // â”€â”€ User mode: listen for tsunami broadcast from admin tab â”€â”€â”€
+  useEffect(() => {
+    if (userRole !== 'user') return
+    // Check stored state on mount
+    const stored = localStorage.getItem('aegisTsunamiGlobal')
+    if (stored) {
+      try {
+        const data = JSON.parse(stored)
+        if (data?.active) {
+          setTsunamiAlert(true)
+          setActivePage('navigate')
+          if ('vibrate' in navigator) navigator.vibrate([500, 200, 500, 200, 500])
+        }
+      } catch {}
+    }
+    // Listen for changes from admin tab
+    const handler = (e: StorageEvent) => {
+      if (e.key !== 'aegisTsunamiGlobal') return
+      try {
+        const data = e.newValue ? JSON.parse(e.newValue) : null
+        if (data?.active) {
+          setTsunamiAlert(true)
+          setActivePage('navigate')
+          if ('vibrate' in navigator) navigator.vibrate([500, 200, 500, 200, 500])
+          if (settings.soundAlert) alarmRef.current.start()
+        } else {
+          setTsunamiAlert(false)
+          alarmRef.current.stop()
+        }
+      } catch {}
+    }
+    window.addEventListener('storage', handler)
+    return () => window.removeEventListener('storage', handler)
+  }, [userRole, settings.soundAlert, setActivePage])
+
+  // â”€â”€ PUBLIC USER layout â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   // Pages use fixed inset-0 z-[1800]; nav uses fixed z-[1900]
   if (userRole === 'user') {
     return (
@@ -524,7 +567,7 @@ function App() {
           )}
         </AnimatePresence>
 
-        {/* USER BOTTOM NAV — fixed z-[1900] sits on top of pages */}
+        {/* USER BOTTOM NAV â€” fixed z-[1900] sits on top of pages */}
         <nav className="fixed bottom-0 left-0 right-0 z-[1900] flex items-center justify-around border-t bg-[#0a1020]/98 border-slate-800/60 backdrop-blur-xl"
           style={{ paddingBottom: 'env(safe-area-inset-bottom)', height: '60px' }}>
           {([
@@ -532,15 +575,7 @@ function App() {
             { page: 'navigate' as ActivePage, Icon: Navigation2, label: 'NAVIGATE' },
             { page: 'family'   as ActivePage, Icon: Users,       label: 'FAMILY'   },
             { page: 'guides'   as ActivePage, Icon: BookOpen,    label: 'GUIDES'   },
-          ]).map(({ page, Icon, label }) => (
-            <button key={page} onClick={() => setActivePage(page)}
-              className={`flex flex-col items-center gap-1 py-2 px-4 transition-colors ${
-                activePage === page ? 'text-emerald-400' : 'text-slate-600 active:text-slate-400'
-              }`}>
-              <Icon className="w-5 h-5"/>
-              <span className="text-[9px] font-bold tracking-wider">{label}</span>
-            </button>
-          ))}
+          ]).map(({ page, Icon, label }) => { const isAlert = page === 'navigate' && tsunamiAlert; const isActive = activePage === page; return (<button key={page} onClick={() => setActivePage(page)} className={`flex flex-col items-center gap-1 py-2 px-4 transition-colors ${isAlert ? 'text-red-400' : isActive ? 'text-emerald-400' : 'text-slate-600 active:text-slate-400'}`}><div className="relative"><Icon className={`w-5 h-5 ${isAlert ? 'animate-pulse' : ''}`}/>{isAlert && <span className="absolute -top-0.5 -right-0.5 w-2 h-2 rounded-full bg-red-400 animate-ping block"/>}</div><span className="text-[9px] font-bold tracking-wider">{label}</span></button>) })}
           {/* Logout only shown when accessed via admin URL */}
           {isAdminURL ? (
             <button onClick={handleLogout}
@@ -557,7 +592,7 @@ function App() {
           )}
         </nav>
 
-        {/* First Visit Modal — shown when no name stored yet */}
+        {/* First Visit Modal â€” shown when no name stored yet */}
         <AnimatePresence>
           {showFirstVisit && (
             <FirstVisitModal key="first-visit" onComplete={handleFirstVisit} />
@@ -568,11 +603,11 @@ function App() {
   }
 
 
-  // ── ADMIN layout (full tactical dashboard) ─────────────────
+  // â”€â”€ ADMIN layout (full tactical dashboard) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   return (
     <div className="w-full h-full bg-[#0b1120] text-slate-300 font-sans overflow-hidden flex flex-col">
 
-      {/* ═══ MOBILE HEADER — 2-row compact layout for all screen sizes ═══ */}
+      {/* â•â•â• MOBILE HEADER â€” 2-row compact layout for all screen sizes â•â•â• */}
       <header className={`md:hidden shrink-0 z-50 relative transition-colors duration-500 backdrop-blur-md
         ${tsunamiAlert ? 'bg-red-950/95 border-b border-red-900/50' : 'bg-[#0a1020]/95 border-b border-slate-800/60'}`}>
 
@@ -585,7 +620,7 @@ function App() {
             </div>
             <div className="min-w-0">
               <h1 className="text-white font-black text-sm tracking-widest leading-none">AEGIS RESPONSE</h1>
-              <p className="text-[9px] text-slate-600 font-mono mt-0.5 truncate">Sistem Evakuasi · {terminalId}</p>
+              <p className="text-[9px] text-slate-600 font-mono mt-0.5 truncate">Sistem Evakuasi Â· {terminalId}</p>
             </div>
           </div>
           {/* SIMULASI button */}
@@ -617,13 +652,13 @@ function App() {
               : gpsAccuracy <= 50 ? 'bg-amber-900/30 border-amber-700/30 text-amber-400'
               : 'bg-red-900/30 border-red-700/30 text-red-400'}`}>
               <Crosshair className="w-2.5 h-2.5" />
-              <span>±{Math.round(gpsAccuracy)}m</span>
+              <span>Â±{Math.round(gpsAccuracy)}m</span>
             </div>
           )}
         </div>
       </header>
 
-      {/* ═══ DESKTOP HEADER ═══ */}
+      {/* â•â•â• DESKTOP HEADER â•â•â• */}
       <header className={`hidden md:flex h-[60px] shrink-0 border-b items-center justify-between px-6 z-50 relative transition-colors duration-500
         ${tsunamiAlert ? 'bg-red-950 border-red-900/50' : 'bg-[#0a1020] border-slate-800/60'}`}>
         {/* Left: brand */}
@@ -636,7 +671,7 @@ function App() {
           </div>
           <div>
             <h1 className="text-white font-black text-sm tracking-widest leading-none">AEGIS RESPONSE</h1>
-            <p className="text-[9px] text-slate-600 font-mono">TES SKRIPSI · Kota Palu</p>
+            <p className="text-[9px] text-slate-600 font-mono">TES SKRIPSI Â· Kota Palu</p>
           </div>
         </div>
         {/* Center: status indicators */}
@@ -682,14 +717,14 @@ function App() {
         </div>
       </header>
 
-      {/* ═══ MAIN CONTENT ═══ */}
+      {/* â•â•â• MAIN CONTENT â•â•â• */}
       <div className="flex flex-1 overflow-hidden relative">
 
         {/* Tsunami overlay */}
         <div className={`absolute inset-0 z-[400] pointer-events-none transition-opacity duration-1000 ${tsunamiAlert ? 'bg-red-900/20' : 'opacity-0'}`} />
         <div className={`absolute inset-0 z-[400] pointer-events-none border-4 transition-colors duration-500 ${tsunamiAlert ? 'border-red-500/50 animate-[borderFlash_2s_infinite]' : 'border-transparent'}`} />
 
-        {/* ═══ DESKTOP LEFT SIDEBAR ═══ */}
+        {/* â•â•â• DESKTOP LEFT SIDEBAR â•â•â• */}
         <AnimatePresence initial={false}>
           {showLeftSidebar && (
             <motion.aside
@@ -733,7 +768,7 @@ function App() {
           )}
         </AnimatePresence>
 
-        {/* ═══ CENTER MAP ═══ */}
+        {/* â•â•â• CENTER MAP â•â•â• */}
         <main className="flex-1 relative z-0 bg-[#0b1120]">
 
           {/* Mobile GPS badges */}
@@ -802,7 +837,7 @@ function App() {
             )}
           </div>
 
-          {/* Compass overlay — floating over the map, outside MapContainer */}
+          {/* Compass overlay â€” floating over the map, outside MapContainer */}
           <div className="absolute top-16 right-4 z-[1000] flex flex-col gap-2 pointer-events-auto">
             <CompassWidget
               bearing={adminMapBearing}
@@ -813,14 +848,14 @@ function App() {
             />
           </div>
 
-          {/* Map — rotation enabled via leaflet-rotate (2-finger mobile, Shift+drag desktop) */}
+          {/* Map â€” rotation enabled via leaflet-rotate (2-finger mobile, Shift+drag desktop) */}
           <MapContainer
             center={[-0.8917, 119.8577]} zoom={14} minZoom={10} maxZoom={20}
             className="w-full h-full" zoomControl={false}
             dragging={true} touchZoom={true} scrollWheelZoom={true}
             doubleClickZoom={true}
             ref={adminMapRef as any}
-            {...({ rotate: true, touchRotate: true, bearingSnap: 5 } as any)}
+            {...({ rotate: true, touchRotate: true } as any)}
           >
             <TileLayer url={mapTileUrl} key={mapTileKey}
               attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
@@ -878,7 +913,7 @@ function App() {
               </Marker>
             ))}
 
-            {/* Arrival radius circles — shown around all shelters, pulse on target */}
+            {/* Arrival radius circles â€” shown around all shelters, pulse on target */}
             {shelters.map((sh) => {
               const isTarget = routes.length > 0 && routes[selectedRoute]?.shelterName === sh.name
               const isArrived = arrivedShelterId === sh.id
@@ -905,9 +940,9 @@ function App() {
               </Marker>
             )}
 
-            {/* Routes — dual layer display:
+            {/* Routes â€” dual layer display:
                 Layer 1: thin dashed reference path (Dijkstra via road network)
-                Layer 2: thick solid beeline from user → shelter (always accurate) */}
+                Layer 2: thick solid beeline from user â†’ shelter (always accurate) */}
             {routes.map((route, i) => {
               const isSelected = i === selectedRoute
               return (
@@ -924,8 +959,8 @@ function App() {
               )
             })}
 
-            {/* Beeline: garis lurus langsung user → shelter tujuan
-                Selalu diperbarui setiap GPS update — tidak bergantung road network */}
+            {/* Beeline: garis lurus langsung user â†’ shelter tujuan
+                Selalu diperbarui setiap GPS update â€” tidak bergantung road network */}
             {userPosition && routes[selectedRoute] && (() => {
               const target = routes[selectedRoute]
               const shelterPos = target.coordinates[target.coordinates.length - 1]
@@ -947,7 +982,7 @@ function App() {
             })()}
           </MapContainer>
 
-          {/* ═══ MOBILE BOTTOM SHEET ═══ */}
+          {/* â•â•â• MOBILE BOTTOM SHEET â•â•â• */}
           <AnimatePresence>
             {showPanel && routes.length > 0 && isMobile && (
               <motion.div
@@ -966,7 +1001,7 @@ function App() {
                     <div>
                       <h2 className="text-base font-bold text-white leading-tight">Rute Evakuasi</h2>
                       <p className="text-[11px] text-slate-400">
-                        {routes.length} rute • <span className="text-indigo-400 italic">{settings.algorithm.toUpperCase()}</span>
+                        {routes.length} rute â€¢ <span className="text-indigo-400 italic">{settings.algorithm.toUpperCase()}</span>
                       </p>
                     </div>
                   </div>
@@ -1027,7 +1062,7 @@ function App() {
           </AnimatePresence>
         </main>
 
-        {/* ═══ DESKTOP RIGHT SIDEBAR (Routes) ═══ */}
+        {/* â•â•â• DESKTOP RIGHT SIDEBAR (Routes) â•â•â• */}
         <AnimatePresence>
           {showPanel && routes.length > 0 && !isMobile && (
             <motion.aside
@@ -1109,9 +1144,9 @@ function App() {
         </AnimatePresence>
       </div>
 
-      {/* ═══ BOTTOM NAV — Role-based ═══ */}
+      {/* â•â•â• BOTTOM NAV â€” Role-based â•â•â• */}
       {userRole === 'admin' ? (
-        /* ── ADMIN NAV: MAP, HISTORY, SENSORS, SETTINGS + logout ── */
+        /* â”€â”€ ADMIN NAV: MAP, HISTORY, SENSORS, SETTINGS + logout â”€â”€ */
         <nav className={`md:hidden fixed bottom-0 left-0 right-0 flex items-center justify-around border-t z-[1900] transition-colors duration-500 backdrop-blur-md
           ${tsunamiAlert ? 'bg-red-950/95 border-red-900/50' : 'bg-[#0f172a]/95 border-slate-800/50'}`}
           style={{ paddingBottom: 'env(safe-area-inset-bottom)', height: '60px' }}>
@@ -1146,7 +1181,7 @@ function App() {
           </button>
         </nav>
       ) : (
-        /* ── USER NAV: STATUS, NAVIGATE, FAMILY, GUIDES + logout ── */
+        /* â”€â”€ USER NAV: STATUS, NAVIGATE, FAMILY, GUIDES + logout â”€â”€ */
         <nav className="md:hidden fixed bottom-0 left-0 right-0 flex items-center justify-around border-t z-[1900] backdrop-blur-md bg-[#0f172a]/95 border-slate-800/50"
           style={{ paddingBottom: 'env(safe-area-inset-bottom)', height: '60px' }}>
           {([
@@ -1154,15 +1189,7 @@ function App() {
             { page: 'navigate' as ActivePage, Icon: Navigation2, label: 'NAVIGATE' },
             { page: 'family'   as ActivePage, Icon: Users,       label: 'FAMILY'   },
             { page: 'guides'   as ActivePage, Icon: BookOpen,    label: 'GUIDES'   },
-          ]).map(({ page, Icon, label }) => (
-            <button key={page} onClick={() => setActivePage(page)}
-              className={`flex flex-col items-center gap-1 py-2 px-4 transition-colors ${
-                activePage === page ? 'text-emerald-400' : 'text-slate-600 active:text-slate-400'
-              }`}>
-              <Icon className="w-5 h-5"/>
-              <span className="text-[9px] font-bold tracking-wider">{label}</span>
-            </button>
-          ))}
+          ]).map(({ page, Icon, label }) => { const isAlert = page === 'navigate' && tsunamiAlert; const isActive = activePage === page; return (<button key={page} onClick={() => setActivePage(page)} className={`flex flex-col items-center gap-1 py-2 px-4 transition-colors ${isAlert ? 'text-red-400' : isActive ? 'text-emerald-400' : 'text-slate-600 active:text-slate-400'}`}><div className="relative"><Icon className={`w-5 h-5 ${isAlert ? 'animate-pulse' : ''}`}/>{isAlert && <span className="absolute -top-0.5 -right-0.5 w-2 h-2 rounded-full bg-red-400 animate-ping block"/>}</div><span className="text-[9px] font-bold tracking-wider">{label}</span></button>) })}
           {/* Logout */}
           <button onClick={handleLogout}
             className="flex flex-col items-center gap-1 py-2 px-4 text-slate-700 active:text-red-400 transition-colors">
@@ -1172,9 +1199,9 @@ function App() {
         </nav>
       )}
 
-      {/* ══════════════════════════════════════════════════════════ */}
+      {/* â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• */}
       {/* MODALS                                                    */}
-      {/* ══════════════════════════════════════════════════════════ */}
+      {/* â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• */}
 
       {/* Tsunami confirm */}
       <AnimatePresence>
@@ -1264,7 +1291,7 @@ function App() {
         </div>
       )}
 
-      {/* ══ ARRIVAL MODAL — full-screen, muncul ketika simulasi selesai (dalam radius) ══ */}
+      {/* â•â• ARRIVAL MODAL â€” full-screen, muncul ketika simulasi selesai (dalam radius) â•â• */}
       <AnimatePresence>
         {arrivalSummary && (
           <motion.div
@@ -1328,14 +1355,14 @@ function App() {
                     <div className="p-3 rounded-xl bg-slate-900/60 border border-slate-700/40 text-center">
                       <p className="text-[9px] text-slate-500 uppercase tracking-widest font-bold mb-1">Jarak Tempuh</p>
                       <p className="text-xl font-black text-white">
-                        {arrivalSummary.distanceKm > 0 ? arrivalSummary.distanceKm.toFixed(2) : '—'}
+                        {arrivalSummary.distanceKm > 0 ? arrivalSummary.distanceKm.toFixed(2) : 'â€”'}
                         <span className="text-xs font-bold text-slate-400 ml-1">km</span>
                       </p>
                     </div>
                     <div className="p-3 rounded-xl bg-slate-900/60 border border-slate-700/40 text-center">
                       <p className="text-[9px] text-slate-500 uppercase tracking-widest font-bold mb-1">Waktu Estimasi</p>
                       <p className="text-xl font-black text-white">
-                        {arrivalSummary.walkingMin > 0 ? arrivalSummary.walkingMin : '—'}
+                        {arrivalSummary.walkingMin > 0 ? arrivalSummary.walkingMin : 'â€”'}
                         <span className="text-xs font-bold text-slate-400 ml-1">min</span>
                       </p>
                     </div>
@@ -1344,7 +1371,7 @@ function App() {
                   {/* Radius info */}
                   <p className="text-center text-[10px] text-slate-500 mb-5 flex items-center justify-center gap-1.5">
                     <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 inline-block" />
-                    GPS berhenti otomatis · dalam radius {ARRIVAL_RADIUS_METERS}m
+                    GPS berhenti otomatis Â· dalam radius {ARRIVAL_RADIUS_METERS}m
                   </p>
 
                   {/* Actions */}
@@ -1379,9 +1406,9 @@ function App() {
         )}
       </AnimatePresence>
 
-      {/* ══════════════════════════════════════════════════════════ */}
-      {/* HISTORY PAGE — "TACTICAL ARCHIVE"                        */}
-      {/* ══════════════════════════════════════════════════════════ */}
+      {/* â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• */}
+      {/* HISTORY PAGE â€” "TACTICAL ARCHIVE"                        */}
+      {/* â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• */}
       <AnimatePresence>
         {activePage === 'history' && (
           <motion.div
@@ -1416,7 +1443,7 @@ function App() {
                     <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-1">Avg. Response Time</p>
                     {avgResponse
                       ? <p className="text-4xl font-black text-white">{avgResponse}<span className="text-xl text-slate-400 font-bold ml-1">m</span></p>
-                      : <p className="text-xl font-black text-slate-600">— m</p>
+                      : <p className="text-xl font-black text-slate-600">â€” m</p>
                     }
                   </div>
                   <div className="w-12 h-12 rounded-xl bg-indigo-500/20 border border-indigo-500/20 flex items-center justify-center">
@@ -1441,10 +1468,10 @@ function App() {
                       </div>
                       <div className="flex justify-between text-[8px] text-slate-600 mt-1">
                         <span>0m</span>
-                        <span className="text-slate-500">Target ≤ {target}m</span>
+                        <span className="text-slate-500">Target â‰¤ {target}m</span>
                         <span>{target}m+</span>
                       </div>
-                      {/* Trend bars — last 5 logs */}
+                      {/* Trend bars â€” last 5 logs */}
                       {evacuationHistory.length > 1 && (
                         <div className="mt-3 pt-3 border-t border-slate-800/60">
                           <p className="text-[8px] text-slate-600 uppercase tracking-widest mb-1.5 font-bold">Last {Math.min(evacuationHistory.length, 6)} Sessions</p>
@@ -1472,9 +1499,9 @@ function App() {
             {/* Filter tabs */}
             <div className="px-5 pb-3 flex gap-2 shrink-0 overflow-x-auto">
               {([
-                { id: 'all'        as HistoryFilter, label: '∞ ALL LOGS'    },
-                { id: 'real'       as HistoryFilter, label: '▲ REAL ALERTS' },
-                { id: 'simulation' as HistoryFilter, label: '◈ SIMULATION'  },
+                { id: 'all'        as HistoryFilter, label: 'âˆž ALL LOGS'    },
+                { id: 'real'       as HistoryFilter, label: 'â–² REAL ALERTS' },
+                { id: 'simulation' as HistoryFilter, label: 'â—ˆ SIMULATION'  },
               ]).map(tab => (
                 <button key={tab.id} onClick={() => setHistoryFilter(tab.id)}
                   className={`px-3 py-1.5 rounded-full text-xs font-bold whitespace-nowrap transition-all
@@ -1534,11 +1561,11 @@ function App() {
                         </span>
                         <div className="flex items-center gap-5">
                           <div className="text-right">
-                            <p className="text-xs font-black text-white">{record.walkingTime != null ? `${record.walkingTime}m` : '—'}</p>
+                            <p className="text-xs font-black text-white">{record.walkingTime != null ? `${record.walkingTime}m` : 'â€”'}</p>
                             <p className="text-[9px] text-slate-600 uppercase tracking-wider">TIME</p>
                           </div>
                           <div className="text-right">
-                            <p className="text-xs font-black text-white">{record.distance != null ? `${record.distance.toFixed(1)}km` : '—'}</p>
+                            <p className="text-xs font-black text-white">{record.distance != null ? `${record.distance.toFixed(1)}km` : 'â€”'}</p>
                             <p className="text-[9px] text-slate-600 uppercase tracking-wider">DIST</p>
                           </div>
                         </div>
@@ -1565,9 +1592,9 @@ function App() {
         )}
       </AnimatePresence>
 
-      {/* ══════════════════════════════════════════════════════════ */}
-      {/* SETTINGS PAGE — "SYSTEM CONFIGURATION"                   */}
-      {/* ══════════════════════════════════════════════════════════ */}
+      {/* â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• */}
+      {/* SETTINGS PAGE â€” "SYSTEM CONFIGURATION"                   */}
+      {/* â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• */}
       <AnimatePresence>
         {activePage === 'settings' && (
           <motion.div
@@ -1599,7 +1626,7 @@ function App() {
 
             <div className="flex-1 overflow-y-auto custom-scrollbar px-4 pb-6 space-y-4 pt-4">
 
-              {/* ─── CORE PROCESSING ─── */}
+              {/* â”€â”€â”€ CORE PROCESSING â”€â”€â”€ */}
               <section className="rounded-2xl border border-slate-800/50 p-4" style={{ background: '#0c1525' }}>
                 <div className="flex items-center gap-2 mb-4">
                   <div className="w-7 h-7 rounded-lg bg-slate-700/50 flex items-center justify-center">
@@ -1639,7 +1666,7 @@ function App() {
                 </div>
               </section>
 
-              {/* ─── DEVICE IDENTITY ─── */}
+              {/* â”€â”€â”€ DEVICE IDENTITY â”€â”€â”€ */}
               <section className="rounded-2xl border border-slate-800/50 p-4" style={{ background: '#0c1525' }}>
                 <div className="flex items-center gap-2 mb-4">
                   <div className="w-7 h-7 rounded-lg bg-slate-700/50 flex items-center justify-center">
@@ -1662,7 +1689,7 @@ function App() {
                 </button>
               </section>
 
-              {/* ─── ALERT PROTOCOLS ─── */}
+              {/* â”€â”€â”€ ALERT PROTOCOLS â”€â”€â”€ */}
               <section className="rounded-2xl border border-slate-800/50 p-4" style={{ background: '#0c1525' }}>
                 <div className="flex items-center gap-2 mb-4">
                   <div className="w-7 h-7 rounded-lg bg-red-500/20 flex items-center justify-center">
@@ -1699,7 +1726,7 @@ function App() {
                 ))}
               </section>
 
-              {/* ─── VISUAL INTERFACE ─── */}
+              {/* â”€â”€â”€ VISUAL INTERFACE â”€â”€â”€ */}
               <section className="rounded-2xl border border-slate-800/50 p-4" style={{ background: '#0c1525' }}>
                 <div className="flex items-center gap-2 mb-4">
                   <div className="w-7 h-7 rounded-lg bg-slate-700/50 flex items-center justify-center">
@@ -1809,7 +1836,7 @@ function App() {
         )}
       </AnimatePresence>
 
-      {/* ═══ ADMIN-ONLY OVERLAY PAGES ═══ */}
+      {/* â•â•â• ADMIN-ONLY OVERLAY PAGES â•â•â• */}
       {/* Sensors: admin tab goes here */}
       <AnimatePresence>
         {activePage === 'sensors' && (
@@ -1817,7 +1844,7 @@ function App() {
         )}
       </AnimatePresence>
 
-      {/* ── LOGIN GATE — only shown on admin URL when not authenticated ── */}
+      {/* â”€â”€ LOGIN GATE â€” only shown on admin URL when not authenticated â”€â”€ */}
       <AnimatePresence>
         {isAdminURL && !userRole && (
           <LoginPage key="login" onLogin={handleLogin} />
@@ -1829,3 +1856,4 @@ function App() {
 }
 
 export default App
+
