@@ -8,12 +8,7 @@ import 'leaflet/dist/leaflet.css'
 import 'leaflet-rotate'
 import { MapPin, Users, BookOpen, ChevronRight, CheckCircle, Heart, Activity, ChevronLeft, Locate } from 'lucide-react'
 import { motion, AnimatePresence } from 'motion/react'
-
-const FAMILY_PREVIEW = [
-  { initials: 'AY', color: '#6366f1' },
-  { initials: 'RD', color: '#10b981' },
-  { initials: 'SJ', color: '#f59e0b' },
-]
+import { loadFamily } from './FamilyPage'
 
 // ── Real Leaflet mini-map ─────────────────────────────────────
 const PALU_CENTER: [number, number] = [-0.8917, 119.8577]
@@ -236,36 +231,45 @@ export default function StatusPage({ onNavigate, userLocation, onBack, userName,
           )}
         </motion.div>
 
-        {/* Family Status */}
-        <motion.button
-          initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.15 }}
-          onClick={() => onNavigate('family')}
-          className="w-full p-4 rounded-2xl border border-slate-700/40 text-left flex items-center justify-between"
-          style={{ background: '#0f1a2e' }}
-        >
-          <div className="flex items-center gap-3">
-            <div className="w-9 h-9 rounded-xl bg-indigo-500/20 border border-indigo-500/30 flex items-center justify-center">
-              <Users className="w-4 h-4 text-indigo-400" />
-            </div>
-            <div>
-              <p className="text-[10px] text-slate-500 uppercase tracking-widest font-bold mb-0.5">Family Status</p>
-              <p className="text-sm font-bold text-white">Circle Protected</p>
-              <div className="flex items-center gap-2 mt-1.5">
-                <div className="flex -space-x-1">
-                  {FAMILY_PREVIEW.map((m, i) => (
-                    <div key={i} className="w-6 h-6 rounded-full border-2 border-[#0f1a2e] flex items-center justify-center text-[9px] font-black text-white"
-                      style={{ background: m.color }}>
-                      {m.initials[0]}
-                    </div>
-                  ))}
+        {/* Family Status — only shown when group has members */}
+        {(() => {
+          const fam = loadFamily()
+          if (fam.length === 0) return null
+          const preview = fam.slice(0, 3)
+          const extra = fam.length - 3
+          const safeCount = fam.filter(m => m.status === 'safe').length
+          return (
+            <motion.button
+              initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.15 }}
+              onClick={() => onNavigate('family')}
+              className="w-full p-4 rounded-2xl border border-slate-700/40 text-left flex items-center justify-between"
+              style={{ background: '#0f1a2e' }}
+            >
+              <div className="flex items-center gap-3">
+                <div className="w-9 h-9 rounded-xl bg-indigo-500/20 border border-indigo-500/30 flex items-center justify-center">
+                  <Users className="w-4 h-4 text-indigo-400" />
                 </div>
-                <span className="text-[10px] text-slate-400">+2</span>
+                <div>
+                  <p className="text-[10px] text-slate-500 uppercase tracking-widest font-bold mb-0.5">Family Status</p>
+                  <p className="text-sm font-bold text-white">My Family · {fam.length} anggota</p>
+                  <div className="flex items-center gap-2 mt-1.5">
+                    <div className="flex -space-x-1">
+                      {preview.map((m, i) => (
+                        <div key={i} className="w-6 h-6 rounded-full border-2 border-[#0f1a2e] flex items-center justify-center text-[9px] font-black text-white"
+                          style={{ background: ['#6366f1','#10b981','#f59e0b'][i] }}>
+                          {m.initials[0]}
+                        </div>
+                      ))}
+                    </div>
+                    {extra > 0 && <span className="text-[10px] text-slate-400">+{extra}</span>}
+                  </div>
+                  <p className="text-[10px] text-emerald-400 mt-1">{safeCount}/{fam.length} anggota aman.</p>
+                </div>
               </div>
-              <p className="text-[10px] text-emerald-400 mt-1">All 4 members have checked in safely.</p>
-            </div>
-          </div>
-          <ChevronRight className="w-5 h-5 text-slate-600 shrink-0" />
-        </motion.button>
+              <ChevronRight className="w-5 h-5 text-slate-600 shrink-0" />
+            </motion.button>
+          )
+        })()}
 
         {/* Resources */}
         <motion.button

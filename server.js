@@ -78,6 +78,14 @@ app.post('/api/ping/reply', (req, res) => {
   res.json({ ok: true })
 })
 
+// ── Location sharing — member broadcasts their GPS position ──
+app.post('/api/location', (req, res) => {
+  const { id, name, lat, lng } = req.body
+  if (!id || lat == null || lng == null) return res.status(400).json({ error: 'Missing fields' })
+  broadcast({ type: 'LOCATION_UPDATE', id, name, lat, lng })
+  res.json({ ok: true })
+})
+
 // ── Serve Vite build ──────────────────────────────────────────
 const distPath = join(__dirname, 'dist')
 if (existsSync(distPath)) {

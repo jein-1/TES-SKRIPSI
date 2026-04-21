@@ -1,4 +1,4 @@
-﻿import { useState, useCallback, useEffect, useRef } from 'react'
+import { useState, useCallback, useEffect, useRef } from 'react'
 import { MapContainer, TileLayer, Marker, Popup, Polyline, Polygon, Circle, useMap, useMapEvents } from 'react-leaflet'
 import 'leaflet/dist/leaflet.css'
 import 'leaflet-rotate'
@@ -201,10 +201,11 @@ function App() {
     return ''
   })
   const [showFirstVisit, setShowFirstVisit] = useState(() => {
-    const ls = localStorage.getItem('aegisUserName')
-    const hasCookie = !!document.cookie.match(/(?:^|; )aegisUserName=([^;]*)/)
-    return !isAdminURL && !ls && !hasCookie
+    const registered = localStorage.getItem('aegisRegistered')
+    const hasName = !!localStorage.getItem('aegisUserName')
+    return !isAdminURL && (!registered || !hasName)
   })
+  const [showEditProfile, setShowEditProfile] = useState(false)
 
   // â”€â”€ Navigation â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   // Admin starts on 'map', public user starts on 'status'
@@ -289,11 +290,19 @@ function App() {
   // First visit name completion
   const handleFirstVisit = (name: string) => {
     localStorage.setItem('aegisUserName', name)
-    // Also store in cookie (365 days) — survives localStorage being cleared by browser
+    localStorage.setItem('aegisRegistered', '1')
     document.cookie = `aegisUserName=${encodeURIComponent(name)};max-age=${365*24*3600};path=/;SameSite=Lax`
     setUserName(name)
     setShowFirstVisit(false)
     setTimeout(() => startGpsTracking(), 800)
+  }
+
+  // Profile edit (name change only — device stays registered)
+  const handleEditProfile = (name: string) => {
+    localStorage.setItem('aegisUserName', name)
+    document.cookie = `aegisUserName=${encodeURIComponent(name)};max-age=${365*24*3600};path=/;SameSite=Lax`
+    setUserName(name)
+    setShowEditProfile(false)
   }
 
   // â”€â”€ GPS â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
@@ -570,8 +579,8 @@ function App() {
               <span className="text-[9px] font-bold tracking-wider">KELUAR</span>
             </button>
           ) : (
-            <button onClick={() => { localStorage.removeItem('aegisUserName'); setShowFirstVisit(true); setUserName('') }}
-              className="flex flex-col items-center gap-1 py-2 px-4 text-slate-700 active:text-slate-400 transition-colors">
+            <button onClick={() => setShowEditProfile(true)}
+              className="flex flex-col items-center gap-1 py-2 px-4 text-slate-600 active:text-indigo-400 transition-colors">
               <Shield className="w-5 h-5"/>
               <span className="text-[9px] font-bold tracking-wider">PROFIL</span>
             </button>
@@ -582,6 +591,14 @@ function App() {
         <AnimatePresence>
           {showFirstVisit && (
             <FirstVisitModal key="first-visit" onComplete={handleFirstVisit} />
+          )}
+          {showEditProfile && (
+            <FirstVisitModal
+              key="edit-profile"
+              isEditing
+              onComplete={handleEditProfile}
+              onCancel={() => setShowEditProfile(false)}
+            />
           )}
         </AnimatePresence>
       </div>
