@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">APLIKASI UJICOBA EVAKUASI TSUNAMI OLEH DIMAS DIVAT MANDA</string>
+    <string name="title_activity_main">APLIKASI UJICOBA EVAKUASI TSUNAMI OLEH DIMAS DIVAT MANDA</string>
+    <string name="package_name">com.dimsstsu.app</string>
+    <string name="custom_url_scheme">com.dimsstsu.app</string>
+</resources>

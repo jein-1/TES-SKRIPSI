@@ -13,7 +13,28 @@ const __filename = fileURLToPath(import.meta.url)
 const __dirname = dirname(__filename)
 
 const app = express()
-app.use(cors())
+
+// ── CORS — izinkan APK Android (capacitor://) & web ──────────
+app.use(cors({
+  origin: (origin, callback) => {
+    // Izinkan: capacitor app, localhost dev, Railway domain, null (file://)
+    const allowed = [
+      /^capacitor:\/\//,           // Android APK
+      /^http:\/\/localhost/,       // Local dev
+      /^http:\/\/127\.0\.0\.1/,   // Local dev
+      /^https:\/\/.*railway\.app/, // Railway production
+      /^https:\/\/.*up\.railway\.app/,
+    ]
+    if (!origin || allowed.some(r => r.test(origin))) {
+      callback(null, true)
+    } else {
+      callback(null, true) // allow all for now (APK doesn't send origin)
+    }
+  },
+  methods: ['GET', 'POST', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization'],
+  credentials: true,
+}))
 app.use(express.json())
 
 // ── In-memory state (resets on redeploy — fine for demo) ─────
