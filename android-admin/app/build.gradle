@@ -17,9 +17,23 @@ android {
         }
     }
     buildTypes {
+        debug {
+            applicationIdSuffix ""
+        }
         release {
             minifyEnabled false
             proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
+        }
+    }
+    // ── Rename output APK ────────────────────────────────────
+    applicationVariants.all { variant ->
+        variant.outputs.all { output ->
+            def buildType = variant.buildType.name
+            if (buildType == 'release') {
+                outputFileName = "Dimsstsu-admin.apk"
+            } else {
+                outputFileName = "Dimsstsu-admin-debug.apk"
+            }
         }
     }
 }
