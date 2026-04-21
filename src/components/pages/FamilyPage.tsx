@@ -4,6 +4,7 @@ import { Users, UserPlus, Phone, AlertTriangle, CheckCircle, Clock, Wifi, Chevro
 import { motion, AnimatePresence } from 'motion/react'
 import QRCode from 'qrcode'
 import type { FamilyMember } from '../../types'
+import { useAegisSync, aegisApi } from '../../lib/useAegisSync'
 
 // ── Helpers ────────────────────────────────────────────────────
 function getMyAegisId(): string {
@@ -115,6 +116,8 @@ function AddMemberModal({ onClose, onAdd }: { onClose: () => void; onAdd: (m: Fa
             localStorage.setItem(`aegisPendingJoin_${joinId}`, JSON.stringify({
               fromId: getMyAegisId(), fromName: getMyName(), ts: Date.now()
             }))
+            // Notify the scanned device via SSE server (cross-device)
+            aegisApi.notifyFamilyJoin(getMyAegisId(), getMyName(), joinId)
             bc?.postMessage({ type: 'FAMILY_UPDATE' })
             return
           }
@@ -231,6 +234,48 @@ export default function FamilyPage({ onBack }: Props) {
     }
   }, [save])
 
+  // SSE cross-device events
+
+  // SSE: listen for cross-device events from server
+  useAegisSync((event) => {
+    if (event.type === 'FAMILY_JOIN') {
+      // Someone scanned OUR QR — add them to our family
+      if (event.toId === getMyAegisId()) {
+        const fromId = event.fromId as string
+        const fromName = event.fromName as string
+        const existing = loadFamily()
+        if (!existing.some(m => m.id === fromId)) {
+          const newMember: FamilyMember = {
+            id: fromId, name: fromName, role: 'Anggota Keluarga',
+            initials: fromName.split(' ').map((w: string) => w[0]).join('').slice(0,2).toUpperCase(),
+            status: 'safe', location: 'Bergabung via QR Scan', updatedAgo: 'baru saja',
+          }
+          const updated = [...existing, newMember]
+          save(updated)
+        }
+      }
+    }
+    if (event.type === 'PING') {
+      // Received a ping from another device
+      if (event.fromId !== getMyAegisId()) {
+        setPingReceived(true)
+        if ('vibrate' in navigator) navigator.vibrate([300, 100, 300])
+        setTimeout(() => {
+          aegisApi.pingReply(getMyAegisId(), getMyName(), event.fromId as string)
+          setPingReceived(false)
+        }, 1500)
+      }
+    }
+    if (event.type === 'PING_REPLY') {
+      if (event.toId === getMyAegisId()) {
+        const updated = loadFamily().map(m =>
+          m.id === event.fromId ? { ...m, status: 'safe' as const, updatedAgo: 'baru saja' } : m
+        )
+        save(updated)
+      }
+    }
+  })
+
   // BroadcastChannel: sync family updates across tabs
   useEffect(() => {
     if (!bc) return
@@ -288,6 +333,8 @@ export default function FamilyPage({ onBack }: Props) {
     setPinging(true)
     if ('vibrate' in navigator) navigator.vibrate([100, 50, 100])
     bc?.postMessage({ type: 'PING', from: getMyAegisId() })
+    // Also broadcast via SSE server for cross-device ping
+    aegisApi.ping(getMyAegisId(), getMyName())
     setTimeout(() => setPinging(false), 3000)
   }
 

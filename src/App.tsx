@@ -20,6 +20,7 @@ import StatusPage    from './components/pages/StatusPage'
 import NavigatePage  from './components/pages/NavigatePage'
 import FamilyPage    from './components/pages/FamilyPage'
 import GuidesPage    from './components/pages/GuidesPage'
+import { useAegisSync, aegisApi } from './lib/useAegisSync'
 // â”€â”€ UI Libraries â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 import {
   AlertTriangle, Shield, MapPin, Info, ChevronRight, ChevronLeft, X, Locate,
@@ -192,12 +193,18 @@ function App() {
   })
 
   // User display name â€” stored in localStorage, set on first visit
-  const [userName, setUserName] = useState<string>(() =>
-    localStorage.getItem('aegisUserName') ?? ''
-  )
-  const [showFirstVisit, setShowFirstVisit] = useState(() =>
-    !isAdminURL && !localStorage.getItem('aegisUserName')
-  )
+  const [userName, setUserName] = useState<string>(() => {
+    const ls = localStorage.getItem('aegisUserName')
+    if (ls) return ls
+    const m = document.cookie.match(/(?:^|; )aegisUserName=([^;]*)/)
+    if (m) { const n = decodeURIComponent(m[1]); localStorage.setItem('aegisUserName', n); return n }
+    return ''
+  })
+  const [showFirstVisit, setShowFirstVisit] = useState(() => {
+    const ls = localStorage.getItem('aegisUserName')
+    const hasCookie = !!document.cookie.match(/(?:^|; )aegisUserName=([^;]*)/)
+    return !isAdminURL && !ls && !hasCookie
+  })
 
   // â”€â”€ Navigation â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   // Admin starts on 'map', public user starts on 'status'
@@ -282,9 +289,10 @@ function App() {
   // First visit name completion
   const handleFirstVisit = (name: string) => {
     localStorage.setItem('aegisUserName', name)
+    // Also store in cookie (365 days) — survives localStorage being cleared by browser
+    document.cookie = `aegisUserName=${encodeURIComponent(name)};max-age=${365*24*3600};path=/;SameSite=Lax`
     setUserName(name)
     setShowFirstVisit(false)
-    // Auto-start GPS after name is set
     setTimeout(() => startGpsTracking(), 800)
   }
 
@@ -352,11 +360,28 @@ function App() {
         saveHistoryRecord(routeResults, tsunamiAlert ? 'simulation' : 'real', newPos)
 
         // â”€â”€ Arrival detection: check if within ARRIVAL_RADIUS_METERS of any shelter â”€â”€
+        // ── Arrival detection: check if within ARRIVAL_RADIUS_METERS of any shelter ──
         // Only fires once per GPS session (arrivedFiredRef prevents repeat triggers)
         if (!arrivedFiredRef.current) {
           const toRad = (d: number) => d * (Math.PI / 180)
           const arrived = shelters.find(sh => {
             const R = 6371000 // metres
+            // ── SSE real-time sync — works cross-device on Railway ────────
+  useAegisSync((event) => {
+    if (event.type === 'TSUNAMI') {
+      const active = event.active as boolean
+      if (active) {
+        setTsunamiAlert(true)
+        setActivePage('navigate')
+        if ('vibrate' in navigator) navigator.vibrate([500, 200, 500, 200, 500])
+        if (settings.soundAlert) alarmRef.current.start()
+      } else {
+        setTsunamiAlert(false)
+        alarmRef.current.stop()
+      }
+    }
+  })
+
             const dLat = toRad(sh.lat - newPos[0])
             const dLng = toRad(sh.lng - newPos[1])
             const a =
@@ -368,7 +393,7 @@ function App() {
           })
           if (arrived) {
             arrivedFiredRef.current = true
-            // â”€â”€ STOP EVERYTHING â€” like Google Maps ending navigation â”€â”€
+            // ── STOP EVERYTHING — like Google Maps ending navigation ──
             // 1. Stop GPS watch
             if (gpsWatchRef.current !== null) {
               navigator.geolocation.clearWatch(gpsWatchRef.current)
@@ -432,9 +457,7 @@ function App() {
 
   const deactivateTsunamiAlert = useCallback(() => {
     setTsunamiAlert(false); alarmRef.current.stop()
-    localStorage.setItem('aegisTsunamiGlobal', JSON.stringify({ active: false, ts: Date.now() }))
-    window.dispatchEvent(new StorageEvent('storage', { key: 'aegisTsunamiGlobal',
-      newValue: JSON.stringify({ active: false, ts: Date.now() }) }))
+    aegisApi.setTsunami(false)
   }, [])
 
   useEffect(() => {
