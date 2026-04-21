@@ -1,11 +1,13 @@
 import { useState, useCallback, useEffect, useRef } from 'react'
 import { MapContainer, TileLayer, Marker, Popup, Polyline, Polygon, Circle, useMap, useMapEvents } from 'react-leaflet'
 import 'leaflet/dist/leaflet.css'
+import 'leaflet-rotate'
 // ── Modules ──────────────────────────────────────────────────────
 import { shelters, hazardZones, findOptimalEvacuationRoutes, type RouteResult } from './lib/evacuation'
 import { TILE_NORMAL, TILE_DARK, TILE_SATELLITE, routeColors, routeBadgeColors } from './constants/mapConfig'
 import { shelterIcon, userIcon, userIconAlert } from './components/map/icons'
 import { FlyToController, MapResizer, CustomMapControls } from './components/map/MapComponents'
+import { CompassWidget } from './components/map/MapRotation'
 import type { ActivePage, HistoryFilter, EvacuationRecord, AppSettings, AppUserRole } from './types'
 import { DEFAULT_SETTINGS } from './types'
 // ── Auth ───────────────────────────────────────────────────────────
@@ -137,9 +139,20 @@ function fmtDate(d: Date) {
 // APP
 // ═══════════════════════════════════════════════════════════════
 // ── Arrival detection radius (metres)
-// 30m = sweet spot: menutupi GPS drift ±15-20m di dekat gedung besar,
-// tapi tidak trigger dari seberang jalan (seperti Google Maps ~30-50m)
 const ARRIVAL_RADIUS_METERS = 50
+
+// ── AdminBearingTracker — reads admin map rotation bearing ─────
+function AdminBearingTracker({ onBearing }: { onBearing: (b: number) => void }) {
+  const map = useMap()
+  useEffect(() => {
+    const m = map as any
+    if (m.touchRotate) { try { m.touchRotate.enable() } catch {} }
+    const handler = () => { if (typeof m.getBearing === 'function') onBearing(m.getBearing()) }
+    map.on('rotate' as any, handler)
+    return () => { map.off('rotate' as any, handler) }
+  }, [map, onBearing])
+  return null
+}
 
 function App() {
   // ── Map state ──────────────────────────────────────────────
@@ -162,6 +175,8 @@ function App() {
   const [showTsunamiConfirm, setShowTsunamiConfirm] = useState(false)
   const [showShelters, setShowShelters] = useState(false)
   const [showLeftSidebar, setShowLeftSidebar] = useState(true)
+  const [adminMapBearing, setAdminMapBearing] = useState(0)
+  const adminMapRef = useRef<L.Map | null>(null)
 
   // ── URL-based Admin Detection ────────────────────────────────
   // Admin mode: URL contains ?admin OR ?key=aegis2024 OR hash #admin
@@ -787,12 +802,25 @@ function App() {
             )}
           </div>
 
-          {/* Map — dragging/touchZoom explicitly enabled for mobile */}
+          {/* Compass overlay — floating over the map, outside MapContainer */}
+          <div className="absolute top-16 right-4 z-[1000] flex flex-col gap-2 pointer-events-auto">
+            <CompassWidget
+              bearing={adminMapBearing}
+              onReset={() => {
+                const m = adminMapRef.current as any
+                if (m?.setBearing) { m.setBearing(0); setAdminMapBearing(0) }
+              }}
+            />
+          </div>
+
+          {/* Map — rotation enabled via leaflet-rotate (2-finger mobile, Shift+drag desktop) */}
           <MapContainer
             center={[-0.8917, 119.8577]} zoom={14} minZoom={10} maxZoom={20}
             className="w-full h-full" zoomControl={false}
             dragging={true} touchZoom={true} scrollWheelZoom={true}
             doubleClickZoom={true}
+            ref={adminMapRef as any}
+            {...({ rotate: true, touchRotate: true, bearingSnap: 5 } as any)}
           >
             <TileLayer url={mapTileUrl} key={mapTileKey}
               attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
@@ -803,6 +831,8 @@ function App() {
             <LocationMarker onLocationSet={handleLocationSet} />
             {/* Fix blank white area when panel resizes map container */}
             <MapResizer showPanel={showPanel} showLeftSidebar={showLeftSidebar} />
+            {/* Bearing tracker for compass widget */}
+            <AdminBearingTracker onBearing={setAdminMapBearing} />
 
             {/* FIX: key forces fresh mount per unique position; onComplete resets flyToPos */}
             {flyToPos && (

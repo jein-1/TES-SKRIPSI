@@ -1,7 +1,11 @@
 // ═══════════════════════════════════════════════════════════════
 // STATUS PAGE — Public User Home "I AM SAFE"
 // ═══════════════════════════════════════════════════════════════
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
+import { MapContainer, TileLayer } from 'react-leaflet'
+import L from 'leaflet'
+import 'leaflet/dist/leaflet.css'
+import 'leaflet-rotate'
 import { MapPin, Users, BookOpen, ChevronRight, CheckCircle, Heart, Activity, ChevronLeft, Locate } from 'lucide-react'
 import { motion, AnimatePresence } from 'motion/react'
 
@@ -10,6 +14,66 @@ const FAMILY_PREVIEW = [
   { initials: 'RD', color: '#10b981' },
   { initials: 'SJ', color: '#f59e0b' },
 ]
+
+// ── Real Leaflet mini-map ─────────────────────────────────────
+const PALU_CENTER: [number, number] = [-0.8917, 119.8577]
+const TILE_DARK = 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png'
+
+const hereIcon = L.divIcon({
+  className: '',
+  html: `<div style="display:flex;flex-direction:column;align-items:center;gap:3px;pointer-events:none">
+    <div style="width:14px;height:14px;border-radius:50%;background:#6366f1;border:2px solid white;box-shadow:0 0 10px rgba(99,102,241,0.8)"></div>
+    <span style="background:rgba(99,102,241,0.85);color:white;font-size:8px;font-weight:900;padding:1px 5px;border-radius:8px;white-space:nowrap;letter-spacing:0.05em">YOU ARE HERE</span>
+  </div>`,
+  iconSize: [80, 32],
+  iconAnchor: [40, 8],
+})
+
+function MiniMap() {
+  const mapRef = useRef<L.Map | null>(null)
+  const markerRef = useRef<L.Marker | null>(null)
+  const [pos, setPos] = useState<[number, number] | null>(null)
+
+  useEffect(() => {
+    if (!navigator.geolocation) return
+    const w = navigator.geolocation.watchPosition(
+      p => setPos([p.coords.latitude, p.coords.longitude]),
+      () => {},
+      { enableHighAccuracy: true }
+    )
+    return () => navigator.geolocation.clearWatch(w)
+  }, [])
+
+  useEffect(() => {
+    const m = mapRef.current
+    if (!m || !pos) return
+    m.setView(pos, 16, { animate: true })
+    if (markerRef.current) { markerRef.current.setLatLng(pos) }
+    else { markerRef.current = L.marker(pos, { icon: hereIcon }).addTo(m) }
+  }, [pos])
+
+  return (
+    <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.25 }}
+      className="h-36 rounded-2xl border border-slate-700/40 overflow-hidden relative">
+      <MapContainer
+        center={pos ?? PALU_CENTER} zoom={pos ? 16 : 13}
+        zoomControl={false} attributionControl={false}
+        dragging={false} touchZoom={false} scrollWheelZoom={false}
+        doubleClickZoom={false} keyboard={false}
+        className="w-full h-full"
+        ref={mapRef as any}
+      >
+        <TileLayer url={TILE_DARK} maxNativeZoom={20} maxZoom={20}/>
+      </MapContainer>
+      {!pos && (
+        <div className="absolute inset-0 flex flex-col items-center justify-center bg-[#060d1a]/70">
+          <MapPin className="w-6 h-6 text-slate-500 mb-1"/>
+          <p className="text-[10px] text-slate-500">GPS belum aktif</p>
+        </div>
+      )}
+    </motion.div>
+  )
+}
 
 interface Props {
   onNavigate: (page: 'navigate' | 'family' | 'guides') => void
@@ -233,28 +297,8 @@ export default function StatusPage({ onNavigate, userLocation, onBack, userName,
           <ChevronRight className="w-5 h-5 text-slate-600 shrink-0" />
         </motion.button>
 
-        {/* Mini location map placeholder */}
-        <motion.div
-          initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.25 }}
-          className="h-32 rounded-2xl border border-slate-700/40 overflow-hidden relative"
-          style={{ background: '#060d1a' }}
-        >
-          <svg width="100%" height="100%" viewBox="0 0 300 128" preserveAspectRatio="none" className="opacity-30">
-            {[0,1,2,3].map(i => <line key={`h${i}`} x1="0" y1={i*40} x2="300" y2={i*40} stroke="#1e293b" strokeWidth="1"/>)}
-            {[0,1,2,3,4,5].map(i => <line key={`v${i}`} x1={i*60} y1="0" x2={i*60} y2="128" stroke="#1e293b" strokeWidth="1"/>)}
-            <path d="M0,80 C50,70 100,50 150,55 C200,60 250,45 300,40" stroke="#334155" strokeWidth="2" fill="none"/>
-            <path d="M0,100 C60,95 120,85 180,80 C240,75 280,70 300,65" stroke="#334155" strokeWidth="1.5" fill="none"/>
-          </svg>
-          <div className="absolute bottom-3 left-1/2 -translate-x-1/2 flex flex-col items-center gap-1">
-            <div className="w-3 h-3 rounded-full bg-indigo-400 border-2 border-white shadow-[0_0_8px_rgba(99,102,241,0.8)]" />
-            <span className="text-[9px] bg-indigo-600/80 text-white px-2 py-0.5 rounded-full font-bold tracking-wide">YOU ARE HERE</span>
-          </div>
-          <div className="absolute bottom-2 right-2">
-            <div className="w-7 h-7 rounded-full bg-slate-800/80 border border-slate-700 flex items-center justify-center">
-              <MapPin className="w-3.5 h-3.5 text-slate-400" />
-            </div>
-          </div>
-        </motion.div>
+        {/* Mini location map — real Leaflet map */}
+        <MiniMap />
 
         <div className="h-20" />
       </div>
