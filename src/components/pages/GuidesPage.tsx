@@ -2,7 +2,7 @@
 // GUIDES PAGE — Panduan Prosedur & P3K (Survival Guides)
 // ═══════════════════════════════════════════════════════════════
 import { useState } from 'react'
-import { ChevronDown, ChevronUp, BookOpen, ArrowRight } from 'lucide-react'
+import { ChevronDown, ChevronUp, BookOpen, ArrowRight, ChevronLeft } from 'lucide-react'
 import { motion, AnimatePresence } from 'motion/react'
 
 interface GuideSection {
@@ -79,7 +79,7 @@ const FIRST_AID = [
   },
 ]
 
-export default function GuidesPage({ onNavigateMap }: { onNavigateMap: () => void }) {
+export default function GuidesPage({ onNavigateMap, onBack }: { onNavigateMap: () => void; onBack?: () => void }) {
   return (
     <motion.div
       initial={{ opacity: 0, x: 40 }} animate={{ opacity: 1, x: 0 }}
@@ -88,9 +88,15 @@ export default function GuidesPage({ onNavigateMap }: { onNavigateMap: () => voi
       style={{ background: '#080e1a' }}
     >
       {/* Header */}
-      <div className="shrink-0 px-5 pt-5 pb-4 border-b border-slate-800/60" style={{ background: '#0a1020' }}>
+      <div className="shrink-0 px-4 pt-4 pb-3 border-b border-slate-800/60" style={{ background: '#0a1020' }}>
         <div className="flex items-center gap-3 mb-1">
-          <div className="w-9 h-9 rounded-xl bg-blue-500/20 border border-blue-500/30 flex items-center justify-center">
+          {onBack && (
+            <button onClick={onBack}
+              className="w-8 h-8 rounded-xl bg-slate-800/60 border border-slate-700/50 flex items-center justify-center shrink-0 hover:bg-slate-700 transition-colors">
+              <ChevronLeft className="w-4 h-4 text-slate-400" />
+            </button>
+          )}
+          <div className="w-9 h-9 rounded-xl bg-blue-500/20 border border-blue-500/30 flex items-center justify-center shrink-0">
             <BookOpen className="w-4 h-4 text-blue-400" />
           </div>
           <div>
@@ -225,6 +231,8 @@ export default function GuidesPage({ onNavigateMap }: { onNavigateMap: () => voi
           <div className="w-2 h-2 rounded-full bg-emerald-500" />
           <p className="text-[10px] text-slate-500">Seluruh konten tersimpan untuk akses offline</p>
         </div>
+        {/* Bottom spacer */}
+        <div className="h-20" />
       </div>
     </motion.div>
   )

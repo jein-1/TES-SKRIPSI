@@ -2,7 +2,7 @@
 // NAVIGATE PAGE — Emergency Navigation (Turn-by-Turn)
 // ═══════════════════════════════════════════════════════════════
 import { useState, useEffect } from 'react'
-import { AlertTriangle, ArrowUp, ArrowRight, Navigation2, Plus, Minus, Crosshair, Phone } from 'lucide-react'
+import { AlertTriangle, ArrowUp, ArrowRight, Navigation2, Plus, Minus, Crosshair, Phone, ChevronLeft } from 'lucide-react'
 import { motion, AnimatePresence } from 'motion/react'
 import type { RouteResult } from '../../lib/evacuation'
 
@@ -11,6 +11,7 @@ interface Props {
   selectedRoute: number
   tsunamiAlert: boolean
   userPosition: [number, number] | null
+  onBack?: () => void
 }
 
 // ── Turn instruction data (computed from beeline bearing) ──────
@@ -57,7 +58,7 @@ function DirectionArrow({ bearing }: { bearing: number }) {
   )
 }
 
-export default function NavigatePage({ routes, selectedRoute, tsunamiAlert, userPosition }: Props) {
+export default function NavigatePage({ routes, selectedRoute, tsunamiAlert, userPosition, onBack }: Props) {
   const [showMedical, setShowMedical] = useState(false)
   const route = routes[selectedRoute]
   const shelterPos = route?.coordinates[route.coordinates.length - 1]
@@ -131,6 +132,12 @@ export default function NavigatePage({ routes, selectedRoute, tsunamiAlert, user
       <div className="shrink-0 flex items-center justify-between px-4 py-3 border-b border-red-900/40"
         style={{ background: '#150505' }}>
         <div className="flex items-center gap-2">
+          {onBack && (
+            <button onClick={onBack}
+              className="w-8 h-8 rounded-xl bg-red-900/30 border border-red-800/50 flex items-center justify-center mr-1">
+              <ChevronLeft className="w-4 h-4 text-red-300" />
+            </button>
+          )}
           <AlertTriangle className="w-5 h-5 text-amber-400 animate-pulse" />
           <span className="text-sm font-black text-white tracking-widest">AEGIS RESPONSE</span>
         </div>

@@ -2,7 +2,7 @@
 // STATUS PAGE — Public User Home "I AM SAFE"
 // ═══════════════════════════════════════════════════════════════
 import { useState, useEffect } from 'react'
-import { MapPin, Users, BookOpen, ChevronRight, CheckCircle, Heart, Activity } from 'lucide-react'
+import { MapPin, Users, BookOpen, ChevronRight, CheckCircle, Heart, Activity, ChevronLeft } from 'lucide-react'
 import { motion, AnimatePresence } from 'motion/react'
 
 const FAMILY_PREVIEW = [
@@ -14,9 +14,10 @@ const FAMILY_PREVIEW = [
 interface Props {
   onNavigate: (page: 'navigate' | 'family' | 'guides') => void
   userLocation: string
+  onBack?: () => void
 }
 
-export default function StatusPage({ onNavigate, userLocation }: Props) {
+export default function StatusPage({ onNavigate, userLocation, onBack }: Props) {
   const [safePressed, setSafePressed] = useState(false)
   const [lastUpdated, setLastUpdated] = useState<string | null>(null)
   const [riskLevel] = useState<'low' | 'medium' | 'high'>('low')
@@ -45,17 +46,25 @@ export default function StatusPage({ onNavigate, userLocation }: Props) {
     <motion.div
       initial={{ opacity: 0, x: -40 }} animate={{ opacity: 1, x: 0 }}
       exit={{ opacity: 0, x: -40 }} transition={{ duration: 0.22 }}
-      className="absolute inset-0 flex flex-col overflow-y-auto custom-scrollbar"
+      className="fixed inset-0 z-[1800] flex flex-col overflow-y-auto custom-scrollbar"
       style={{ background: '#080e1a' }}
     >
       {/* Header */}
-      <div className="shrink-0 px-5 pt-5 pb-4 border-b border-slate-800/60" style={{ background: '#0a1020' }}>
-        <p className="text-[10px] text-slate-500 uppercase tracking-widest font-bold mb-1">Current Location</p>
-        <div className="flex items-start gap-2">
-          <MapPin className="w-5 h-5 text-indigo-400 shrink-0 mt-0.5" />
-          <h2 className="text-2xl font-black text-white leading-tight">
-            {userLocation || 'Palu, Sulawesi Tengah'}
-          </h2>
+      <div className="shrink-0 px-4 pt-4 pb-3 border-b border-slate-800/60 flex items-center gap-3" style={{ background: '#0a1020' }}>
+        {onBack && (
+          <button onClick={onBack}
+            className="w-8 h-8 rounded-xl bg-slate-800/60 border border-slate-700/50 flex items-center justify-center shrink-0 hover:bg-slate-700 transition-colors">
+            <ChevronLeft className="w-4 h-4 text-slate-400" />
+          </button>
+        )}
+        <div>
+          <p className="text-[10px] text-slate-500 uppercase tracking-widest font-bold mb-0.5">Current Location</p>
+          <div className="flex items-start gap-2">
+            <MapPin className="w-4 h-4 text-indigo-400 shrink-0 mt-0.5" />
+            <h2 className="text-lg font-black text-white leading-tight">
+              {userLocation || 'Palu, Sulawesi Tengah'}
+            </h2>
+          </div>
         </div>
       </div>
 
@@ -222,7 +231,7 @@ export default function StatusPage({ onNavigate, userLocation }: Props) {
           </div>
         </motion.div>
 
-        <div className="h-4" />
+        <div className="h-20" />
       </div>
     </motion.div>
   )

@@ -2,7 +2,7 @@
 // FAMILY PAGE — Family Circle Safety Monitoring
 // ═══════════════════════════════════════════════════════════════
 import { useState } from 'react'
-import { Radio, UserPlus, Phone, AlertTriangle, CheckCircle, Clock, Wifi } from 'lucide-react'
+import { Radio, UserPlus, Phone, AlertTriangle, CheckCircle, Clock, Wifi, ChevronLeft } from 'lucide-react'
 import { motion } from 'motion/react'
 import type { FamilyMember } from '../../types'
 
@@ -63,7 +63,11 @@ function StatusChip({ status }: { status: FamilyMember['status'] }) {
   )
 }
 
-export default function FamilyPage() {
+interface Props {
+  onBack?: () => void
+}
+
+export default function FamilyPage({ onBack }: Props) {
   const [pinging, setPinging] = useState(false)
   const [addMember, setAddMember] = useState(false)
 
@@ -81,12 +85,19 @@ export default function FamilyPage() {
       style={{ background: '#080e1a' }}
     >
       {/* Header */}
-      <div className="shrink-0 px-5 pt-5 pb-4 border-b border-slate-800/60" style={{ background: '#0a1020' }}>
-        <h2 className="text-2xl font-black text-white mb-1">Family Circle</h2>
-        <p className="text-[11px] text-slate-400 leading-relaxed">
-          Real-time status monitoring for your primary response group.<br />
-          <span className="text-emerald-400 font-bold">5 active connections established.</span>
-        </p>
+      <div className="shrink-0 px-4 pt-4 pb-3 border-b border-slate-800/60 flex items-center gap-3" style={{ background: '#0a1020' }}>
+        {onBack && (
+          <button onClick={onBack}
+            className="w-8 h-8 rounded-xl bg-slate-800/60 border border-slate-700/50 flex items-center justify-center shrink-0 hover:bg-slate-700 transition-colors">
+            <ChevronLeft className="w-4 h-4 text-slate-400" />
+          </button>
+        )}
+        <div>
+          <h2 className="text-xl font-black text-white leading-tight">Family Circle</h2>
+          <p className="text-[10px] text-slate-400">
+            Real-time monitoring · <span className="text-emerald-400 font-bold">5 connections active</span>
+          </p>
+        </div>
       </div>
 
       <div className="flex-1 px-4 py-4 space-y-4">
@@ -160,9 +171,7 @@ export default function FamilyPage() {
                 {/* Footer */}
                 <div className="flex items-center justify-between mt-2.5">
                   <div>
-                    <p className="text-[10px] text-slate-500 font-bold uppercase tracking-wider mb-0.5">
-                      {isDanger ? 'Last Known Location' : 'Last Known Location'}
-                    </p>
+                    <p className="text-[10px] text-slate-500 font-bold uppercase tracking-wider mb-0.5">Last Known Location</p>
                     <p className="text-[11px] text-slate-300 font-semibold">{member.location}</p>
                   </div>
                   <div className="flex items-center gap-1.5">
@@ -235,7 +244,8 @@ export default function FamilyPage() {
           </motion.div>
         )}
 
-        <div className="h-4" />
+        {/* Bottom spacer — clears bottom nav */}
+        <div className="h-20" />
       </div>
     </motion.div>
   )

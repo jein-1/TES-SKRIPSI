@@ -19,7 +19,7 @@ import FamilyPage    from './components/pages/FamilyPage'
 import GuidesPage    from './components/pages/GuidesPage'
 // ── UI Libraries ─────────────────────────────────────────────────
 import {
-  AlertTriangle, Shield, MapPin, Info, ChevronRight, X, Locate,
+  AlertTriangle, Shield, MapPin, Info, ChevronRight, ChevronLeft, X, Locate,
   Volume2, Menu, Radio, Satellite, Map as MapIcon, HelpCircle, Cpu,
   ArrowRight, History, Bell, Vibrate, Crosshair,
   SlidersHorizontal, Trash2, Navigation2, Lock, RefreshCw, Activity, Clock, Check, CheckCircle2,
@@ -138,7 +138,7 @@ function fmtDate(d: Date) {
 // ── Arrival detection radius (metres)
 // 30m = sweet spot: menutupi GPS drift ±15-20m di dekat gedung besar,
 // tapi tidak trigger dari seberang jalan (seperti Google Maps ~30-50m)
-const ARRIVAL_RADIUS_METERS = 30
+const ARRIVAL_RADIUS_METERS = 50
 
 function App() {
   // ── Map state ──────────────────────────────────────────────
@@ -446,43 +446,44 @@ function App() {
   // ════════════════════════════════════════════════════════════
 
   // ── PUBLIC USER layout ─────────────────────────────────────
+  // Pages use fixed inset-0 z-[1800]; nav uses fixed z-[1900]
   if (userRole === 'user') {
     return (
-      <div className="w-full h-full bg-[#080e1a] text-slate-300 font-sans overflow-hidden flex flex-col">
+      <div className="fixed inset-0 bg-[#080e1a] text-slate-300 font-sans">
 
-        {/* Public pages rendered here */}
-        <div className="flex-1 relative overflow-hidden">
-          <AnimatePresence mode="wait">
-            {activePage === 'status' && (
-              <StatusPage
-                key="status"
-                onNavigate={(p) => setActivePage(p)}
-                userLocation={userPosition ? 'Palu, Sulawesi Tengah' : 'Mendeteksi lokasi...'}
-              />
-            )}
-            {activePage === 'navigate' && (
-              <NavigatePage
-                key="navigate"
-                routes={routes}
-                selectedRoute={selectedRoute}
-                tsunamiAlert={tsunamiAlert}
-                userPosition={userPosition}
-              />
-            )}
-            {activePage === 'family' && (
-              <FamilyPage key="family" />
-            )}
-            {activePage === 'guides' && (
-              <GuidesPage
-                key="guides"
-                onNavigateMap={() => setActivePage('status')}
-              />
-            )}
-          </AnimatePresence>
-        </div>
+        {/* Pages */}
+        <AnimatePresence mode="wait">
+          {activePage === 'status' && (
+            <StatusPage
+              key="status"
+              onNavigate={(p) => setActivePage(p)}
+              userLocation={userPosition ? 'Palu, Sulawesi Tengah' : 'Mendeteksi lokasi...'}
+            />
+          )}
+          {activePage === 'navigate' && (
+            <NavigatePage
+              key="navigate"
+              routes={routes}
+              selectedRoute={selectedRoute}
+              tsunamiAlert={tsunamiAlert}
+              userPosition={userPosition}
+              onBack={() => setActivePage('status')}
+            />
+          )}
+          {activePage === 'family' && (
+            <FamilyPage key="family" onBack={() => setActivePage('status')} />
+          )}
+          {activePage === 'guides' && (
+            <GuidesPage
+              key="guides"
+              onNavigateMap={() => setActivePage('navigate')}
+              onBack={() => setActivePage('status')}
+            />
+          )}
+        </AnimatePresence>
 
-        {/* USER BOTTOM NAV */}
-        <nav className="shrink-0 flex items-center justify-around border-t bg-[#0a1020]/95 border-slate-800/50 backdrop-blur-md"
+        {/* USER BOTTOM NAV — fixed z-[1900] sits on top of pages */}
+        <nav className="fixed bottom-0 left-0 right-0 z-[1900] flex items-center justify-around border-t bg-[#0a1020]/98 border-slate-800/60 backdrop-blur-xl"
           style={{ paddingBottom: 'env(safe-area-inset-bottom)', height: '60px' }}>
           {([
             { page: 'status'   as ActivePage, Icon: Home,        label: 'STATUS'   },
@@ -742,8 +743,13 @@ function App() {
             )}
           </div>
 
-          {/* Map */}
-          <MapContainer center={[-0.8917, 119.8577]} zoom={14} minZoom={10} maxZoom={20} className="w-full h-full" zoomControl={false}>
+          {/* Map — dragging/touchZoom explicitly enabled for mobile */}
+          <MapContainer
+            center={[-0.8917, 119.8577]} zoom={14} minZoom={10} maxZoom={20}
+            className="w-full h-full" zoomControl={false}
+            dragging={true} touchZoom={true} scrollWheelZoom={true}
+            doubleClickZoom={true}
+          >
             <TileLayer url={mapTileUrl} key={mapTileKey}
               attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
               maxNativeZoom={mapMaxNativeZoom}
@@ -1311,10 +1317,12 @@ function App() {
           >
             {/* AEGIS top bar */}
             <div className="flex items-center justify-between px-4 py-3 border-b border-slate-800/60 shrink-0" style={{ background: '#0a1020' }}>
-              <button onClick={() => setActivePage('map')} className="p-2 text-slate-500 hover:text-white transition-colors">
-                <Menu className="w-5 h-5"/>
+              <button onClick={() => setActivePage('map')}
+                className="flex items-center gap-1.5 text-slate-400 hover:text-white transition-colors">
+                <ChevronLeft className="w-5 h-5"/>
+                <span className="text-xs font-bold tracking-wide">KEMBALI</span>
               </button>
-              <span className="text-sm font-black text-white tracking-widest">AEGIS RESPONSE</span>
+              <span className="text-sm font-black text-white tracking-widest">TACTICAL ARCHIVE</span>
               <div className="w-9 h-9 rounded-full bg-indigo-500/20 border border-indigo-500/30 flex items-center justify-center">
                 <Shield className="w-4 h-4 text-indigo-400"/>
               </div>
@@ -1495,10 +1503,12 @@ function App() {
           >
             {/* AEGIS top bar */}
             <div className="flex items-center justify-between px-4 py-3 border-b border-slate-800/60 shrink-0" style={{ background: '#0a1020' }}>
-              <button onClick={() => setActivePage('map')} className="p-2 text-slate-500 hover:text-white transition-colors">
-                <Menu className="w-5 h-5"/>
+              <button onClick={() => setActivePage('map')}
+                className="flex items-center gap-1.5 text-slate-400 hover:text-white transition-colors">
+                <ChevronLeft className="w-5 h-5"/>
+                <span className="text-xs font-bold tracking-wide">KEMBALI</span>
               </button>
-              <span className="text-sm font-black text-white tracking-widest">AEGIS RESPONSE</span>
+              <span className="text-sm font-black text-white tracking-widest">SYSTEM CONFIG</span>
               <div className="w-9 h-9 rounded-full bg-indigo-500/20 border border-indigo-500/30 flex items-center justify-center">
                 <Shield className="w-4 h-4 text-indigo-400"/>
               </div>
@@ -1725,47 +1735,11 @@ function App() {
         )}
       </AnimatePresence>
 
-      {/* ═══ NEW PAGES — Full-screen overlays ═══ */}
+      {/* ═══ ADMIN-ONLY OVERLAY PAGES ═══ */}
+      {/* Sensors: admin tab goes here */}
       <AnimatePresence>
         {activePage === 'sensors' && (
-          <SensorsPage key="sensors" />
-        )}
-      </AnimatePresence>
-
-      <AnimatePresence>
-        {activePage === 'status' && (
-          <StatusPage
-            key="status"
-            onNavigate={(p) => setActivePage(p)}
-            userLocation={userPosition ? 'Palu, Sulawesi Tengah' : 'Mendeteksi lokasi...'}
-          />
-        )}
-      </AnimatePresence>
-
-      <AnimatePresence>
-        {activePage === 'navigate' && (
-          <NavigatePage
-            key="navigate"
-            routes={routes}
-            selectedRoute={selectedRoute}
-            tsunamiAlert={tsunamiAlert}
-            userPosition={userPosition}
-          />
-        )}
-      </AnimatePresence>
-
-      <AnimatePresence>
-        {activePage === 'family' && (
-          <FamilyPage key="family" />
-        )}
-      </AnimatePresence>
-
-      <AnimatePresence>
-        {activePage === 'guides' && (
-          <GuidesPage
-            key="guides"
-            onNavigateMap={() => setActivePage('map')}
-          />
+          <SensorsPage key="sensors" onBack={() => setActivePage('map')} />
         )}
       </AnimatePresence>
 

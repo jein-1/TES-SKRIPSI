@@ -4,7 +4,7 @@
 import { useState, useEffect } from 'react'
 import { MapContainer, TileLayer, Marker, Popup, useMap } from 'react-leaflet'
 import L from 'leaflet'
-import { Wifi, WifiOff, Activity, AlertTriangle, CheckCircle, RefreshCw, Radio } from 'lucide-react'
+import { Wifi, WifiOff, Activity, AlertTriangle, CheckCircle, RefreshCw, Radio, ChevronLeft } from 'lucide-react'
 import { motion } from 'motion/react'
 import type { SensorNode, SensorStatus } from '../../types'
 import { TILE_DARK } from '../../constants/mapConfig'
@@ -118,7 +118,7 @@ function FitBounds() {
 }
 
 // ── Main SensorsPage ─────────────────────────────────────────────
-export default function SensorsPage() {
+export default function SensorsPage({ onBack }: { onBack?: () => void }) {
   const [lastSync] = useState(() => {
     const now = new Date()
     return `${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}:${String(now.getSeconds()).padStart(2,'0')} UTC`
@@ -139,15 +139,23 @@ export default function SensorsPage() {
     <motion.div
       initial={{ opacity: 0, x: 40 }} animate={{ opacity: 1, x: 0 }}
       exit={{ opacity: 0, x: 40 }} transition={{ duration: 0.22 }}
-      className="absolute inset-0 flex flex-col overflow-y-auto custom-scrollbar"
+      className="fixed inset-0 z-[1800] flex flex-col overflow-y-auto custom-scrollbar"
       style={{ background: '#080e1a' }}
     >
       {/* Header */}
       <div className="shrink-0 px-5 pt-5 pb-4 border-b border-slate-800/60" style={{ background: '#0a1020' }}>
         <div className="flex items-center justify-between mb-1">
-          <div>
-            <p className="text-[10px] font-bold text-indigo-400 tracking-[0.2em] uppercase">System Diagnostics</p>
-            <h2 className="text-xl font-black text-white tracking-tight">SENSOR ARRAY STATUS</h2>
+          <div className="flex items-center gap-3">
+            {onBack && (
+              <button onClick={onBack}
+                className="w-8 h-8 rounded-xl bg-slate-800/60 border border-slate-700/50 flex items-center justify-center hover:bg-slate-700 transition-colors">
+                <ChevronLeft className="w-4 h-4 text-slate-400" />
+              </button>
+            )}
+            <div>
+              <p className="text-[10px] font-bold text-indigo-400 tracking-[0.2em] uppercase">System Diagnostics</p>
+              <h2 className="text-xl font-black text-white tracking-tight">SENSOR ARRAY STATUS</h2>
+            </div>
           </div>
           <button
             onClick={handleRefresh}
