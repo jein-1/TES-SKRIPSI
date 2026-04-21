@@ -11,7 +11,7 @@ const API_BASE = ''
 export type SyncEventHandler = (event: AegisSyncEvent) => void
 
 export interface AegisSyncEvent {
-  type: 'INIT' | 'TSUNAMI' | 'FAMILY_JOIN' | 'PING' | 'PING_REPLY'
+  type: 'INIT' | 'TSUNAMI' | 'FAMILY_JOIN' | 'PING' | 'PING_REPLY' | 'LOCATION_UPDATE'
   [key: string]: unknown
 }
 

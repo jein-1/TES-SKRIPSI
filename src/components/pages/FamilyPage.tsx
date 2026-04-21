@@ -270,7 +270,9 @@ export default function FamilyPage({ onBack }: Props) {
       }
     }
     if (event.type === 'LOCATION_UPDATE') {
-      const { id, lat, lng } = event as { id: string; lat: number; lng: number }
+      const id = event.id as string
+      const lat = event.lat as number
+      const lng = event.lng as number
       if (id && lat && lng) saveMemberLoc(id, lat, lng)
     }
     if (event.type === 'PING' && event.fromId !== myId) {
