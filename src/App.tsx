@@ -10,6 +10,7 @@ import type { ActivePage, HistoryFilter, EvacuationRecord, AppSettings, AppUserR
 import { DEFAULT_SETTINGS } from './types'
 // ── Auth ───────────────────────────────────────────────────────────
 import LoginPage from './components/pages/LoginPage'
+import FirstVisitModal from './components/modals/FirstVisitModal'
 import type { UserRole } from './types'
 // ── New Pages ─────────────────────────────────────────────────────
 import SensorsPage   from './components/pages/SensorsPage'
@@ -162,17 +163,31 @@ function App() {
   const [showShelters, setShowShelters] = useState(false)
   const [showLeftSidebar, setShowLeftSidebar] = useState(true)
 
-  // ── Auth / Role ────────────────────────────────────────────
-  const [userRole, setUserRole] = useState<AppUserRole>(() =>
-    (sessionStorage.getItem('aegisRole') as AppUserRole) ?? null
+  // ── URL-based Admin Detection ────────────────────────────────
+  // Admin mode: URL contains ?admin OR ?key=aegis2024 OR hash #admin
+  // User mode:  any other URL (default — no login required)
+  const isAdminURL = (() => {
+    const p = new URLSearchParams(window.location.search)
+    return p.has('admin') || p.get('key') === 'aegis2024' || window.location.hash === '#admin'
+  })()
+
+  const [userRole, setUserRole] = useState<AppUserRole>(() => {
+    if (!isAdminURL) return 'user' // Regular URL → instant user mode
+    return (sessionStorage.getItem('aegisRole') as AppUserRole) ?? null
+  })
+
+  // User display name — stored in localStorage, set on first visit
+  const [userName, setUserName] = useState<string>(() =>
+    localStorage.getItem('aegisUserName') ?? ''
   )
-  const [loggedInUser, setLoggedInUser] = useState<string>(() =>
-    sessionStorage.getItem('aegisUser') ?? ''
+  const [showFirstVisit, setShowFirstVisit] = useState(() =>
+    !isAdminURL && !localStorage.getItem('aegisUserName')
   )
 
   // ── Navigation ─────────────────────────────────────────────
   // Admin starts on 'map', public user starts on 'status'
   const [activePage, setActivePage] = useState<ActivePage>(() => {
+    if (!isAdminURL) return 'status'
     const role = sessionStorage.getItem('aegisRole') as UserRole
     return role === 'user' ? 'status' : 'map'
   })
@@ -233,20 +248,29 @@ function App() {
   }, [])
 
   // ── Auth handlers ──────────────────────────────────────────
+  // Admin login (only called when isAdminURL)
   const handleLogin = (role: UserRole, name: string) => {
     sessionStorage.setItem('aegisRole', role ?? '')
     sessionStorage.setItem('aegisUser', name)
     setUserRole(role)
-    setLoggedInUser(name)
     setActivePage(role === 'user' ? 'status' : 'map')
   }
 
+  // Admin logout → back to admin login screen
   const handleLogout = () => {
     sessionStorage.removeItem('aegisRole')
     sessionStorage.removeItem('aegisUser')
-    setUserRole(null)
-    setLoggedInUser('')
-    setActivePage('map')
+    setUserRole(isAdminURL ? null : 'user')
+    setActivePage('status')
+  }
+
+  // First visit name completion
+  const handleFirstVisit = (name: string) => {
+    localStorage.setItem('aegisUserName', name)
+    setUserName(name)
+    setShowFirstVisit(false)
+    // Auto-start GPS after name is set
+    setTimeout(() => startGpsTracking(), 800)
   }
 
   // ── GPS ────────────────────────────────────────────────────
@@ -458,6 +482,9 @@ function App() {
               key="status"
               onNavigate={(p) => setActivePage(p)}
               userLocation={userPosition ? 'Palu, Sulawesi Tengah' : 'Mendeteksi lokasi...'}
+              userName={userName}
+              onRequestGps={!gpsTracking ? startGpsTracking : undefined}
+              gpsTracking={gpsTracking}
             />
           )}
           {activePage === 'navigate' && (
@@ -499,15 +526,32 @@ function App() {
               <span className="text-[9px] font-bold tracking-wider">{label}</span>
             </button>
           ))}
-          <button onClick={handleLogout}
-            className="flex flex-col items-center gap-1 py-2 px-4 text-slate-700 active:text-red-400 transition-colors">
-            <Lock className="w-5 h-5"/>
-            <span className="text-[9px] font-bold tracking-wider">LOGOUT</span>
-          </button>
+          {/* Logout only shown when accessed via admin URL */}
+          {isAdminURL ? (
+            <button onClick={handleLogout}
+              className="flex flex-col items-center gap-1 py-2 px-4 text-slate-700 active:text-red-400 transition-colors">
+              <Lock className="w-5 h-5"/>
+              <span className="text-[9px] font-bold tracking-wider">KELUAR</span>
+            </button>
+          ) : (
+            <button onClick={() => { localStorage.removeItem('aegisUserName'); setShowFirstVisit(true); setUserName('') }}
+              className="flex flex-col items-center gap-1 py-2 px-4 text-slate-700 active:text-slate-400 transition-colors">
+              <Shield className="w-5 h-5"/>
+              <span className="text-[9px] font-bold tracking-wider">PROFIL</span>
+            </button>
+          )}
         </nav>
+
+        {/* First Visit Modal — shown when no name stored yet */}
+        <AnimatePresence>
+          {showFirstVisit && (
+            <FirstVisitModal key="first-visit" onComplete={handleFirstVisit} />
+          )}
+        </AnimatePresence>
       </div>
     )
   }
+
 
   // ── ADMIN layout (full tactical dashboard) ─────────────────
   return (
@@ -1743,9 +1787,9 @@ function App() {
         )}
       </AnimatePresence>
 
-      {/* ── LOGIN GATE — overlay when not authenticated ── */}
+      {/* ── LOGIN GATE — only shown on admin URL when not authenticated ── */}
       <AnimatePresence>
-        {!userRole && (
+        {isAdminURL && !userRole && (
           <LoginPage key="login" onLogin={handleLogin} />
         )}
       </AnimatePresence>

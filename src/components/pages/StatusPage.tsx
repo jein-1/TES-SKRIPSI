@@ -2,7 +2,7 @@
 // STATUS PAGE — Public User Home "I AM SAFE"
 // ═══════════════════════════════════════════════════════════════
 import { useState, useEffect } from 'react'
-import { MapPin, Users, BookOpen, ChevronRight, CheckCircle, Heart, Activity, ChevronLeft } from 'lucide-react'
+import { MapPin, Users, BookOpen, ChevronRight, CheckCircle, Heart, Activity, ChevronLeft, Locate } from 'lucide-react'
 import { motion, AnimatePresence } from 'motion/react'
 
 const FAMILY_PREVIEW = [
@@ -15,9 +15,12 @@ interface Props {
   onNavigate: (page: 'navigate' | 'family' | 'guides') => void
   userLocation: string
   onBack?: () => void
+  userName?: string
+  onRequestGps?: () => void
+  gpsTracking?: boolean
 }
 
-export default function StatusPage({ onNavigate, userLocation, onBack }: Props) {
+export default function StatusPage({ onNavigate, userLocation, onBack, userName, onRequestGps, gpsTracking }: Props) {
   const [safePressed, setSafePressed] = useState(false)
   const [lastUpdated, setLastUpdated] = useState<string | null>(null)
   const [riskLevel] = useState<'low' | 'medium' | 'high'>('low')
@@ -57,16 +60,38 @@ export default function StatusPage({ onNavigate, userLocation, onBack }: Props) 
             <ChevronLeft className="w-4 h-4 text-slate-400" />
           </button>
         )}
-        <div>
+        <div className="flex-1 min-w-0">
           <p className="text-[10px] text-slate-500 uppercase tracking-widest font-bold mb-0.5">Current Location</p>
           <div className="flex items-start gap-2">
             <MapPin className="w-4 h-4 text-indigo-400 shrink-0 mt-0.5" />
-            <h2 className="text-lg font-black text-white leading-tight">
+            <h2 className="text-lg font-black text-white leading-tight truncate">
               {userLocation || 'Palu, Sulawesi Tengah'}
             </h2>
           </div>
         </div>
+        {userName && (
+          <div className="shrink-0 w-9 h-9 rounded-xl bg-indigo-500/20 border border-indigo-500/30 flex items-center justify-center">
+            <span className="text-xs font-black text-indigo-300">{userName.charAt(0).toUpperCase()}</span>
+          </div>
+        )}
       </div>
+
+      {/* GPS Activation Banner — shown when GPS not active */}
+      {!gpsTracking && onRequestGps && (
+        <div className="shrink-0 px-4 py-3 flex items-center gap-3 border-b border-amber-800/30" style={{ background: '#1a1000' }}>
+          <div className="w-8 h-8 rounded-xl bg-amber-500/20 border border-amber-500/30 flex items-center justify-center shrink-0">
+            <Locate className="w-4 h-4 text-amber-400" />
+          </div>
+          <div className="flex-1 min-w-0">
+            <p className="text-[11px] font-black text-amber-300">GPS Belum Aktif</p>
+            <p className="text-[10px] text-amber-500/70">Aktifkan untuk navigasi evakuasi real-time</p>
+          </div>
+          <button onClick={onRequestGps}
+            className="shrink-0 px-3 py-1.5 rounded-xl bg-amber-500 text-black font-black text-[11px] tracking-wide">
+            AKTIFKAN
+          </button>
+        </div>
+      )}
 
       <div className="flex-1 px-4 py-4 space-y-4">
 
