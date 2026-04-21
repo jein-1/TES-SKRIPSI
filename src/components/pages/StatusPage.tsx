@@ -45,7 +45,7 @@ export default function StatusPage({ onNavigate, userLocation }: Props) {
     <motion.div
       initial={{ opacity: 0, x: -40 }} animate={{ opacity: 1, x: 0 }}
       exit={{ opacity: 0, x: -40 }} transition={{ duration: 0.22 }}
-      className="fixed inset-0 z-[1800] flex flex-col overflow-y-auto custom-scrollbar"
+      className="absolute inset-0 flex flex-col overflow-y-auto custom-scrollbar"
       style={{ background: '#080e1a' }}
     >
       {/* Header */}

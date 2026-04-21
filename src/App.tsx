@@ -225,13 +225,19 @@ function App() {
   useEffect(() => { localStorage.setItem('appSettings', JSON.stringify(settings)) }, [settings])
   useEffect(() => { localStorage.setItem('evacuationHistory', JSON.stringify(evacuationHistory)) }, [evacuationHistory])
 
+  // Mobile detection — MUST be before any conditional returns (Rules of Hooks)
+  useEffect(() => {
+    const check = () => setIsMobile(window.innerWidth < 768)
+    check(); window.addEventListener('resize', check)
+    return () => window.removeEventListener('resize', check)
+  }, [])
+
   // ── Auth handlers ──────────────────────────────────────────
   const handleLogin = (role: UserRole, name: string) => {
     sessionStorage.setItem('aegisRole', role ?? '')
     sessionStorage.setItem('aegisUser', name)
     setUserRole(role)
     setLoggedInUser(name)
-    // Navigate to appropriate home page
     setActivePage(role === 'user' ? 'status' : 'map')
   }
 
@@ -243,17 +249,7 @@ function App() {
     setActivePage('map')
   }
 
-  // ── Login gate — show LoginPage until authenticated ────────
-  if (!userRole) {
-    return <LoginPage onLogin={handleLogin} />
-  }
-
-  // Mobile detection
-  useEffect(() => {
-    const check = () => setIsMobile(window.innerWidth < 768)
-    check(); window.addEventListener('resize', check)
-    return () => window.removeEventListener('resize', check)
-  }, [])
+  // ── GPS ────────────────────────────────────────────────────
 
   // ── Save history record ────────────────────────────────────
   const saveHistoryRecord = useCallback((
@@ -446,8 +442,73 @@ function App() {
     : evacuationHistory.filter(r => r.type === (historyFilter === 'real' ? 'real' : 'simulation'))
 
   // ════════════════════════════════════════════════════════════
-  // RENDER
+  // RENDER — Split by role (no z-index conflicts)
   // ════════════════════════════════════════════════════════════
+
+  // ── PUBLIC USER layout ─────────────────────────────────────
+  if (userRole === 'user') {
+    return (
+      <div className="w-full h-full bg-[#080e1a] text-slate-300 font-sans overflow-hidden flex flex-col">
+
+        {/* Public pages rendered here */}
+        <div className="flex-1 relative overflow-hidden">
+          <AnimatePresence mode="wait">
+            {activePage === 'status' && (
+              <StatusPage
+                key="status"
+                onNavigate={(p) => setActivePage(p)}
+                userLocation={userPosition ? 'Palu, Sulawesi Tengah' : 'Mendeteksi lokasi...'}
+              />
+            )}
+            {activePage === 'navigate' && (
+              <NavigatePage
+                key="navigate"
+                routes={routes}
+                selectedRoute={selectedRoute}
+                tsunamiAlert={tsunamiAlert}
+                userPosition={userPosition}
+              />
+            )}
+            {activePage === 'family' && (
+              <FamilyPage key="family" />
+            )}
+            {activePage === 'guides' && (
+              <GuidesPage
+                key="guides"
+                onNavigateMap={() => setActivePage('status')}
+              />
+            )}
+          </AnimatePresence>
+        </div>
+
+        {/* USER BOTTOM NAV */}
+        <nav className="shrink-0 flex items-center justify-around border-t bg-[#0a1020]/95 border-slate-800/50 backdrop-blur-md"
+          style={{ paddingBottom: 'env(safe-area-inset-bottom)', height: '60px' }}>
+          {([
+            { page: 'status'   as ActivePage, Icon: Home,        label: 'STATUS'   },
+            { page: 'navigate' as ActivePage, Icon: Navigation2, label: 'NAVIGATE' },
+            { page: 'family'   as ActivePage, Icon: Users,       label: 'FAMILY'   },
+            { page: 'guides'   as ActivePage, Icon: BookOpen,    label: 'GUIDES'   },
+          ]).map(({ page, Icon, label }) => (
+            <button key={page} onClick={() => setActivePage(page)}
+              className={`flex flex-col items-center gap-1 py-2 px-4 transition-colors ${
+                activePage === page ? 'text-emerald-400' : 'text-slate-600 active:text-slate-400'
+              }`}>
+              <Icon className="w-5 h-5"/>
+              <span className="text-[9px] font-bold tracking-wider">{label}</span>
+            </button>
+          ))}
+          <button onClick={handleLogout}
+            className="flex flex-col items-center gap-1 py-2 px-4 text-slate-700 active:text-red-400 transition-colors">
+            <Lock className="w-5 h-5"/>
+            <span className="text-[9px] font-bold tracking-wider">LOGOUT</span>
+          </button>
+        </nav>
+      </div>
+    )
+  }
+
+  // ── ADMIN layout (full tactical dashboard) ─────────────────
   return (
     <div className="w-full h-full bg-[#0b1120] text-slate-300 font-sans overflow-hidden flex flex-col">
 
@@ -1705,6 +1766,13 @@ function App() {
             key="guides"
             onNavigateMap={() => setActivePage('map')}
           />
+        )}
+      </AnimatePresence>
+
+      {/* ── LOGIN GATE — overlay when not authenticated ── */}
+      <AnimatePresence>
+        {!userRole && (
+          <LoginPage key="login" onLogin={handleLogin} />
         )}
       </AnimatePresence>
 
