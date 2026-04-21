@@ -2,7 +2,9 @@
 // GLOBAL TYPES — Semua tipe data yang digunakan di seluruh app
 // ═══════════════════════════════════════════════════════════════
 
-export type ActivePage = 'map' | 'history' | 'settings'
+export type ActivePage = 'map' | 'history' | 'settings' | 'sensors' | 'status' | 'navigate' | 'family' | 'guides'
+export type UserRole = 'admin' | 'user'
+export type AppUserRole = UserRole | null
 export type HistoryFilter = 'all' | 'real' | 'simulation'
 
 export interface EvacuationRecord {
@@ -40,4 +42,34 @@ export const DEFAULT_SETTINGS: AppSettings = {
   safeZoneRadius: 2.5,
   autoStartGPS: true,
   showHazardZones: true,
+}
+
+// ── Public User Types ──────────────────────────────────────────
+export type FamilyMemberStatus = 'safe' | 'danger' | 'unknown'
+
+export interface FamilyMember {
+  id: string
+  name: string
+  role: string
+  initials: string
+  status: FamilyMemberStatus
+  location: string
+  updatedAgo: string
+  alertLabel?: string
+}
+
+export type SensorStatus = 'online' | 'degraded' | 'offline'
+
+export interface SensorNode {
+  id: string
+  name: string
+  nodeId: string
+  type: 'buoy' | 'seismograph' | 'camera'
+  status: SensorStatus
+  signalStrength: number  // 0–100
+  latencyMs: number
+  uptimePct: number
+  lat: number
+  lng: number
+  bars: number[]          // mini sparkline (8 values)
 }

@@ -6,14 +6,24 @@ import { shelters, hazardZones, findOptimalEvacuationRoutes, type RouteResult } 
 import { TILE_NORMAL, TILE_DARK, TILE_SATELLITE, routeColors, routeBadgeColors } from './constants/mapConfig'
 import { shelterIcon, userIcon, userIconAlert } from './components/map/icons'
 import { FlyToController, MapResizer, CustomMapControls } from './components/map/MapComponents'
-import type { ActivePage, HistoryFilter, EvacuationRecord, AppSettings } from './types'
+import type { ActivePage, HistoryFilter, EvacuationRecord, AppSettings, AppUserRole } from './types'
 import { DEFAULT_SETTINGS } from './types'
+// ── Auth ───────────────────────────────────────────────────────────
+import LoginPage from './components/pages/LoginPage'
+import type { UserRole } from './types'
+// ── New Pages ─────────────────────────────────────────────────────
+import SensorsPage   from './components/pages/SensorsPage'
+import StatusPage    from './components/pages/StatusPage'
+import NavigatePage  from './components/pages/NavigatePage'
+import FamilyPage    from './components/pages/FamilyPage'
+import GuidesPage    from './components/pages/GuidesPage'
 // ── UI Libraries ─────────────────────────────────────────────────
 import {
   AlertTriangle, Shield, MapPin, Info, ChevronRight, X, Locate,
   Volume2, Menu, Radio, Satellite, Map as MapIcon, HelpCircle, Cpu,
   ArrowRight, History, Bell, Vibrate, Crosshair,
-  SlidersHorizontal, Trash2, Navigation2, Lock, RefreshCw, Activity, Clock, Check, CheckCircle2
+  SlidersHorizontal, Trash2, Navigation2, Lock, RefreshCw, Activity, Clock, Check, CheckCircle2,
+  Users, BookOpen, Home
 } from 'lucide-react'
 import { motion, AnimatePresence } from 'motion/react'
 
@@ -125,8 +135,10 @@ function fmtDate(d: Date) {
 // ═══════════════════════════════════════════════════════════════
 // APP
 // ═══════════════════════════════════════════════════════════════
-// ── Arrival detection radius (metres) — same ballpark as Google Maps
-const ARRIVAL_RADIUS_METERS = 50
+// ── Arrival detection radius (metres)
+// 30m = sweet spot: menutupi GPS drift ±15-20m di dekat gedung besar,
+// tapi tidak trigger dari seberang jalan (seperti Google Maps ~30-50m)
+const ARRIVAL_RADIUS_METERS = 30
 
 function App() {
   // ── Map state ──────────────────────────────────────────────
@@ -150,8 +162,20 @@ function App() {
   const [showShelters, setShowShelters] = useState(false)
   const [showLeftSidebar, setShowLeftSidebar] = useState(true)
 
+  // ── Auth / Role ────────────────────────────────────────────
+  const [userRole, setUserRole] = useState<AppUserRole>(() =>
+    (sessionStorage.getItem('aegisRole') as AppUserRole) ?? null
+  )
+  const [loggedInUser, setLoggedInUser] = useState<string>(() =>
+    sessionStorage.getItem('aegisUser') ?? ''
+  )
+
   // ── Navigation ─────────────────────────────────────────────
-  const [activePage, setActivePage] = useState<ActivePage>('map')
+  // Admin starts on 'map', public user starts on 'status'
+  const [activePage, setActivePage] = useState<ActivePage>(() => {
+    const role = sessionStorage.getItem('aegisRole') as UserRole
+    return role === 'user' ? 'status' : 'map'
+  })
   const [historyFilter, setHistoryFilter] = useState<HistoryFilter>('all')
 
   // ── Persistent Terminal ID ─────────────────────────────────
@@ -200,6 +224,29 @@ function App() {
   // Persist
   useEffect(() => { localStorage.setItem('appSettings', JSON.stringify(settings)) }, [settings])
   useEffect(() => { localStorage.setItem('evacuationHistory', JSON.stringify(evacuationHistory)) }, [evacuationHistory])
+
+  // ── Auth handlers ──────────────────────────────────────────
+  const handleLogin = (role: UserRole, name: string) => {
+    sessionStorage.setItem('aegisRole', role ?? '')
+    sessionStorage.setItem('aegisUser', name)
+    setUserRole(role)
+    setLoggedInUser(name)
+    // Navigate to appropriate home page
+    setActivePage(role === 'user' ? 'status' : 'map')
+  }
+
+  const handleLogout = () => {
+    sessionStorage.removeItem('aegisRole')
+    sessionStorage.removeItem('aegisUser')
+    setUserRole(null)
+    setLoggedInUser('')
+    setActivePage('map')
+  }
+
+  // ── Login gate — show LoginPage until authenticated ────────
+  if (!userRole) {
+    return <LoginPage onLogin={handleLogin} />
+  }
 
   // Mobile detection
   useEffect(() => {
@@ -717,15 +764,46 @@ function App() {
               </Marker>
             )}
 
-            {/* Routes */}
-            {routes.map((route, i) => (
-              <Polyline key={i} positions={route.coordinates} pathOptions={{
-                color: routeColors[i],
-                weight: i === selectedRoute ? 6 : 3,
-                opacity: i === selectedRoute ? 0.9 : 0.4,
-                dashArray: i === selectedRoute ? undefined : '10 6',
-              }} />
-            ))}
+            {/* Routes — dual layer display:
+                Layer 1: thin dashed reference path (Dijkstra via road network)
+                Layer 2: thick solid beeline from user → shelter (always accurate) */}
+            {routes.map((route, i) => {
+              const isSelected = i === selectedRoute
+              return (
+                <Polyline
+                  key={`road-${i}`}
+                  positions={route.coordinates}
+                  pathOptions={{
+                    color: routeColors[i],
+                    weight: isSelected ? 3 : 2,
+                    opacity: isSelected ? 0.45 : 0.2,
+                    dashArray: '8 6',
+                  }}
+                />
+              )
+            })}
+
+            {/* Beeline: garis lurus langsung user → shelter tujuan
+                Selalu diperbarui setiap GPS update — tidak bergantung road network */}
+            {userPosition && routes[selectedRoute] && (() => {
+              const target = routes[selectedRoute]
+              const shelterPos = target.coordinates[target.coordinates.length - 1]
+              const color = tsunamiAlert ? '#ef4444' : '#6366f1'
+              return (
+                <Polyline
+                  key={`beeline-${selectedRoute}`}
+                  positions={[userPosition, shelterPos]}
+                  pathOptions={{
+                    color,
+                    weight: 5,
+                    opacity: 0.9,
+                    dashArray: undefined,
+                    lineCap: 'round',
+                    lineJoin: 'round',
+                  }}
+                />
+              )
+            })()}
           </MapContainer>
 
           {/* ═══ MOBILE BOTTOM SHEET ═══ */}
@@ -890,33 +968,68 @@ function App() {
         </AnimatePresence>
       </div>
 
-      {/* ═══ MOBILE BOTTOM NAV — fixed bottom-0 untuk PASTI muncul di semua HP ═══ */}
-      <nav className={`md:hidden fixed bottom-0 left-0 right-0 flex items-center justify-around border-t z-[1900] transition-colors duration-500 backdrop-blur-md
-        ${tsunamiAlert ? 'bg-red-950/95 border-red-900/50' : 'bg-[#0f172a]/95 border-slate-800/50'}`}
-        style={{ paddingBottom: 'env(safe-area-inset-bottom)', height: '60px' }}>
-        {([
-          { page: 'map'      as ActivePage, Icon: MapIcon,          label: 'MAP'      },
-          { page: 'history'  as ActivePage, Icon: History,           label: 'HISTORY'  },
-          { page: 'settings' as ActivePage, Icon: SlidersHorizontal, label: 'SETTINGS' },
-        ]).map(({ page, Icon, label }) => (
-          <button key={page} onClick={() => setActivePage(page)}
-            className={`flex flex-col items-center gap-1 py-2 px-6 transition-colors ${
-              activePage === page
-                ? tsunamiAlert ? 'text-red-400' : 'text-indigo-400'
-                : 'text-slate-600 active:text-slate-400'
-            }`}>
-            <div className="relative">
-              <Icon className="w-5 h-5"/>
-              {page === 'history' && evacuationHistory.length > 0 && (
-                <span className="absolute -top-1 -right-1 w-3.5 h-3.5 bg-indigo-500 rounded-full text-[8px] font-bold flex items-center justify-center text-white">
-                  {evacuationHistory.length > 9 ? '9+' : evacuationHistory.length}
-                </span>
-              )}
-            </div>
-            <span className="text-[9px] font-bold tracking-wider">{label}</span>
+      {/* ═══ BOTTOM NAV — Role-based ═══ */}
+      {userRole === 'admin' ? (
+        /* ── ADMIN NAV: MAP, HISTORY, SENSORS, SETTINGS + logout ── */
+        <nav className={`md:hidden fixed bottom-0 left-0 right-0 flex items-center justify-around border-t z-[1900] transition-colors duration-500 backdrop-blur-md
+          ${tsunamiAlert ? 'bg-red-950/95 border-red-900/50' : 'bg-[#0f172a]/95 border-slate-800/50'}`}
+          style={{ paddingBottom: 'env(safe-area-inset-bottom)', height: '60px' }}>
+          {([
+            { page: 'map'      as ActivePage, Icon: MapIcon,          label: 'MAP'      },
+            { page: 'history'  as ActivePage, Icon: History,           label: 'HISTORY'  },
+            { page: 'sensors'  as ActivePage, Icon: Radio,             label: 'SENSORS'  },
+            { page: 'settings' as ActivePage, Icon: SlidersHorizontal, label: 'SETTINGS' },
+          ]).map(({ page, Icon, label }) => (
+            <button key={page} onClick={() => setActivePage(page)}
+              className={`flex flex-col items-center gap-1 py-2 px-4 transition-colors ${
+                activePage === page
+                  ? tsunamiAlert ? 'text-red-400' : 'text-indigo-400'
+                  : 'text-slate-600 active:text-slate-400'
+              }`}>
+              <div className="relative">
+                <Icon className="w-5 h-5"/>
+                {page === 'history' && evacuationHistory.length > 0 && (
+                  <span className="absolute -top-1 -right-1 w-3.5 h-3.5 bg-indigo-500 rounded-full text-[8px] font-bold flex items-center justify-center text-white">
+                    {evacuationHistory.length > 9 ? '9+' : evacuationHistory.length}
+                  </span>
+                )}
+              </div>
+              <span className="text-[9px] font-bold tracking-wider">{label}</span>
+            </button>
+          ))}
+          {/* Logout */}
+          <button onClick={handleLogout}
+            className="flex flex-col items-center gap-1 py-2 px-4 text-slate-700 active:text-red-400 transition-colors">
+            <Lock className="w-5 h-5"/>
+            <span className="text-[9px] font-bold tracking-wider">LOGOUT</span>
           </button>
-        ))}
-      </nav>
+        </nav>
+      ) : (
+        /* ── USER NAV: STATUS, NAVIGATE, FAMILY, GUIDES + logout ── */
+        <nav className="md:hidden fixed bottom-0 left-0 right-0 flex items-center justify-around border-t z-[1900] backdrop-blur-md bg-[#0f172a]/95 border-slate-800/50"
+          style={{ paddingBottom: 'env(safe-area-inset-bottom)', height: '60px' }}>
+          {([
+            { page: 'status'   as ActivePage, Icon: Home,        label: 'STATUS'   },
+            { page: 'navigate' as ActivePage, Icon: Navigation2, label: 'NAVIGATE' },
+            { page: 'family'   as ActivePage, Icon: Users,       label: 'FAMILY'   },
+            { page: 'guides'   as ActivePage, Icon: BookOpen,    label: 'GUIDES'   },
+          ]).map(({ page, Icon, label }) => (
+            <button key={page} onClick={() => setActivePage(page)}
+              className={`flex flex-col items-center gap-1 py-2 px-4 transition-colors ${
+                activePage === page ? 'text-emerald-400' : 'text-slate-600 active:text-slate-400'
+              }`}>
+              <Icon className="w-5 h-5"/>
+              <span className="text-[9px] font-bold tracking-wider">{label}</span>
+            </button>
+          ))}
+          {/* Logout */}
+          <button onClick={handleLogout}
+            className="flex flex-col items-center gap-1 py-2 px-4 text-slate-700 active:text-red-400 transition-colors">
+            <Lock className="w-5 h-5"/>
+            <span className="text-[9px] font-bold tracking-wider">LOGOUT</span>
+          </button>
+        </nav>
+      )}
 
       {/* ══════════════════════════════════════════════════════════ */}
       {/* MODALS                                                    */}
@@ -1548,6 +1661,50 @@ function App() {
               </button>
             </div>
           </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* ═══ NEW PAGES — Full-screen overlays ═══ */}
+      <AnimatePresence>
+        {activePage === 'sensors' && (
+          <SensorsPage key="sensors" />
+        )}
+      </AnimatePresence>
+
+      <AnimatePresence>
+        {activePage === 'status' && (
+          <StatusPage
+            key="status"
+            onNavigate={(p) => setActivePage(p)}
+            userLocation={userPosition ? 'Palu, Sulawesi Tengah' : 'Mendeteksi lokasi...'}
+          />
+        )}
+      </AnimatePresence>
+
+      <AnimatePresence>
+        {activePage === 'navigate' && (
+          <NavigatePage
+            key="navigate"
+            routes={routes}
+            selectedRoute={selectedRoute}
+            tsunamiAlert={tsunamiAlert}
+            userPosition={userPosition}
+          />
+        )}
+      </AnimatePresence>
+
+      <AnimatePresence>
+        {activePage === 'family' && (
+          <FamilyPage key="family" />
+        )}
+      </AnimatePresence>
+
+      <AnimatePresence>
+        {activePage === 'guides' && (
+          <GuidesPage
+            key="guides"
+            onNavigateMap={() => setActivePage('map')}
+          />
         )}
       </AnimatePresence>
 
