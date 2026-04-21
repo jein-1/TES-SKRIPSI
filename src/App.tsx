@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect, useRef } from 'react'
+﻿import { useState, useCallback, useEffect, useRef } from 'react'
 import { MapContainer, TileLayer, Marker, Popup, Polyline, Polygon, Circle, useMap, useMapEvents } from 'react-leaflet'
 import 'leaflet/dist/leaflet.css'
 import 'leaflet-rotate'
@@ -366,22 +366,6 @@ function App() {
           const toRad = (d: number) => d * (Math.PI / 180)
           const arrived = shelters.find(sh => {
             const R = 6371000 // metres
-            // ── SSE real-time sync — works cross-device on Railway ────────
-  useAegisSync((event) => {
-    if (event.type === 'TSUNAMI') {
-      const active = event.active as boolean
-      if (active) {
-        setTsunamiAlert(true)
-        setActivePage('navigate')
-        if ('vibrate' in navigator) navigator.vibrate([500, 200, 500, 200, 500])
-        if (settings.soundAlert) alarmRef.current.start()
-      } else {
-        setTsunamiAlert(false)
-        alarmRef.current.stop()
-      }
-    }
-  })
-
             const dLat = toRad(sh.lat - newPos[0])
             const dLng = toRad(sh.lng - newPos[1])
             const a =
@@ -448,11 +432,7 @@ function App() {
     if (!alarmMuted && settings.soundAlert) alarmRef.current.start()
     if (settings.vibrationAlert && 'vibrate' in navigator) navigator.vibrate([500, 200, 500, 200, 500])
     startGpsTracking()
-    // â­ Broadcast to ALL other tabs/devices (user tabs listening via storage event)
-    localStorage.setItem('aegisTsunamiGlobal', JSON.stringify({ active: true, ts: Date.now() }))
-    // Dispatch manually so SAME tab also hears it (storage event only fires in OTHER tabs)
-    window.dispatchEvent(new StorageEvent('storage', { key: 'aegisTsunamiGlobal',
-      newValue: JSON.stringify({ active: true, ts: Date.now() }) }))
+    aegisApi.setTsunami(true)
   }, [alarmMuted, settings.soundAlert, settings.vibrationAlert, startGpsTracking])
 
   const deactivateTsunamiAlert = useCallback(() => {
@@ -515,40 +495,23 @@ function App() {
   // RENDER â€” Split by role (no z-index conflicts)
   // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 
-  // â”€â”€ User mode: listen for tsunami broadcast from admin tab â”€â”€â”€
-  useEffect(() => {
-    if (userRole !== 'user') return
-    // Check stored state on mount
-    const stored = localStorage.getItem('aegisTsunamiGlobal')
-    if (stored) {
-      try {
-        const data = JSON.parse(stored)
-        if (data?.active) {
-          setTsunamiAlert(true)
-          setActivePage('navigate')
-          if ('vibrate' in navigator) navigator.vibrate([500, 200, 500, 200, 500])
-        }
-      } catch {}
+  // -- SSE real-time sync -- cross-device via Railway server
+  useAegisSync((event) => {
+    if (event.type === 'TSUNAMI') {
+      const active = event.active as boolean
+      if (active) {
+        setTsunamiAlert(true)
+        setActivePage('navigate')
+        if ('vibrate' in navigator) navigator.vibrate([500, 200, 500, 200, 500])
+        if (settings.soundAlert) alarmRef.current.start()
+      } else {
+        setTsunamiAlert(false)
+        alarmRef.current.stop()
+      }
     }
-    // Listen for changes from admin tab
-    const handler = (e: StorageEvent) => {
-      if (e.key !== 'aegisTsunamiGlobal') return
-      try {
-        const data = e.newValue ? JSON.parse(e.newValue) : null
-        if (data?.active) {
-          setTsunamiAlert(true)
-          setActivePage('navigate')
-          if ('vibrate' in navigator) navigator.vibrate([500, 200, 500, 200, 500])
-          if (settings.soundAlert) alarmRef.current.start()
-        } else {
-          setTsunamiAlert(false)
-          alarmRef.current.stop()
-        }
-      } catch {}
-    }
-    window.addEventListener('storage', handler)
-    return () => window.removeEventListener('storage', handler)
-  }, [userRole, settings.soundAlert, setActivePage])
+  })
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  useEffect(() => { aegisApi.getTsunami().then(({ active }) => { if (active) { setTsunamiAlert(true); setActivePage('navigate') } }) }, [])
 
   // â”€â”€ PUBLIC USER layout â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   // Pages use fixed inset-0 z-[1800]; nav uses fixed z-[1900]
