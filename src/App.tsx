@@ -1221,26 +1221,7 @@ function App() {
 
         {/* â•â•â• CENTER MAP â•â•â• */}
         <main className="flex-1 relative z-0 bg-[#0b1120]">
-          {/* Mobile GPS badges */}
-          <div className="md:hidden absolute top-3 left-0 right-0 flex justify-center gap-2 z-[1000]">
-            <button
-              onClick={() =>
-                gpsTracking ? stopGpsTracking() : startGpsTracking()
-              }
-              className={`px-3 py-1.5 rounded-full flex items-center gap-2 border shadow-lg transition-colors text-xs font-bold tracking-wide
-                ${gpsTracking ? "bg-green-900/80 border-green-500/50 text-green-300" : "bg-slate-900/80 border-slate-700 text-slate-400"}`}
-            >
-              <div
-                className={`w-2 h-2 rounded-full ${gpsTracking ? "bg-green-400 animate-pulse" : "bg-slate-500"}`}
-              />
-              {gpsTracking ? "GPS AKTIF" : "ACTIVATE GPS"}
-            </button>
-            {gpsTracking && (
-              <div className="px-3 py-1.5 rounded-full bg-indigo-900/60 border border-indigo-500/30 flex items-center gap-2 text-xs font-bold tracking-wide text-indigo-300 shadow-lg">
-                <Locate className="w-3.5 h-3.5" /> TRACKING
-              </div>
-            )}
-          </div>
+          {/* Admin: GPS badges dihapus - admin hanya memantau, tidak navigasi */}
 
           {/* Mobile floating LIHAT RUTE button */}
           <AnimatePresence>
@@ -1284,26 +1265,7 @@ function App() {
             )}
           </AnimatePresence>
 
-          {/* Desktop GPS controls */}
-          <div className="hidden md:flex absolute top-4 left-4 gap-2 z-[1000]">
-            <button
-              onClick={() =>
-                gpsTracking ? stopGpsTracking() : startGpsTracking()
-              }
-              className={`px-3 py-1.5 rounded-full flex items-center gap-2 border shadow-lg transition-colors text-xs font-bold tracking-wide
-                ${gpsTracking ? "bg-green-900/60 border-green-500/50 text-green-300" : "bg-slate-900/80 border-slate-700 hover:bg-slate-800 text-slate-400"}`}
-            >
-              <div
-                className={`w-2 h-2 rounded-full ${gpsTracking ? "bg-green-400 animate-pulse" : "bg-slate-500"}`}
-              />
-              {gpsTracking ? "GPS AKTIF" : "ACTIVATE GPS"}
-            </button>
-            {gpsTracking && (
-              <div className="px-3 py-1.5 rounded-full bg-indigo-900/40 border border-indigo-500/30 flex items-center gap-2 text-xs font-bold tracking-wide text-indigo-300">
-                <Locate className="w-3.5 h-3.5" /> TRACKING
-              </div>
-            )}
-          </div>
+          {/* Admin: Desktop GPS controls dihapus - admin hanya memantau */}
 
           {/* Compass overlay â€” floating over the map, outside MapContainer */}
           <div className="absolute top-16 right-4 z-[1000] flex flex-col gap-2 pointer-events-auto">
@@ -1341,11 +1303,10 @@ function App() {
               maxNativeZoom={mapMaxNativeZoom}
               maxZoom={20}
             />
+            {/* CustomMapControls: locate button dihapus dari admin — hanya zoom */}
             <CustomMapControls
-              userPosition={userPosition}
-              onLocateClick={() => {
-                if (!gpsTracking) startGpsTracking();
-              }}
+              userPosition={null}
+              onLocateClick={() => {}}
             />
             <LocationMarker onLocationSet={handleLocationSet} />
             {/* Fix blank white area when panel resizes map container */}
@@ -1471,20 +1432,7 @@ function App() {
               )
             })}
 
-            {/* User position */}
-            {userPosition && (
-              <Marker
-                position={userPosition}
-                icon={tsunamiAlert ? userIconAlert : userIcon}
-                zIndexOffset={1000}
-              >
-                <Popup>
-                  <strong>
-                    {gpsTracking ? "Lokasi GPS Anda" : "Lokasi Terpilih"}
-                  </strong>
-                </Popup>
-              </Marker>
-            )}
+            {/* Admin: Lokasi admin sendiri tidak ditampilkan - hanya pantau user lain */}
 
             {/* Routes â€” dual layer display:
                 Layer 1: thin dashed reference path (Dijkstra via road network)
@@ -1505,30 +1453,7 @@ function App() {
               );
             })}
 
-            {/* Beeline: garis lurus langsung user â†’ shelter tujuan
-                Selalu diperbarui setiap GPS update â€” tidak bergantung road network */}
-            {userPosition &&
-              routes[selectedRoute] &&
-              (() => {
-                const target = routes[selectedRoute];
-                const shelterPos =
-                  target.coordinates[target.coordinates.length - 1];
-                const color = tsunamiAlert ? "#ef4444" : "#6366f1";
-                return (
-                  <Polyline
-                    key={`beeline-${selectedRoute}`}
-                    positions={[userPosition, shelterPos]}
-                    pathOptions={{
-                      color,
-                      weight: 5,
-                      opacity: 0.9,
-                      dashArray: undefined,
-                      lineCap: "round",
-                      lineJoin: "round",
-                    }}
-                  />
-                );
-              })()}
+            {/* Beeline dihapus dari admin - admin hanya memantau, bukan navigasi */}
           </MapContainer>
 
           {/* â•â•â• MOBILE BOTTOM SHEET â•â•â• */}

@@ -6,8 +6,6 @@ const config: CapacitorConfig = {
   webDir: 'dist',
 
   // ── KUNCI: Koneksi langsung ke Railway server ──────────────
-  // APK akan load web content DARI Railway, bukan dari assets lokal
-  // Ini memastikan APK selalu sync dengan server secara real-time
   server: {
     url: 'https://tes-skripsi-production.up.railway.app',
     cleartext: false,
@@ -26,15 +24,23 @@ const config: CapacitorConfig = {
     StatusBar: {
       style: 'Dark',
       backgroundColor: '#0a1020',
-      overlaysWebView: false,   // FIX: jangan tumpang tindih dengan konten app
+      overlaysWebView: false,
     },
     Geolocation: {},
     Camera: {},
+    // ── Background Runner: cek tsunami tiap 15 menit meski app ditutup ──
+    BackgroundRunner: {
+      label: 'aegis.background.check',     // identifier unik
+      src: 'runner.js',                     // file di public/runner.js
+      event: 'aegisBackgroundCheck',        // nama event di runner.js
+      repeat: true,                         // ulangi terus
+      interval: 15,                         // setiap 15 menit (iOS/Android minimum)
+      autoStart: true,                      // mulai otomatis setelah install
+    },
   },
   android: {
     allowMixedContent: false,
     webContentsDebuggingEnabled: false,
-    // backgroundColor: '#0a1020', // warna background native
   },
 };
 

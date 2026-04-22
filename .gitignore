@@ -42,3 +42,8 @@ android-admin/build/
 android-admin/app/build/
 *.apk
 *.aab
+
+# ── Android SOURCE folders — build lokal, tidak di-push GitHub ─
+# APK di-sync lokal saja, codenya ada di src/ (web unified)
+android/
+android-admin/

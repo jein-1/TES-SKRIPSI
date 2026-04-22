@@ -9,11 +9,10 @@
     "dev:full": "concurrently \"node server.js\" \"vite\"",
     "build": "tsc && vite build",
     "build:admin": "tsc && vite build --mode admin --outDir dist-admin",
-    "cap:sync": "npm run build && npx cap sync android",
-    "cap:sync:admin": "npm run build:admin && node tools/cap-admin-sync.js",
+    "bump": "node tools/bump-version.js",
+    "cap:sync": "node tools/bump-version.js && npm run build && npx cap sync android && npm run build:admin && node tools/cap-admin-sync.js",
     "cap:open": "npx cap open android",
     "cap:open:admin": "node tools/cap-admin-open.js",
-    "cap:add:admin": "node tools/cap-admin-sync.js",
     "start": "node server.js",
     "lint": "eslint . --ext ts,tsx --report-unused-disable-directives --max-warnings 0",
     "preview": "vite preview"
@@ -21,6 +20,7 @@
   "dependencies": {
     "@capacitor/android": "^8.3.1",
     "@capacitor/app": "^8.1.0",
+    "@capacitor/background-runner": "^3.0.0",
     "@capacitor/camera": "^8.1.0",
     "@capacitor/cli": "^8.3.1",
     "@capacitor/core": "^8.3.1",
