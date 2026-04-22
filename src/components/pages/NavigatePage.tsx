@@ -200,8 +200,34 @@ export default function NavigatePage({ routes, selectedRoute, tsunamiAlert, user
   useEffect(() => { setHeadingLocked(true) }, [tsunamiAlert])
 
   const route       = routes[activeRouteIdx]
-  const shelterPos  = route?.coordinates[route.coordinates.length - 1] as [number, number] | undefined
+  const shelterPos  = route ? [shelters.find(s => s.id === route.shelterId)?.lat ?? route.coordinates[route.coordinates.length-1]?.[0], shelters.find(s => s.id === route.shelterId)?.lng ?? route.coordinates[route.coordinates.length-1]?.[1]] as [number, number] : undefined
   const routeCoords = (route?.coordinates ?? []) as [number, number][]
+
+  // ── OSRM real road routing ─────────────────────────────────────
+  const [osrmCoords, setOsrmCoords] = useState<[number, number][]>([])
+  useEffect(() => {
+    if (!emergency || !userPosition || !shelterPos) {
+      setOsrmCoords([])
+      return
+    }
+    const [uLat, uLng] = userPosition
+    const [sLat, sLng] = shelterPos
+    const url = `https://router.project-osrm.org/route/v1/foot/${uLng},${uLat};${sLng},${sLat}?overview=full&geometries=geojson`
+    const ctrl = new AbortController()
+    fetch(url, { signal: ctrl.signal })
+      .then(r => r.json())
+      .then(data => {
+        if (data?.routes?.[0]?.geometry?.coordinates) {
+          const coords: [number, number][] = data.routes[0].geometry.coordinates.map(
+            ([lng, lat]: [number, number]) => [lat, lng] as [number, number]
+          )
+          setOsrmCoords(coords)
+        }
+      })
+      .catch(() => setOsrmCoords([]))  // fallback ke garis lurus jika offline
+    return () => ctrl.abort()
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [emergency, userPosition?.[0], userPosition?.[1], shelterPos?.[0], shelterPos?.[1]])
 
   const computedBearing = (userPosition && shelterPos) ? getBearing(userPosition, shelterPos) : 0
   const heading = deviceHeading ?? computedBearing
@@ -383,11 +409,15 @@ export default function NavigatePage({ routes, selectedRoute, tsunamiAlert, user
             />
           )}
 
-          {/* ─── GARIS JALAN RAYA DIJKSTRA (ikut belokan jalan) ─── */}
-          {emergency && routeCoords.length > 0 && <>
-            <Polyline positions={routeCoords} color="#ef4444" weight={5} opacity={0.9}/>
-            <Polyline positions={routeCoords} color="#fca5a5" weight={10} opacity={0.2}/>
-          </>}
+          {/* ─── GARIS JALAN RAYA via OSRM (ikut belokan jalan nyata) ─── */}
+          {emergency && (() => {
+            const roadPath = osrmCoords.length > 0 ? osrmCoords : routeCoords
+            if (roadPath.length < 2) return null
+            return <>
+              <Polyline positions={roadPath} color="#ef4444" weight={5} opacity={0.9}/>
+              <Polyline positions={roadPath} color="#fca5a5" weight={10} opacity={0.2}/>
+            </>
+          })()}
 
           <NavMapController
             userPos={userPosition}
