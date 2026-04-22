@@ -578,7 +578,7 @@ function App() {
     
     try {
       const watchId = await Geolocation.watchPosition(
-        { enableHighAccuracy: true, timeout: 20000, maximumAge: 0 },
+        { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 },
         (pos, err) => {
           if (err) {
             setIsCalculating(false);

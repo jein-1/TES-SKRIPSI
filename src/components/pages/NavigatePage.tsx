@@ -377,6 +377,14 @@ export default function NavigatePage({ routes, selectedRoute, tsunamiAlert, user
 
           {/* Route line — HANYA saat simulasi emergency */}
           {emergency && routeCoords.length > 0 && <>
+            {/* 1. Garis Lurus (Panduan Jarak Terdekat) */}
+            {userPosition && shelterPos && (
+              <Polyline 
+                positions={[userPosition, shelterPos]} 
+                color="#f59e0b" weight={3} opacity={0.9} dashArray="6 8"
+              />
+            )}
+            {/* 2. Garis Jalan Raya (Rute Dijkstra) */}
             <Polyline positions={routeCoords} color="#ef4444" weight={5} opacity={0.9}/>
             <Polyline positions={routeCoords} color="#fca5a5" weight={10} opacity={0.2}/>
           </>}
