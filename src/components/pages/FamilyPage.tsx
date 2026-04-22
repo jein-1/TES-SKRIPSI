@@ -294,11 +294,7 @@ export default function FamilyPage({ onBack }: Props) {
       // Save own location tagged as self (for others to see me when I join their family)
       saveMemberLoc(myId, lat, lng)
       // Broadcast via server if online
-      fetch('/api/location', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ id: myId, name: getMyName(), lat, lng }),
-      }).catch(() => { /* offline — already saved to localStorage */ })
+      aegisApi.broadcastLocation(myId, getMyName(), lat, lng).catch(() => {})
     }, () => {}, { enableHighAccuracy: true })
     return () => navigator.geolocation.clearWatch(w)
   }, [myId])

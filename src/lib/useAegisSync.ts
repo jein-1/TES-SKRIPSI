@@ -64,6 +64,10 @@ export const aegisApi = {
   pingReply: (fromId: string, fromName: string, toId: string) =>
     apiPost("/api/ping/reply", { fromId, fromName, toId }),
 
+  /** Broadcast user location to admin dashboard */
+  broadcastLocation: (id: string, name: string, lat: number, lng: number) =>
+    apiPost('/api/location', { id, name, lat, lng }),
+
   /** Get current tsunami state on mount */
   getTsunami: async (): Promise<{ active: boolean; ts: number }> => {
     try {

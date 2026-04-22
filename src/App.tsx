@@ -349,6 +349,8 @@ function App() {
   const [gpsTracking, setGpsTracking] = useState(false);
   const [gpsError, setGpsError] = useState<string | null>(null);
   const [tsunamiAlert, setTsunamiAlert] = useState(false);
+  const tsunamiAlertRef = useRef(false);
+  useEffect(() => { tsunamiAlertRef.current = tsunamiAlert }, [tsunamiAlert]);
   const [alarmMuted, setAlarmMuted] = useState(false);
   const [showTsunamiConfirm, setShowTsunamiConfirm] = useState(false);
   const [showShelters, setShowShelters] = useState(false);
@@ -591,9 +593,14 @@ function App() {
         }
         saveHistoryRecord(
           routeResults,
-          tsunamiAlert ? "simulation" : "real",
+          tsunamiAlertRef.current ? "simulation" : "real",
           newPos,
         );
+
+        // ── Broadcast Lokasi ke Admin (HANYA saat simulasi / emergency) ──
+        if (tsunamiAlertRef.current) {
+          aegisApi.broadcastLocation(terminalId, userName || "Pengguna", newPos[0], newPos[1]).catch(() => {});
+        }
 
         // â”€â”€ Arrival detection: check if within ARRIVAL_RADIUS_METERS of any shelter â”€â”€
         // ── Arrival detection: check if within ARRIVAL_RADIUS_METERS of any shelter ──
