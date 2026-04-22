@@ -91,15 +91,34 @@ export function findOptimalEvacuationRoutes(
   const nodeMap = new Map(roadNodes.map(n => [n.id, n]))
   const allRoutes: RouteResult[] = shelters.map(shelter => {
     const haversineDistance = calculateHaversine(userLat, userLng, shelter.lat, shelter.lng)
-    const shelterNode = findNearestNode(shelter.lat, shelter.lng)
-    const distNodeToShelter = calculateHaversine(
-      shelterNode.lat, shelterNode.lng,
-      shelter.lat, shelter.lng,
-    )
+    const shelterCandidates = [...roadNodes]
+      .map(node => ({
+        node,
+        distNodeToShelter: calculateHaversine(node.lat, node.lng, shelter.lat, shelter.lng),
+      }))
+      .sort((a, b) => a.distNodeToShelter - b.distNodeToShelter)
+      .slice(0, 3)
 
-    // Rekonstruksi rute dari shelterNode ke USER_START
+    let chosenNode = shelterCandidates[0]?.node ?? findNearestNode(shelter.lat, shelter.lng)
+    let chosenDistNodeToShelter = shelterCandidates[0]?.distNodeToShelter ?? calculateHaversine(
+      chosenNode.lat, chosenNode.lng, shelter.lat, shelter.lng,
+    )
+    let chosenDijkstraDistance = distances[chosenNode.id]
+
+    for (const candidate of shelterCandidates) {
+      const dijkstraDistance = distances[candidate.node.id]
+      const total = dijkstraDistance + candidate.distNodeToShelter
+      const chosenTotal = chosenDijkstraDistance + chosenDistNodeToShelter
+      if (total < chosenTotal) {
+        chosenNode = candidate.node
+        chosenDistNodeToShelter = candidate.distNodeToShelter
+        chosenDijkstraDistance = dijkstraDistance
+      }
+    }
+
+    // Rekonstruksi rute dari node shelter terpilih ke USER_START
     const path: string[] = []
-    let curr: string | null = shelterNode.id
+    let curr: string | null = chosenNode.id
     while (curr !== null && curr !== USER_NODE_ID) {
       path.unshift(curr)
       curr = previous[curr]
@@ -112,8 +131,8 @@ export function findOptimalEvacuationRoutes(
       })
       .filter((c): c is [number, number] => c !== null)
 
-    let dijkstraDistance = distances[shelterNode.id]
-    let totalDistance = dijkstraDistance + distNodeToShelter
+    let dijkstraDistance = chosenDijkstraDistance
+    let totalDistance = dijkstraDistance + chosenDistNodeToShelter
     let coordinates: [number, number][] = []
 
     // Koordinat garis jalan raya (Dijkstra) — selalu ikut jalan
@@ -147,7 +166,7 @@ export function findOptimalEvacuationRoutes(
   })
 
   return allRoutes
-    .sort((a, b) => a.haversineDistance - b.haversineDistance)
+    .sort((a, b) => a.totalDistance - b.totalDistance)
     .slice(0, maxRoutes)
 }
 
