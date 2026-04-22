@@ -175,6 +175,7 @@ export default function NavigatePage({ routes, selectedRoute, tsunamiAlert, user
   const [activeRouteIdx, setActiveRouteIdx] = useState(selectedRoute)
   const [showRoutePanel, setShowRoutePanel] = useState(true)
   const mapRef = useRef<L.Map | null>(null)
+  const emergency = tsunamiAlert
 
   // Saat tidak simulasi: shelter index berdasar jarak haversine ke user
   // Saat simulasi: index dari routes (sudah sorted by nearest)
@@ -264,7 +265,6 @@ export default function NavigatePage({ routes, selectedRoute, tsunamiAlert, user
     }
   }, [userPosition])
 
-  const emergency = tsunamiAlert
   const headerBg = emergency ? '#0f0505' : '#0a1020'
   const headerBorder = emergency ? 'border-red-900/40' : 'border-slate-800/60'
 
