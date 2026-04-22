@@ -204,10 +204,10 @@ export default function NavigatePage({ routes, selectedRoute, tsunamiAlert, user
   const shelterPos  = route ? [shelters.find(s => s.id === route.shelterId)?.lat ?? route.coordinates[route.coordinates.length-1]?.[0], shelters.find(s => s.id === route.shelterId)?.lng ?? route.coordinates[route.coordinates.length-1]?.[1]] as [number, number] : undefined
   const routeCoords = (route?.coordinates ?? []) as [number, number][]
 
-  // ── OSRM real road routing ─────────────────────────────────────
+  // ── OSRM real road routing (selalu aktif jika posisi tersedia) ──
   const [osrmCoords, setOsrmCoords] = useState<[number, number][]>([])
   useEffect(() => {
-    if (!emergency || !userPosition || !shelterPos) {
+    if (!userPosition || !shelterPos) {
       setOsrmCoords([])
       return
     }
@@ -228,7 +228,7 @@ export default function NavigatePage({ routes, selectedRoute, tsunamiAlert, user
       .catch(() => setOsrmCoords([]))  // fallback ke garis lurus jika offline
     return () => ctrl.abort()
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [emergency, userPosition?.[0], userPosition?.[1], shelterPos?.[0], shelterPos?.[1]])
+  }, [userPosition?.[0], userPosition?.[1], shelterPos?.[0], shelterPos?.[1]])
 
   const computedBearing = (userPosition && shelterPos) ? getBearing(userPosition, shelterPos) : 0
   const heading = deviceHeading ?? computedBearing
@@ -401,8 +401,8 @@ export default function NavigatePage({ routes, selectedRoute, tsunamiAlert, user
             )
           })}
 
-          {/* ─── GARIS LURUS BEELINE (selalu ada saat emergency) ─── */}
-          {emergency && userPosition && shelterPos && (
+          {/* ─── GARIS LURUS BEELINE (selalu ada sebagai patokan arah) ─── */}
+          {userPosition && shelterPos && (
             <Polyline
               positions={[userPosition, shelterPos]}
               color="#f59e0b" weight={3} opacity={0.85} dashArray="8 10"
@@ -410,7 +410,7 @@ export default function NavigatePage({ routes, selectedRoute, tsunamiAlert, user
           )}
 
           {/* ─── GARIS JALAN RAYA via OSRM (ikut belokan jalan nyata) ─── */}
-          {emergency && (() => {
+          {(() => {
             const roadPath = osrmCoords.length > 0 ? osrmCoords : routeCoords
             if (roadPath.length < 2) return null
             return <>
