@@ -1,36 +1,36 @@
-import type { CapacitorConfig } from '@capacitor/cli';
+import type { CapacitorConfig } from "@capacitor/cli";
 
 const config: CapacitorConfig = {
-  appId: 'com.dimsstsu.admin',
-  appName: 'APLIKASI (ADMIN) UJICOBA EVAKUASI TSUNAMI OLEH DIMAS DIVAT MANDA',
-  webDir: 'dist-admin',
+  appId: "com.dimsstsu.admin",
+  appName: "APLIKASI (ADMIN) UJICOBA EVAKUASI TSUNAMI OLEH DIMAS DIVAT MANDA",
+  webDir: "dist-admin",
 
   // ── Koneksi ke Railway server (admin mode) ─────────────────
   // APK admin load dari Railway dengan key admin otomatis agar bisa melacak user
   server: {
-    url: 'https://tes-skripsi-production.up.railway.app/?key=aegis2024',
+    url: "https://tes-skripsi-production.up.railway.app/?key=aegis2024",
     cleartext: false,
-    androidScheme: 'https',
+    androidScheme: "https",
   },
 
   android: {
-    path: 'android-admin',
+    path: "android-admin",
     allowMixedContent: false,
     webContentsDebuggingEnabled: false,
   },
-  
+
   plugins: {
     SplashScreen: {
       launchShowDuration: 2000,
       launchAutoHide: true,
-      backgroundColor: '#0a1020',
-      androidSplashResourceName: 'splash',
-      androidScaleType: 'CENTER_CROP',
+      backgroundColor: "#0a1020",
+      androidSplashResourceName: "splash",
+      androidScaleType: "CENTER_CROP",
       showSpinner: false,
     },
     StatusBar: {
-      style: 'Dark',
-      backgroundColor: '#0a1020',
+      style: "Dark",
+      backgroundColor: "#0a1020",
       overlaysWebView: false,
     },
     Geolocation: {},
