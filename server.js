@@ -58,8 +58,8 @@ app.use(cors({
   origin: (origin, callback) => {
     const allowed = [
       /^capacitor:\/\//,
-      /^http:\/\/localhost/,
-      /^http:\/\/127\.0\.0\.1/,
+      /^https?:\/\/localhost/,
+      /^https?:\/\/127\.0\.0\.1/,
       /^https:\/\/.*railway\.app/,
       /^https:\/\/.*up\.railway\.app/,
     ]
@@ -148,12 +148,13 @@ async function sendPushToAll(payload) {
 
 // SSE — real-time events
 app.get('/api/events', (req, res) => {
-  res.writeHead(200, {
+  res.set({
     'Content-Type': 'text/event-stream',
     'Cache-Control': 'no-cache',
     'Connection': 'keep-alive',
     'X-Accel-Buffering': 'no',
   })
+  res.flushHeaders()
   res.write(`data: ${JSON.stringify({ type: 'INIT', tsunami: tsunamiState })}\n\n`)
   sseClients.add(res)
   const hb = setInterval(() => {
