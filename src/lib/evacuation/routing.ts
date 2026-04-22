@@ -107,14 +107,25 @@ export function findOptimalEvacuationRoutes(
       })
       .filter((c): c is [number, number] => c !== null)
 
-    const dijkstraDistance = distances[shelterNode.id]
-    const totalDistance    = dijkstraDistance + distNodeToShelter
+    let dijkstraDistance = distances[shelterNode.id]
+    let totalDistance = dijkstraDistance + distNodeToShelter
+    let coordinates: [number, number][] = []
 
-    const coordinates: [number, number][] = [
-      [userLat, userLng],
-      ...dijkstraPathCoords,
-      [shelter.lat, shelter.lng],
-    ]
+    if (!isFinite(dijkstraDistance)) {
+      // FALLBACK: If the road graph is disconnected, draw a straight line
+      dijkstraDistance = haversineDistance
+      totalDistance = haversineDistance
+      coordinates = [
+        [userLat, userLng],
+        [shelter.lat, shelter.lng],
+      ]
+    } else {
+      coordinates = [
+        [userLat, userLng],
+        ...dijkstraPathCoords,
+        [shelter.lat, shelter.lng],
+      ]
+    }
 
     return {
       shelterName:      shelter.name,
@@ -124,13 +135,12 @@ export function findOptimalEvacuationRoutes(
       dijkstraDistance,
       totalDistance,
       coordinates,
-      walkingTime: Math.ceil((totalDistance / 5)  * 60),  // 5 km/jam
-      runningTime: Math.ceil((totalDistance / 10) * 60),  // 10 km/jam
+      walkingTime: Math.ceil((totalDistance / 1000 / 5)  * 60),  // 5 km/jam
+      runningTime: Math.ceil((totalDistance / 1000 / 10) * 60),  // 10 km/jam
     }
   })
 
   return allRoutes
-    .filter(r => isFinite(r.totalDistance))
     .sort((a, b) => a.totalDistance - b.totalDistance)
     .slice(0, maxRoutes)
 }

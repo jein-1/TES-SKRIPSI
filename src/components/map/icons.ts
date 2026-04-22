@@ -23,18 +23,20 @@ export const shelterIcon = new L.Icon({
 
 // ── User Position (Normal) ──────────────────────────────────────
 export const userIcon = new L.DivIcon({
-  html: `<div style="width:20px;height:20px;background:linear-gradient(135deg,#6366f1,#8b5cf6);border:3px solid white;border-radius:50%;box-shadow:0 0 12px rgba(99,102,241,0.7),0 0 24px rgba(99,102,241,0.3);animation:userPulse 2s infinite;"></div>
-  <style>@keyframes userPulse{0%,100%{box-shadow:0 0 12px rgba(99,102,241,0.7);}50%{box-shadow:0 0 24px rgba(99,102,241,1),0 0 48px rgba(99,102,241,0.5);}}</style>`,
-  className: '', iconSize: [20, 20], iconAnchor: [10, 10],
+  html: `<div style="position:relative;width:22px;height:22px;">
+    <div style="position:absolute;top:0;left:0;width:100%;height:100%;background:rgba(59,130,246,0.3);border-radius:50%;animation:haloPulse 2s infinite;"></div>
+    <div style="position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);width:16px;height:16px;background:#3b82f6;border:2.5px solid white;border-radius:50%;box-shadow:0 0 4px rgba(0,0,0,0.3);"></div>
+  </div>
+  <style>@keyframes haloPulse{0%{transform:scale(1);opacity:0.8;}100%{transform:scale(2.5);opacity:0;}}</style>`,
+  className: '', iconSize: [22, 22], iconAnchor: [11, 11],
 })
 
-// ── User Position (Tsunami Alert — panah merah berkedip) ─────────
+// ── User Position (Tsunami Alert) ────────────────────────────────
 export const userIconAlert = new L.DivIcon({
-  html: `<div style="width:36px;height:36px;display:flex;align-items:center;justify-content:center;filter:drop-shadow(0 0 8px rgba(239,68,68,0.8));animation:navPulse 1s infinite;">
-    <svg viewBox="0 0 24 24" width="32" height="32" xmlns="http://www.w3.org/2000/svg">
-      <path d="M12 2L4.5 20.29l.71.71L12 18l6.79 3 .71-.71z" fill="#ef4444"/>
-    </svg>
+  html: `<div style="position:relative;width:24px;height:24px;">
+    <div style="position:absolute;top:0;left:0;width:100%;height:100%;background:rgba(239,68,68,0.4);border-radius:50%;animation:haloPulseFast 1s infinite;"></div>
+    <div style="position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);width:18px;height:18px;background:#ef4444;border:3px solid white;border-radius:50%;box-shadow:0 0 6px rgba(239,68,68,0.6);"></div>
   </div>
-  <style>@keyframes navPulse{0%,100%{opacity:1;transform:scale(1);}50%{opacity:0.7;transform:scale(1.2);}}</style>`,
-  className: '', iconSize: [36, 36], iconAnchor: [18, 18],
+  <style>@keyframes haloPulseFast{0%{transform:scale(1);opacity:1;}100%{transform:scale(3);opacity:0;}}</style>`,
+  className: '', iconSize: [24, 24], iconAnchor: [12, 12],
 })

@@ -240,13 +240,14 @@ app.post('/api/ping/reply', (req, res) => {
 
 // Location sharing
 app.post('/api/location', (req, res) => {
-  const id   = sanitizeStr(req.body?.id)
-  const name = sanitizeStr(req.body?.name)
-  const lat  = Number(req.body?.lat)
-  const lng  = Number(req.body?.lng)
+  const id          = sanitizeStr(req.body?.id)
+  const name        = sanitizeStr(req.body?.name)
+  const deviceModel = sanitizeStr(req.body?.deviceModel) || 'Unknown Device'
+  const lat         = Number(req.body?.lat)
+  const lng         = Number(req.body?.lng)
   if (!id) return res.status(400).json({ error: 'ID tidak valid.' })
   if (!isValidCoord(lat, lng)) return res.status(400).json({ error: 'Koordinat GPS tidak valid.' })
-  broadcast({ type: 'LOCATION_UPDATE', id, name, lat, lng })
+  broadcast({ type: 'LOCATION_UPDATE', id, name, deviceModel, lat, lng })
   res.json({ ok: true })
 })
 

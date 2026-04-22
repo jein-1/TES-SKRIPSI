@@ -362,7 +362,7 @@ function App() {
   const [activeUsers, setActiveUsers] = useState<
     Record<
       string,
-      { id: string; name: string; lat: number; lng: number; ts: number }
+      { id: string; name: string; deviceModel: string; lat: number; lng: number; ts: number }
     >
   >({});
 
@@ -622,7 +622,8 @@ function App() {
 
         // ── Broadcast Lokasi ke Admin (HANYA saat simulasi / emergency) ──
         if (tsunamiAlertRef.current) {
-          aegisApi.broadcastLocation(terminalId, userName || "Pengguna", newPos[0], newPos[1]).catch(() => {});
+          const deviceInfo = (window as any).__DEVICE_MODEL__ || navigator.userAgent;
+          aegisApi.broadcastLocation(terminalId, userName || "Pengguna", deviceInfo, newPos[0], newPos[1]).catch(() => {});
         }
 
         // â”€â”€ Arrival detection: check if within ARRIVAL_RADIUS_METERS of any shelter â”€â”€
@@ -853,6 +854,7 @@ function App() {
           [ev.id]: {
             id: ev.id,
             name: ev.name || ev.id,
+            deviceModel: ev.deviceModel || 'Unknown Device',
             lat: ev.lat,
             lng: ev.lng,
             ts: Date.now(),
@@ -863,6 +865,13 @@ function App() {
   });
   // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => {
+    // Ambil info device (brand + model) untuk admin
+    import("@capacitor/device").then(({ Device }) => {
+      Device.getInfo().then(info => {
+        (window as any).__DEVICE_MODEL__ = `${info.manufacturer} ${info.model}`;
+      }).catch(() => {});
+    });
+
     // 1. Izin notifikasi Capacitor
     requestNotifPermission();
     // 2. Web Push agar notif masuk saat app ditutup
@@ -1470,10 +1479,10 @@ function App() {
               Object.values(activeUsers).map((u) => {
                 const userDotIcon = L.divIcon({
                   className: "",
-                  html: `<div style="background:#f59e0b;border:2.5px solid #fff;border-radius:50%;width:26px;height:26px;display:flex;align-items:center;justify-content:center;box-shadow:0 0 12px rgba(245,158,11,0.8);font-size:11px;">👤</div>`,
-                  iconSize: [26, 26],
-                  iconAnchor: [13, 13],
-                  popupAnchor: [0, -15],
+                  html: `<div style="background:#3b82f6;border:3px solid #fff;border-radius:50%;width:22px;height:22px;display:flex;align-items:center;justify-content:center;box-shadow:0 0 12px rgba(59,130,246,0.8);"></div>`,
+                  iconSize: [22, 22],
+                  iconAnchor: [11, 11],
+                  popupAnchor: [0, -11],
                 });
                 return (
                   <Marker
@@ -1485,12 +1494,17 @@ function App() {
                     <Popup>
                       <strong style={{ fontSize: 13 }}>{u.name}</strong>
                       <div
-                        style={{ fontSize: 11, color: "#555", marginTop: 3 }}
+                        style={{ fontSize: 11, color: "#555", marginTop: 3, fontWeight: "500" }}
+                      >
+                        📱 {u.deviceModel}
+                      </div>
+                      <div
+                        style={{ fontSize: 11, color: "#888", marginTop: 3 }}
                       >
                         📍 {u.lat.toFixed(5)}, {u.lng.toFixed(5)}
                       </div>
                       <div
-                        style={{ fontSize: 10, color: "#888", marginTop: 2 }}
+                        style={{ fontSize: 10, color: "#aaa", marginTop: 2 }}
                       >
                         🕐 {new Date(u.ts).toLocaleTimeString("id-ID")}
                       </div>
@@ -1500,11 +1514,9 @@ function App() {
               })}
 
             {/* Admin: Lokasi admin sendiri tidak ditampilkan - hanya pantau user lain */}
-
-            {/* Routes â€” dual layer display:
-                Layer 1: thin dashed reference path (Dijkstra via road network)
-                Layer 2: thick solid beeline from user â†’ shelter (always accurate) */}
-            {routes.map((route, i) => {
+            {/* Routes — dual layer display:
+                Layer 1: thin dashed reference path (Dijkstra via road network) */}
+            {!isAdminURL && routes.map((route, i) => {
               const isSelected = i === selectedRoute;
               return (
                 <Polyline
@@ -1519,7 +1531,7 @@ function App() {
                 />
               );
             })}
-
+            
             {/* Beeline dihapus dari admin - admin hanya memantau, bukan navigasi */}
           </MapContainer>
 
