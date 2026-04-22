@@ -42,30 +42,6 @@ function haversineM(a: [number, number], b: [number, number]): number {
   const h = Math.sin(dLat/2)**2 + Math.cos(r(a[0]))*Math.cos(r(b[0]))*Math.sin(dLng/2)**2
   return R * 2 * Math.atan2(Math.sqrt(h), Math.sqrt(1-h))
 }
-function trimRouteFromUser(
-  userPos: [number, number] | null,
-  path: [number, number][],
-): [number, number][] {
-  if (!userPos || path.length < 2) return path
-
-  let nearestIdx = 0
-  let nearestDist = Infinity
-  for (let i = 0; i < path.length; i++) {
-    const d = haversineM(userPos, path[i])
-    if (d < nearestDist) {
-      nearestDist = d
-      nearestIdx = i
-    }
-  }
-
-  const forwardPath = path.slice(nearestIdx)
-  if (forwardPath.length === 0) return [userPos]
-
-  // Paksa path selalu mulai dari posisi user saat ini,
-  // agar jejak di belakang tidak terlihat.
-  if (haversineM(userPos, forwardPath[0]) < 2) return forwardPath
-  return [userPos, ...forwardPath]
-}
 function bearingLabel(b: number): { label: string; icon: string } {
   if (b < 22.5 || b >= 337.5) return { label: 'Terus Lurus', icon: '↑' }
   if (b < 67.5)  return { label: 'Kanan Diagonal', icon: '↗' }
@@ -226,35 +202,6 @@ export default function NavigatePage({ routes, selectedRoute, tsunamiAlert, user
 
   const route       = routes[activeRouteIdx]
   const shelterPos  = route ? [shelters.find(s => s.id === route.shelterId)?.lat ?? route.coordinates[route.coordinates.length-1]?.[0], shelters.find(s => s.id === route.shelterId)?.lng ?? route.coordinates[route.coordinates.length-1]?.[1]] as [number, number] : undefined
-
-  const routeCoords = (route?.coordinates ?? []) as [number, number][]
-  const [osrmCoords, setOsrmCoords] = useState<[number, number][]>([])
-
-  useEffect(() => {
-    if (!emergency || !userPosition || !shelterPos) {
-      setOsrmCoords([])
-      return
-    }
-    const [uLat, uLng] = userPosition
-    const [sLat, sLng] = shelterPos
-    const url = `https://router.project-osrm.org/route/v1/foot/${uLng},${uLat};${sLng},${sLat}?overview=full&geometries=geojson&steps=true&alternatives=false`
-    const ctrl = new AbortController()
-    fetch(url, { signal: ctrl.signal })
-      .then(r => r.json())
-      .then(data => {
-        if (data?.routes?.[0]?.geometry?.coordinates) {
-          const coords: [number, number][] = data.routes[0].geometry.coordinates.map(
-            ([lng, lat]: [number, number]) => [lat, lng] as [number, number]
-          )
-          setOsrmCoords(coords)
-          return
-        }
-        setOsrmCoords([])
-      })
-      .catch(() => setOsrmCoords([]))
-    return () => ctrl.abort()
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [emergency, userPosition?.[0], userPosition?.[1], shelterPos?.[0], shelterPos?.[1]])
 
   const computedBearing = (userPosition && shelterPos) ? getBearing(userPosition, shelterPos) : 0
   const heading = deviceHeading ?? computedBearing
@@ -426,17 +373,6 @@ export default function NavigatePage({ routes, selectedRoute, tsunamiAlert, user
               </Marker>
             )
           })}
-
-          {/* ─── GARIS JALAN RAYA via graph lokal bidirectional ─── */}
-          {emergency && (() => {
-            const sourcePath = osrmCoords.length > 1 ? osrmCoords : routeCoords
-            const roadPath = trimRouteFromUser(userPosition, sourcePath)
-            if (roadPath.length < 2) return null
-            return <>
-              <Polyline positions={roadPath} color="#ef4444" weight={5} opacity={0.9}/>
-              <Polyline positions={roadPath} color="#fca5a5" weight={10} opacity={0.2}/>
-            </>
-          })()}
 
           {/* ─── GARIS LURUS BEELINE (khusus mode simulasi) ─── */}
           {emergency && userPosition && shelterPos && (
