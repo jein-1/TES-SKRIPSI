@@ -58,6 +58,7 @@ import {
   sendTsunamiNotification,
 } from "./lib/useTsunamiAlert";
 import { registerWebPush } from "./lib/usePushNotification";
+import { Geolocation } from "@capacitor/geolocation";
 // â”€â”€ UI Libraries â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 import {
   AlertTriangle,
@@ -449,7 +450,7 @@ function App() {
   // â”€â”€ Misc â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   const [isMobile, setIsMobile] = useState(false);
   const alarmRef = useRef(createAlarmSound());
-  const gpsWatchRef = useRef<number | null>(null);
+  const gpsWatchRef = useRef<string | number | null>(null);
   const gpsAutoStartedRef = useRef(false);
   const vibrateIntervalRef = useRef<ReturnType<typeof setInterval> | null>(
     null,
@@ -515,9 +516,9 @@ function App() {
     setShowEditProfile(false);
   };
 
-  // â”€â”€ GPS â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // ── GPS ────────────────────────────────────────────────────────────────────
 
-  // â”€â”€ Save history record â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // ── Save history record ────────────────────────────────────────────────────
   const saveHistoryRecord = useCallback(
     (
       routeResults: RouteResult[],
@@ -550,16 +551,21 @@ function App() {
   );
 
   // â”€â”€ GPS â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-  const startGpsTracking = useCallback(() => {
-    if (!navigator.geolocation) {
-      setGpsError("GPS tidak didukung di browser ini");
-      return;
-    }
+  const startGpsTracking = useCallback(async () => {
     // Clear any existing watch first to prevent duplicate watchers
     if (gpsWatchRef.current !== null) {
-      navigator.geolocation.clearWatch(gpsWatchRef.current);
+      if (typeof gpsWatchRef.current === "string") {
+        await Geolocation.clearWatch({ id: gpsWatchRef.current });
+      } else {
+        navigator.geolocation.clearWatch(gpsWatchRef.current as number);
+      }
       gpsWatchRef.current = null;
     }
+
+    try {
+      await Geolocation.requestPermissions();
+    } catch {}
+
     // Reset flags when GPS is freshly started
     panelUserClosedRef.current = false;
     hasFirstGPSFixRef.current = false;
@@ -569,14 +575,31 @@ function App() {
     setGpsTracking(true);
     setGpsError(null);
     setIsCalculating(true);
-    gpsWatchRef.current = navigator.geolocation.watchPosition(
-      (pos) => {
-        // Show accuracy badge but don't filter â€” let all positions through
-        setGpsAccuracy(pos.coords.accuracy);
-        const newPos: [number, number] = [
-          pos.coords.latitude,
-          pos.coords.longitude,
-        ];
+    
+    try {
+      const watchId = await Geolocation.watchPosition(
+        { enableHighAccuracy: true, timeout: 20000, maximumAge: 0 },
+        (pos, err) => {
+          if (err) {
+            setIsCalculating(false);
+            setGpsError("Sinyal GPS lemah atau izin ditolak");
+            setGpsTracking(false);
+            if (gpsWatchRef.current !== null) {
+              if (typeof gpsWatchRef.current === "string") {
+                Geolocation.clearWatch({ id: gpsWatchRef.current });
+              }
+              gpsWatchRef.current = null;
+            }
+            return;
+          }
+          if (!pos) return;
+
+          // Show accuracy badge but don't filter â€” let all positions through
+          setGpsAccuracy(pos.coords.accuracy);
+          const newPos: [number, number] = [
+            pos.coords.latitude,
+            pos.coords.longitude,
+          ];
         setUserPosition(newPos);
         // Only fly to position on the FIRST GPS fix to prevent map shaking
         if (!hasFirstGPSFixRef.current) {
@@ -624,7 +647,11 @@ function App() {
             // ── STOP EVERYTHING — like Google Maps ending navigation ──
             // 1. Stop GPS watch
             if (gpsWatchRef.current !== null) {
-              navigator.geolocation.clearWatch(gpsWatchRef.current);
+              if (typeof gpsWatchRef.current === "string") {
+                Geolocation.clearWatch({ id: gpsWatchRef.current });
+              } else {
+                navigator.geolocation.clearWatch(gpsWatchRef.current as number);
+              }
               gpsWatchRef.current = null;
             }
             // 2. Stop alarm & deactivate tsunami alert
@@ -648,28 +675,23 @@ function App() {
             });
           }
         }
-      },
-      (err) => {
-        setIsCalculating(false);
-        setGpsError(
-          err.code === 1
-            ? "Izin lokasi ditolak. Aktifkan GPS di pengaturan browser."
-            : "Sinyal GPS lemah atau timeout",
-        );
-        setGpsTracking(false);
-        if (gpsWatchRef.current !== null) {
-          navigator.geolocation.clearWatch(gpsWatchRef.current);
-          gpsWatchRef.current = null;
         }
-      },
-      // âš ï¸ JANGAN DIUBAH â€” GPS optimal: fresh position, high accuracy, no filter
-      { enableHighAccuracy: true, timeout: 20000, maximumAge: 0 },
-    );
+      );
+      gpsWatchRef.current = watchId;
+    } catch (e) {
+      setIsCalculating(false);
+      setGpsError("Gagal mengaktifkan sensor lokasi GPS.");
+      setGpsTracking(false);
+    }
   }, [saveHistoryRecord, tsunamiAlert]);
 
-  const stopGpsTracking = useCallback(() => {
+  const stopGpsTracking = useCallback(async () => {
     if (gpsWatchRef.current !== null) {
-      navigator.geolocation.clearWatch(gpsWatchRef.current);
+      if (typeof gpsWatchRef.current === "string") {
+        await Geolocation.clearWatch({ id: gpsWatchRef.current });
+      } else {
+        navigator.geolocation.clearWatch(gpsWatchRef.current as number);
+      }
       gpsWatchRef.current = null;
     }
     setGpsTracking(false);
@@ -716,8 +738,13 @@ function App() {
   useEffect(
     () => () => {
       alarmRef.current.stop();
-      if (gpsWatchRef.current !== null)
-        navigator.geolocation.clearWatch(gpsWatchRef.current);
+      if (gpsWatchRef.current !== null) {
+        if (typeof gpsWatchRef.current === "string") {
+          Geolocation.clearWatch({ id: gpsWatchRef.current });
+        } else {
+          navigator.geolocation.clearWatch(gpsWatchRef.current as number);
+        }
+      }
     },
     [],
   );
