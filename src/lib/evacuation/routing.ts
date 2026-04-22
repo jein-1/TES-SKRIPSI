@@ -136,7 +136,7 @@ export function findOptimalEvacuationRoutes(
     let coordinates: [number, number][] = []
 
     // Koordinat garis jalan raya (Dijkstra) — selalu ikut jalan
-    if (!isFinite(dijkstraDistance) || path.length <= 1) {
+    if (!isFinite(dijkstraDistance) || path.length === 0) {
       // FALLBACK hanya jika graph benar-benar terputus (node tidak terhubung sama sekali)
       dijkstraDistance = haversineDistance
       totalDistance = haversineDistance

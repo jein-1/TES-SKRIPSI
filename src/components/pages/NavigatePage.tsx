@@ -400,16 +400,8 @@ export default function NavigatePage({ routes, selectedRoute, tsunamiAlert, user
             )
           })}
 
-          {/* ─── GARIS LURUS BEELINE (selalu ada sebagai patokan arah) ─── */}
-          {userPosition && shelterPos && (
-            <Polyline
-              positions={[userPosition, shelterPos]}
-              color="#f59e0b" weight={3} opacity={0.85} dashArray="8 10"
-            />
-          )}
-
           {/* ─── GARIS JALAN RAYA via graph lokal bidirectional ─── */}
-          {(() => {
+          {emergency && (() => {
             const roadPath = trimRouteFromUser(userPosition, routeCoords)
             if (roadPath.length < 2) return null
             return <>
@@ -417,6 +409,14 @@ export default function NavigatePage({ routes, selectedRoute, tsunamiAlert, user
               <Polyline positions={roadPath} color="#fca5a5" weight={10} opacity={0.2}/>
             </>
           })()}
+
+          {/* ─── GARIS LURUS BEELINE (khusus mode simulasi) ─── */}
+          {emergency && userPosition && shelterPos && (
+            <Polyline
+              positions={[userPosition, shelterPos]}
+              color="#f59e0b" weight={3} opacity={0.9} dashArray="8 10"
+            />
+          )}
 
           <NavMapController
             userPos={userPosition}
