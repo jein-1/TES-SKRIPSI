@@ -37,4 +37,28 @@ export const shelters: Shelter[] = [
     lng: 119.85226,
     capacity: 1000,
   },
+  {
+    id: "S5",
+    name: "Lapangan imanuel palu",
+    // Jl. Balai Kota Sel. No.8, Tanamodindi, Kec. Palu Sel., Kota Palu, Sulawesi Tengah 94111
+    lat: -0.90394,
+    lng: 119.88947,
+    capacity: 2000,
+  },
+  {
+    id: "S6",
+    name: "Lapangan Vatulemo",
+    // Lapangan Vatulomo, Jl. Balai Kota Timur Tanamodindi Mantikulore, Lolu Utara, Kec. Palu Sel., Kota Palu, Sulawesi Tengah 94111
+    lat: -0.900281,
+    lng: 119.889075,
+    capacity: 5000,
+  },
+  {
+    id: "S7",
+    name: "Kantor Walikota Palu",
+    // Jl. Balai Kota Timur No.1, Tanamodindi, Kec. Mantikulore, Kota Palu, Sulawesi Tengah 94234
+    lat: -0.90015,
+    lng: 119.89056,
+    capacity: 500,
+  },
 ];
