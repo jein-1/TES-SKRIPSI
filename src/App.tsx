@@ -666,14 +666,11 @@ function App() {
               navigator.vibrate([200, 100, 200, 100, 400]);
             // 4. Show arrival state
             setArrivedShelterId(arrived.id);
-            const bestRoute = routeResults[0];
+            // routeResults dari GPS callback sudah di-async, pakai state 'routes' yang ter-update
             setArrivalSummary({
               shelter: arrived,
-              distanceKm:
-                bestRoute?.totalDistance === Infinity
-                  ? 0
-                  : (bestRoute?.totalDistance ?? 0),
-              walkingMin: bestRoute?.walkingTime ?? 0,
+              distanceKm: 0,
+              walkingMin: 0,
             });
           }
         }
