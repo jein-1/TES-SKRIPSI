@@ -255,6 +255,7 @@ function App() {
   const alarmRef = useRef(createAlarmSound())
   const gpsWatchRef = useRef<number | null>(null)
   const gpsAutoStartedRef = useRef(false)
+  const vibrateIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null)  // loop getar
   // FIX: track if user manually closed the panel so GPS updates don't reopen it
   const panelUserClosedRef = useRef(false)
   // FIX: only fly to GPS position on first fix to prevent map shaking
@@ -514,14 +515,28 @@ function App() {
       if (active) {
         setTsunamiAlert(true)
         setActivePage('navigate')
-        if ('vibrate' in navigator) navigator.vibrate([500, 200, 500, 200, 500])
+        // ── Getar terus-menerus sampai alert dimatikan ────────
+        if (vibrateIntervalRef.current) clearInterval(vibrateIntervalRef.current)
+        const doVibrate = () => { if ('vibrate' in navigator) navigator.vibrate([800, 400]) }
+        doVibrate()
+        vibrateIntervalRef.current = setInterval(doVibrate, 1200)
+        // ── Alarm suara ───────────────────────────────────────
         if (settings.soundAlert) alarmRef.current.start()
-        // Kirim local notification ke HP — muncul bahkan saat app di background
+        // ── Auto aktifkan GPS tanpa perlu user klik tombol ───
+        if (!gpsAutoStartedRef.current) {
+          gpsAutoStartedRef.current = true
+          setTimeout(() => startGpsTracking(), 500)
+        }
+        // ── Notifikasi HP ─────────────────────────────────────
         sendTsunamiNotification(true)
       } else {
         setTsunamiAlert(false)
         alarmRef.current.stop()
+        // Hentikan getar
+        if (vibrateIntervalRef.current) { clearInterval(vibrateIntervalRef.current); vibrateIntervalRef.current = null }
+        if ('vibrate' in navigator) navigator.vibrate(0)
         sendTsunamiNotification(false)
+        gpsAutoStartedRef.current = false
       }
     }
   })

@@ -1,6 +1,6 @@
 // FAMILY PAGE — My Family group + member location map
 import { useState, useEffect, useRef, useCallback } from 'react'
-import { UserPlus, AlertTriangle, CheckCircle, Clock, ChevronLeft, QrCode, Camera, X, Trash2, Share2, Radio, MapPin, Navigation2 } from 'lucide-react'
+import { UserPlus, AlertTriangle, CheckCircle, Clock, ChevronLeft, QrCode, Camera, Image, X, Trash2, Share2, Radio, MapPin, Navigation2 } from 'lucide-react'
 import { motion, AnimatePresence } from 'motion/react'
 import { MapContainer, TileLayer, Marker, Popup } from 'react-leaflet'
 import L from 'leaflet'
@@ -130,12 +130,15 @@ function MyQRModal({ onClose }: { onClose: () => void }) {
   )
 }
 
-// ── Add Member Modal (QR scan) ────────────────────────────────
+// ── Add Member Modal (QR scan + Gallery upload) ───────────────
 function AddMemberModal({ onClose, onAdd }: { onClose: () => void; onAdd: (m: FamilyMember) => void }) {
   const [scanning, setScanning] = useState(false)
   const [camErr, setCamErr] = useState('')
+  const [galleryErr, setGalleryErr] = useState('')
+  const [galleryLoading, setGalleryLoading] = useState(false)
   const videoRef = useRef<HTMLVideoElement>(null)
   const canvasRef = useRef<HTMLCanvasElement>(null)
+  const fileInputRef = useRef<HTMLInputElement>(null)
   const streamRef = useRef<MediaStream | null>(null)
   const rafRef = useRef(0)
 
@@ -147,13 +150,34 @@ function AddMemberModal({ onClose, onAdd }: { onClose: () => void; onAdd: (m: Fa
   }
   useEffect(() => () => stopCam(), [])
 
+  // Proses data QR string → tambah member
+  const processQRData = (data: string): boolean => {
+    try {
+      const url = new URL(data)
+      const joinId = url.searchParams.get('joinFamily')
+      const joinName = url.searchParams.get('inviteName')
+      if (joinId && joinName) {
+        const newMember: FamilyMember = {
+          id: joinId, name: joinName, role: 'Anggota Keluarga',
+          initials: joinName.split(' ').map((w: string) => w[0]).join('').slice(0, 2).toUpperCase(),
+          status: 'safe', location: 'Terdeteksi via QR', updatedAgo: 'baru saja',
+        }
+        onAdd(newMember)
+        aegisApi.notifyFamilyJoin(getMyAegisId(), getMyName(), joinId)
+        onClose()
+        return true
+      }
+    } catch { }
+    return false
+  }
+
   const startCam = async () => {
-    setCamErr(''); setScanning(true)
+    setCamErr(''); setGalleryErr(''); setScanning(true)
     try {
       const s = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } })
       streamRef.current = s
       if (videoRef.current) { videoRef.current.srcObject = s; await videoRef.current.play(); scanLoop() }
-    } catch { setCamErr('Izin kamera ditolak.'); setScanning(false) }
+    } catch { setCamErr('Izin kamera ditolak. Coba upload dari galeri.'); setScanning(false) }
   }
 
   const scanLoop = () => {
@@ -166,26 +190,39 @@ function AddMemberModal({ onClose, onAdd }: { onClose: () => void; onAdd: (m: Fa
       if (!id) { rafRef.current = requestAnimationFrame(scanLoop); return }
       const code = jsQR(id.data, id.width, id.height)
       if (code?.data) {
-        try {
-          const url = new URL(code.data)
-          const joinId = url.searchParams.get('joinFamily')
-          const joinName = url.searchParams.get('inviteName')
-          if (joinId && joinName) {
-            stopCam()
-            const newMember: FamilyMember = {
-              id: joinId, name: joinName, role: 'Anggota Keluarga',
-              initials: joinName.split(' ').map((w: string) => w[0]).join('').slice(0, 2).toUpperCase(),
-              status: 'safe', location: 'Terdeteksi via QR', updatedAgo: 'baru saja',
-            }
-            onAdd(newMember)
-            aegisApi.notifyFamilyJoin(getMyAegisId(), getMyName(), joinId)
-            onClose()
-            return
-          }
-        } catch { }
+        stopCam()
+        if (!processQRData(code.data)) setCamErr('QR tidak valid. Pastikan scan QR dari Aegis Family.')
+        return
       }
       rafRef.current = requestAnimationFrame(scanLoop)
     }).catch(() => { rafRef.current = requestAnimationFrame(scanLoop) })
+  }
+
+  // Upload QR dari galeri
+  const handleGalleryUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+    setGalleryErr(''); setGalleryLoading(true); stopCam()
+    try {
+      const img = new window.Image()
+      img.onload = async () => {
+        const c = canvasRef.current!
+        c.width = img.width; c.height = img.height
+        c.getContext('2d')!.drawImage(img, 0, 0)
+        const { default: jsQR } = await import('jsqr')
+        const id = c.getContext('2d')!.getImageData(0, 0, c.width, c.height)
+        const code = jsQR(id.data, id.width, id.height)
+        setGalleryLoading(false)
+        if (code?.data) {
+          if (!processQRData(code.data)) setGalleryErr('QR ditemukan tapi tidak valid.')
+        } else {
+          setGalleryErr('QR tidak terdeteksi. Coba foto lebih jelas/dekat.')
+        }
+      }
+      img.onerror = () => { setGalleryLoading(false); setGalleryErr('Gagal membaca gambar.') }
+      img.src = URL.createObjectURL(file)
+    } catch { setGalleryLoading(false); setGalleryErr('Gagal memproses gambar.') }
+    e.target.value = ''
   }
 
   return (
@@ -195,11 +232,13 @@ function AddMemberModal({ onClose, onAdd }: { onClose: () => void; onAdd: (m: Fa
         transition={{ type: 'spring', damping: 25, stiffness: 300 }}
         className="w-full max-w-sm rounded-t-3xl border border-slate-700/50 p-5" style={{ background: '#0f1a2e' }}>
         <div className="flex items-center justify-between mb-4">
-          <h3 className="text-base font-black text-white">Tambah via Scan QR</h3>
+          <h3 className="text-base font-black text-white">Tambah Anggota Family</h3>
           <button onClick={onClose} className="w-8 h-8 rounded-xl bg-slate-800 flex items-center justify-center"><X className="w-4 h-4 text-slate-400"/></button>
         </div>
-        <p className="text-[11px] text-slate-400 mb-3">Scan QR Code milik anggota keluarga untuk menambahkannya ke grup <span className="text-white font-bold">My Family</span>.</p>
+        <p className="text-[11px] text-slate-400 mb-3">Scan atau upload foto QR Code anggota untuk bergabung ke <span className="text-white font-bold">My Family</span>.</p>
         {camErr && <p className="text-red-400 text-[11px] text-center mb-2">{camErr}</p>}
+        {galleryErr && <p className="text-amber-400 text-[11px] text-center mb-2">{galleryErr}</p>}
+        {galleryLoading && <p className="text-indigo-400 text-[11px] text-center mb-2 animate-pulse">Memproses gambar QR...</p>}
         <div className="relative w-full aspect-square rounded-2xl overflow-hidden bg-slate-900 border border-slate-700/40">
           <video ref={videoRef} className="w-full h-full object-cover" playsInline muted/>
           <canvas ref={canvasRef} className="hidden"/>
@@ -207,21 +246,31 @@ function AddMemberModal({ onClose, onAdd }: { onClose: () => void; onAdd: (m: Fa
             <div className="absolute inset-0 flex flex-col items-center justify-center gap-2">
               <Camera className="w-10 h-10 text-slate-600"/>
               <p className="text-slate-500 text-sm">Kamera belum aktif</p>
+              <p className="text-slate-600 text-xs">atau upload foto QR dari galeri</p>
             </div>
           )}
           {scanning && <div className="absolute inset-0 flex items-center justify-center pointer-events-none"><div className="w-40 h-40 border-2 border-indigo-400/60 rounded-xl"/></div>}
         </div>
-        <div className="flex gap-3 mt-4">
-          <button onClick={onClose} className="flex-1 py-3 rounded-2xl bg-slate-700/60 text-slate-300 font-bold text-sm">Batal</button>
+        {/* Hidden file input */}
+        <input ref={fileInputRef} type="file" accept="image/*" className="hidden" onChange={handleGalleryUpload}/>
+        <div className="flex gap-2 mt-4">
+          <button onClick={onClose} className="py-3 px-3 rounded-2xl bg-slate-700/60 text-slate-300 font-bold text-sm">Batal</button>
+          {/* Upload galeri */}
+          <button onClick={() => fileInputRef.current?.click()}
+            className="flex-1 py-3 rounded-2xl bg-emerald-700/80 border border-emerald-600/50 text-white font-black text-sm flex items-center justify-center gap-1.5">
+            <Image className="w-4 h-4"/> Galeri
+          </button>
+          {/* Kamera */}
           {!scanning
-            ? <button onClick={startCam} className="flex-1 py-3 rounded-2xl bg-indigo-600 text-white font-black text-sm flex items-center justify-center gap-2"><Camera className="w-4 h-4"/> Buka Kamera</button>
-            : <button onClick={stopCam} className="flex-1 py-3 rounded-2xl bg-slate-700 text-white font-bold text-sm">Stop Kamera</button>
+            ? <button onClick={startCam} className="flex-1 py-3 rounded-2xl bg-indigo-600 text-white font-black text-sm flex items-center justify-center gap-1.5"><Camera className="w-4 h-4"/> Kamera</button>
+            : <button onClick={stopCam} className="flex-1 py-3 rounded-2xl bg-slate-700 text-white font-bold text-sm">Stop</button>
           }
         </div>
       </motion.div>
     </motion.div>
   )
 }
+
 
 // ── Main FamilyPage ───────────────────────────────────────────
 interface Props { onBack?: () => void }
