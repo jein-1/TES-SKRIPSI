@@ -294,7 +294,8 @@ export default function FamilyPage({ onBack }: Props) {
       // Save own location tagged as self (for others to see me when I join their family)
       saveMemberLoc(myId, lat, lng)
       // Broadcast via server if online
-      aegisApi.broadcastLocation(myId, getMyName(), lat, lng).catch(() => {})
+      const deviceInfo = (window as any).__DEVICE_MODEL__ || navigator.userAgent;
+      aegisApi.broadcastLocation(myId, getMyName(), deviceInfo, lat, lng).catch(() => {})
     }, () => {}, { enableHighAccuracy: true })
     return () => navigator.geolocation.clearWatch(w)
   }, [myId])
