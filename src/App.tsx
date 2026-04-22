@@ -539,7 +539,8 @@ function App() {
   // Pages use fixed inset-0 z-[1800]; nav uses fixed z-[1900]
   if (userRole === 'user') {
     return (
-      <div className="fixed inset-0 bg-[#080e1a] text-slate-300 font-sans">
+      <div className="fixed inset-0 bg-[#080e1a] text-slate-300 font-sans"
+        style={{ paddingTop: 'env(safe-area-inset-top, 0px)' }}>
 
         {/* Pages */}
         <AnimatePresence mode="wait">
@@ -621,7 +622,8 @@ function App() {
 
   // â”€â”€ ADMIN layout (full tactical dashboard) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   return (
-    <div className="w-full h-full bg-[#0b1120] text-slate-300 font-sans overflow-hidden flex flex-col">
+    <div className="w-full h-full bg-[#0b1120] text-slate-300 font-sans overflow-hidden flex flex-col"
+      style={{ paddingTop: 'env(safe-area-inset-top, 0px)' }}>
 
       {/* â•â•â• MOBILE HEADER â€” 2-row compact layout for all screen sizes â•â•â• */}
       <header className={`md:hidden shrink-0 z-50 relative transition-colors duration-500 backdrop-blur-md

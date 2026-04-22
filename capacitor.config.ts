@@ -4,12 +4,16 @@ const config: CapacitorConfig = {
   appId: 'com.dimsstsu.app',
   appName: 'AEGIS RESPONSE',
   webDir: 'dist',
-  // Server config: saat development bisa pakai livereload dari PC
-  // Untuk production APK, hapus/comment blok server ini
-  // server: {
-  //   url: 'http://192.168.x.x:5173',
-  //   cleartext: true,
-  // },
+
+  // ── KUNCI: Koneksi langsung ke Railway server ──────────────
+  // APK akan load web content DARI Railway, bukan dari assets lokal
+  // Ini memastikan APK selalu sync dengan server secara real-time
+  server: {
+    url: 'https://tes-skripsi-production.up.railway.app',
+    cleartext: false,
+    androidScheme: 'https',
+  },
+
   plugins: {
     SplashScreen: {
       launchShowDuration: 2000,
@@ -22,20 +26,15 @@ const config: CapacitorConfig = {
     StatusBar: {
       style: 'Dark',
       backgroundColor: '#0a1020',
+      overlaysWebView: false,   // FIX: jangan tumpang tindih dengan konten app
     },
-    Geolocation: {
-      // Android: gunakan GPS hardware langsung
-    },
-    Camera: {
-      // Untuk scan QR lewat kamera
-    },
+    Geolocation: {},
+    Camera: {},
   },
   android: {
-    // Izinkan koneksi ke Railway server (HTTPS) — aman
     allowMixedContent: false,
-    // Hapus allowMixedContent di production
-    // captureInput: true,
     webContentsDebuggingEnabled: false,
+    // backgroundColor: '#0a1020', // warna background native
   },
 };
 
