@@ -42,6 +42,30 @@ function haversineM(a: [number, number], b: [number, number]): number {
   const h = Math.sin(dLat/2)**2 + Math.cos(r(a[0]))*Math.cos(r(b[0]))*Math.sin(dLng/2)**2
   return R * 2 * Math.atan2(Math.sqrt(h), Math.sqrt(1-h))
 }
+function trimRouteFromUser(
+  userPos: [number, number] | null,
+  path: [number, number][],
+): [number, number][] {
+  if (!userPos || path.length < 2) return path
+
+  let nearestIdx = 0
+  let nearestDist = Infinity
+  for (let i = 0; i < path.length; i++) {
+    const d = haversineM(userPos, path[i])
+    if (d < nearestDist) {
+      nearestDist = d
+      nearestIdx = i
+    }
+  }
+
+  const forwardPath = path.slice(nearestIdx)
+  if (forwardPath.length === 0) return [userPos]
+
+  // Paksa path selalu mulai dari posisi user saat ini,
+  // agar jejak di belakang tidak terlihat.
+  if (haversineM(userPos, forwardPath[0]) < 2) return forwardPath
+  return [userPos, ...forwardPath]
+}
 function bearingLabel(b: number): { label: string; icon: string } {
   if (b < 22.5 || b >= 337.5) return { label: 'Terus Lurus', icon: '↑' }
   if (b < 67.5)  return { label: 'Kanan Diagonal', icon: '↗' }
@@ -202,7 +226,6 @@ export default function NavigatePage({ routes, selectedRoute, tsunamiAlert, user
 
   const route       = routes[activeRouteIdx]
   const shelterPos  = route ? [shelters.find(s => s.id === route.shelterId)?.lat ?? route.coordinates[route.coordinates.length-1]?.[0], shelters.find(s => s.id === route.shelterId)?.lng ?? route.coordinates[route.coordinates.length-1]?.[1]] as [number, number] : undefined
-  const routeCoords = (route?.coordinates ?? []) as [number, number][]
 
   // ── OSRM real road routing (selalu aktif jika posisi tersedia) ──
   const [osrmCoords, setOsrmCoords] = useState<[number, number][]>([])
@@ -413,7 +436,7 @@ export default function NavigatePage({ routes, selectedRoute, tsunamiAlert, user
 
           {/* ─── GARIS JALAN RAYA via OSRM (ikut belokan jalan nyata) ─── */}
           {(() => {
-            const roadPath = osrmCoords
+            const roadPath = trimRouteFromUser(userPosition, osrmCoords)
             if (roadPath.length < 2) return null
             return <>
               <Polyline positions={roadPath} color="#ef4444" weight={5} opacity={0.9}/>
