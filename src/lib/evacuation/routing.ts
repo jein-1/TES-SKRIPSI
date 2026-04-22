@@ -67,10 +67,15 @@ export function findOptimalEvacuationRoutes(
     if (currentNode === null || currentDist === Infinity) break
     unvisited.delete(currentNode)
 
-    const neighborEdges: RoadEdge[] =
+    const neighborEdges: { to: string, distance: number }[] =
       currentNode === USER_NODE_ID
-        ? userEdges
-        : roadEdges.filter(e => e.from === currentNode)
+        ? userEdges.map(e => ({ to: e.to, distance: e.distance }))
+        : roadEdges
+            .filter(e => e.from === currentNode || e.to === currentNode)
+            .map(e => ({
+              to: e.from === currentNode ? e.to : e.from,
+              distance: e.distance,
+            }))
 
     for (const edge of neighborEdges) {
       if (!unvisited.has(edge.to)) continue
