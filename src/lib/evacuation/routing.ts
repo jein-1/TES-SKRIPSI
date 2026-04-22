@@ -23,7 +23,7 @@ import { calculateHaversine, findNearestNode } from './haversine'
 export function findOptimalEvacuationRoutes(
   userLat: number,
   userLng: number,
-  maxRoutes: number = 3,
+  maxRoutes: number = 99,   // Tampilkan SEMUA shelter, sort by distance
 ): RouteResult[] {
   // Inisialisasi Dijkstra dengan multi-node snapping (3 node terdekat)
   // untuk mencegah backtracking saat snap ke 1 node saja.
