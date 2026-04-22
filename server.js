@@ -67,6 +67,7 @@ app.use(
           "'self'",
           "capacitor:",
           "https://*.railway.app",
+          "https://router.project-osrm.org",
           "https://nominatim.openstreetmap.org",
         ],
         fontSrc: ["'self'", "https://fonts.gstatic.com", "data:"],

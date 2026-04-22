@@ -213,7 +213,7 @@ export default function NavigatePage({ routes, selectedRoute, tsunamiAlert, user
     }
     const [uLat, uLng] = userPosition
     const [sLat, sLng] = shelterPos
-    const url = `https://router.project-osrm.org/route/v1/foot/${uLng},${uLat};${sLng},${sLat}?overview=full&geometries=geojson`
+    const url = `https://router.project-osrm.org/route/v1/foot/${uLng},${uLat};${sLng},${sLat}?overview=full&geometries=geojson&steps=true&alternatives=false`
     const ctrl = new AbortController()
     fetch(url, { signal: ctrl.signal })
       .then(r => r.json())
@@ -223,9 +223,11 @@ export default function NavigatePage({ routes, selectedRoute, tsunamiAlert, user
             ([lng, lat]: [number, number]) => [lat, lng] as [number, number]
           )
           setOsrmCoords(coords)
+          return
         }
+        setOsrmCoords([])
       })
-      .catch(() => setOsrmCoords([]))  // fallback ke garis lurus jika offline
+      .catch(() => setOsrmCoords([]))
     return () => ctrl.abort()
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [userPosition?.[0], userPosition?.[1], shelterPos?.[0], shelterPos?.[1]])
@@ -411,7 +413,7 @@ export default function NavigatePage({ routes, selectedRoute, tsunamiAlert, user
 
           {/* ─── GARIS JALAN RAYA via OSRM (ikut belokan jalan nyata) ─── */}
           {(() => {
-            const roadPath = osrmCoords.length > 0 ? osrmCoords : routeCoords
+            const roadPath = osrmCoords
             if (roadPath.length < 2) return null
             return <>
               <Polyline positions={roadPath} color="#ef4444" weight={5} opacity={0.9}/>
