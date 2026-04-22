@@ -757,14 +757,13 @@ function App() {
       if (gpsTracking) return;
       setUserPosition([lat, lng]);
       setIsCalculating(true);
-      setTimeout(() => {
-        const routeResults = findOptimalEvacuationRoutes(lat, lng);
+      findOptimalEvacuationRoutes(lat, lng).then((routeResults) => {
         setRoutes(routeResults);
         setSelectedRoute(0);
         setShowPanel(true);
         setIsCalculating(false);
         saveHistoryRecord(routeResults, "real", [lat, lng]);
-      }, 300);
+      });
     },
     [gpsTracking, saveHistoryRecord],
   );
@@ -1421,16 +1420,15 @@ function App() {
                         e.stopPropagation();
                         if (userPosition) {
                           setIsCalculating(true);
-                          setTimeout(() => {
-                            const r = findOptimalEvacuationRoutes(
-                              userPosition[0],
-                              userPosition[1],
-                            );
+                          findOptimalEvacuationRoutes(
+                            userPosition[0],
+                            userPosition[1],
+                          ).then((r) => {
                             setRoutes(r);
                             setSelectedRoute(0);
                             setShowPanel(true);
                             setIsCalculating(false);
-                          }, 300);
+                          });
                         } else
                           alert(
                             "Klik peta terlebih dahulu untuk menentukan lokasi Anda!",

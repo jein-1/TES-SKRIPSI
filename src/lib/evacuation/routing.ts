@@ -45,7 +45,7 @@ export async function findOptimalEvacuationRoutes(
     // We only fetch precise OSRM routing for the top 3 shelters to be fast
     if (i < 3) {
       try {
-        const url = \`https://router.project-osrm.org/route/v1/foot/\${userLng},\${userLat};\${shelter.lng},\${shelter.lat}?overview=full&geometries=geojson\`
+        const url = `https://router.project-osrm.org/route/v1/foot/${userLng},${userLat};${shelter.lng},${shelter.lat}?overview=full&geometries=geojson`
         const res = await fetch(url)
         const data = await res.json()
         if (data.code === 'Ok' && data.routes && data.routes[0]) {
