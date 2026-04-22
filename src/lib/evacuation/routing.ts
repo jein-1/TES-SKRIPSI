@@ -111,8 +111,9 @@ export function findOptimalEvacuationRoutes(
     let totalDistance = dijkstraDistance + distNodeToShelter
     let coordinates: [number, number][] = []
 
-    if (!isFinite(dijkstraDistance)) {
-      // FALLBACK: If the road graph is disconnected, draw a straight line
+    if (!isFinite(dijkstraDistance) || path.length <= 1 || totalDistance > haversineDistance * 1.5) {
+      // FALLBACK: Jika graf terputus, atau user & shelter snap ke node yang sama (V-shape error),
+      // atau rute jalan raya muter terlalu jauh (> 1.5x jarak lurus).
       dijkstraDistance = haversineDistance
       totalDistance = haversineDistance
       coordinates = [
