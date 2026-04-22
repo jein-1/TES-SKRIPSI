@@ -201,9 +201,9 @@ export default function NavigatePage({ routes, selectedRoute, tsunamiAlert, user
   const mapRef = useRef<L.Map | null>(null)
   const emergency = tsunamiAlert
 
-  // Saat tidak simulasi: shelter index berdasar jarak haversine ke user
-  // Saat simulasi: index dari routes (sudah sorted by nearest)
-  const nearestIdx = !tsunamiAlert && userPosition
+  // Selalu hitung index shelter terdekat dari posisi user saat ini
+  // agar rute aktif tetap konsisten "paling dekat".
+  const nearestIdx = userPosition
     ? (() => {
         if (routes.length === 0) return 0
         let minDist = Infinity, idx = 0
@@ -215,12 +215,12 @@ export default function NavigatePage({ routes, selectedRoute, tsunamiAlert, user
         })
         return idx
       })()
-    : selectedRoute   // saat simulasi, routes[0] sudah paling dekat
+    : selectedRoute
 
-  // Sync activeRouteIdx dengan nearest saat simulasi baru aktif
+  // Sync rute aktif ke shelter terdekat saat data/posisi berubah
   useEffect(() => {
-    setActiveRouteIdx(tsunamiAlert ? selectedRoute : nearestIdx)
-  }, [tsunamiAlert, selectedRoute, nearestIdx])
+    setActiveRouteIdx(nearestIdx)
+  }, [nearestIdx])
 
   useEffect(() => { setHeadingLocked(true) }, [tsunamiAlert])
 

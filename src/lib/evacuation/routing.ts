@@ -166,7 +166,9 @@ export function findOptimalEvacuationRoutes(
   })
 
   return allRoutes
-    .sort((a, b) => a.totalDistance - b.totalDistance)
+    // Prioritas utama: shelter paling dekat ke posisi user saat ini (jarak lurus).
+    // Ini memastikan "shelter terdekat" tetap konsisten walau graph jalan belum detail.
+    .sort((a, b) => a.haversineDistance - b.haversineDistance)
     .slice(0, maxRoutes)
 }
 
