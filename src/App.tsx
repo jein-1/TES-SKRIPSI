@@ -606,20 +606,19 @@ function App() {
           hasFirstGPSFixRef.current = true;
           setFlyToPos(newPos);
         }
-        findOptimalEvacuationRoutes(newPos[0], newPos[1]).then((routeResults) => {
-          setRoutes(routeResults);
-          setSelectedRoute(0);
-          setIsCalculating(false);
-          // Only open panel if user hasn't manually closed it
-          if (!panelUserClosedRef.current) {
-            setShowPanel(true);
-          }
-          saveHistoryRecord(
-            routeResults,
-            tsunamiAlertRef.current ? "simulation" : "real",
-            newPos,
-          );
-        });
+        const routeResults = findOptimalEvacuationRoutes(newPos[0], newPos[1]);
+        setRoutes(routeResults);
+        setSelectedRoute(0);
+        setIsCalculating(false);
+        // Only open panel if user hasn't manually closed it
+        if (!panelUserClosedRef.current) {
+          setShowPanel(true);
+        }
+        saveHistoryRecord(
+          routeResults,
+          tsunamiAlertRef.current ? "simulation" : "real",
+          newPos,
+        );
 
         // ── Broadcast Lokasi ke Admin (HANYA saat simulasi / emergency) ──
         if (tsunamiAlertRef.current) {
@@ -666,11 +665,14 @@ function App() {
               navigator.vibrate([200, 100, 200, 100, 400]);
             // 4. Show arrival state
             setArrivedShelterId(arrived.id);
-            // routeResults dari GPS callback sudah di-async, pakai state 'routes' yang ter-update
+            const bestRoute = routeResults[0];
             setArrivalSummary({
               shelter: arrived,
-              distanceKm: 0,
-              walkingMin: 0,
+              distanceKm:
+                bestRoute?.totalDistance === Infinity
+                  ? 0
+                  : (bestRoute?.totalDistance ?? 0),
+              walkingMin: bestRoute?.walkingTime ?? 0,
             });
           }
         }
@@ -754,13 +756,14 @@ function App() {
       if (gpsTracking) return;
       setUserPosition([lat, lng]);
       setIsCalculating(true);
-      findOptimalEvacuationRoutes(lat, lng).then((routeResults) => {
+      setTimeout(() => {
+        const routeResults = findOptimalEvacuationRoutes(lat, lng);
         setRoutes(routeResults);
         setSelectedRoute(0);
         setShowPanel(true);
         setIsCalculating(false);
         saveHistoryRecord(routeResults, "real", [lat, lng]);
-      });
+      }, 300);
     },
     [gpsTracking, saveHistoryRecord],
   );
@@ -1417,15 +1420,16 @@ function App() {
                         e.stopPropagation();
                         if (userPosition) {
                           setIsCalculating(true);
-                          findOptimalEvacuationRoutes(
-                            userPosition[0],
-                            userPosition[1],
-                          ).then((r) => {
+                          setTimeout(() => {
+                            const r = findOptimalEvacuationRoutes(
+                              userPosition[0],
+                              userPosition[1],
+                            );
                             setRoutes(r);
                             setSelectedRoute(0);
                             setShowPanel(true);
                             setIsCalculating(false);
-                          });
+                          }, 300);
                         } else
                           alert(
                             "Klik peta terlebih dahulu untuk menentukan lokasi Anda!",
