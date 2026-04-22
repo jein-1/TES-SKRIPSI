@@ -606,19 +606,20 @@ function App() {
           hasFirstGPSFixRef.current = true;
           setFlyToPos(newPos);
         }
-        const routeResults = findOptimalEvacuationRoutes(newPos[0], newPos[1]);
-        setRoutes(routeResults);
-        setSelectedRoute(0);
-        setIsCalculating(false);
-        // Only open panel if user hasn't manually closed it
-        if (!panelUserClosedRef.current) {
-          setShowPanel(true);
-        }
-        saveHistoryRecord(
-          routeResults,
-          tsunamiAlertRef.current ? "simulation" : "real",
-          newPos,
-        );
+        findOptimalEvacuationRoutes(newPos[0], newPos[1]).then((routeResults) => {
+          setRoutes(routeResults);
+          setSelectedRoute(0);
+          setIsCalculating(false);
+          // Only open panel if user hasn't manually closed it
+          if (!panelUserClosedRef.current) {
+            setShowPanel(true);
+          }
+          saveHistoryRecord(
+            routeResults,
+            tsunamiAlertRef.current ? "simulation" : "real",
+            newPos,
+          );
+        });
 
         // ── Broadcast Lokasi ke Admin (HANYA saat simulasi / emergency) ──
         if (tsunamiAlertRef.current) {
