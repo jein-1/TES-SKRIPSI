@@ -1479,10 +1479,10 @@ function App() {
               Object.values(activeUsers).map((u) => {
                 const userDotIcon = L.divIcon({
                   className: "",
-                  html: `<div style="background:#3b82f6;border:3px solid #fff;border-radius:50%;width:22px;height:22px;display:flex;align-items:center;justify-content:center;box-shadow:0 0 12px rgba(59,130,246,0.8);"></div>`,
-                  iconSize: [22, 22],
-                  iconAnchor: [11, 11],
-                  popupAnchor: [0, -11],
+                  html: `<div style="background:#f59e0b;border:2.5px solid #fff;border-radius:50%;width:26px;height:26px;display:flex;align-items:center;justify-content:center;box-shadow:0 0 12px rgba(245,158,11,0.8);font-size:11px;">👤</div>`,
+                  iconSize: [26, 26],
+                  iconAnchor: [13, 13],
+                  popupAnchor: [0, -15],
                 });
                 return (
                   <Marker

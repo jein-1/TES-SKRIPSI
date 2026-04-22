@@ -141,7 +141,7 @@ export function findOptimalEvacuationRoutes(
   })
 
   return allRoutes
-    .sort((a, b) => a.totalDistance - b.totalDistance)
+    .sort((a, b) => a.haversineDistance - b.haversineDistance)
     .slice(0, maxRoutes)
 }
 

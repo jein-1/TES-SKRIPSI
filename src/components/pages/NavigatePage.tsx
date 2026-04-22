@@ -76,25 +76,28 @@ function makeShelterIcon(isNearest: boolean, isEmergency: boolean): L.DivIcon {
 
 // ── User position icon ─────────────────────────────────────────
 function makeUserIcon(bearing: number, emergency = false): L.DivIcon {
-  const col = emergency ? '#ef4444' : '#6366f1'
+  const col = emergency ? '#ef4444' : '#3b82f6'
+  const pulseAnim = emergency ? 'haloPulseFast' : 'haloPulse'
   return L.divIcon({
     className: '',
-    html: `<div style="
-      width:36px;height:36px;
-      display:flex;align-items:center;justify-content:center;
-      background:${col}22;border:1.5px solid ${col};border-radius:50%;
-    ">
-      <div style="
-        width:0;height:0;
-        border-left:7px solid transparent;
-        border-right:7px solid transparent;
-        border-bottom:18px solid ${col};
-        transform:rotate(${bearing}deg);
-        transform-origin:center;
-      "></div>
+    html: `<div style="position:relative;width:60px;height:60px;">
+      <!-- Flashlight / Beam -->
+      <svg style="position:absolute;top:0;left:0;width:100%;height:100%;transform:rotate(${bearing}deg);transform-origin:50% 50%;" viewBox="0 0 100 100">
+         <defs>
+           <radialGradient id="grad-${emergency ? 'red' : 'blue'}" cx="50%" cy="50%" r="50%">
+             <stop offset="0%" stop-color="${col}" stop-opacity="0.6" />
+             <stop offset="100%" stop-color="${col}" stop-opacity="0" />
+           </radialGradient>
+         </defs>
+         <polygon points="50,50 20,5 80,5" fill="url(#grad-${emergency ? 'red' : 'blue'})" />
+      </svg>
+      <!-- Pulsing Halo -->
+      <div style="position:absolute;top:18px;left:18px;width:24px;height:24px;background:${col};border-radius:50%;animation:${pulseAnim} ${emergency ? '1s' : '2s'} infinite;"></div>
+      <!-- Center Dot -->
+      <div style="position:absolute;top:22px;left:22px;width:16px;height:16px;background:${col};border:2.5px solid white;border-radius:50%;box-shadow:0 0 6px rgba(0,0,0,0.4);"></div>
     </div>`,
-    iconSize: [36, 36],
-    iconAnchor: [18, 18],
+    iconSize: [60, 60],
+    iconAnchor: [30, 30],
   })
 }
 
