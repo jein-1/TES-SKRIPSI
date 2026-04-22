@@ -1,39 +1,39 @@
-import type { CapacitorConfig } from '@capacitor/cli';
+import type { CapacitorConfig } from "@capacitor/cli";
 
 const config: CapacitorConfig = {
-  appId: 'com.dimsstsu.admin',
-  appName: 'APLIKASI (ADMIN) UJICOBA EVAKUASI TSUNAMI OLEH DIMAS DIVAT MANDA',
-  webDir: 'dist-admin',
+  appId: "com.dimsstsu.app",
+  appName: "AEGIS RESPONSE",
+  webDir: "dist",
 
-  // ── Koneksi ke Railway server (admin mode) ─────────────────
-  // APK admin load dari Railway dengan key admin otomatis
+  // ── MODE FINAL (PRODUCTION / OFFLINE) ──────────────
+  // Blok server sengaja dimatikan agar aplikasi mandiri
+  /*
   server: {
-    url: 'https://tes-skripsi-production.up.railway.app/?key=aegis2024',
-    cleartext: false,
-    androidScheme: 'https',
+    url: 'http://192.168.x.x:5173',
+    cleartext: true,
   },
+  */
 
-  android: {
-    path: 'android-admin',
-    allowMixedContent: false,
-    webContentsDebuggingEnabled: false,
-  },
   plugins: {
     SplashScreen: {
       launchShowDuration: 2000,
       launchAutoHide: true,
-      backgroundColor: '#0a1020',
-      androidSplashResourceName: 'splash',
-      androidScaleType: 'CENTER_CROP',
+      backgroundColor: "#080e1a",
+      androidSplashResourceName: "splash",
+      androidScaleType: "CENTER_CROP",
       showSpinner: false,
     },
     StatusBar: {
-      style: 'Dark',
-      backgroundColor: '#0a1020',
-      overlaysWebView: false,   // FIX: tidak tumpang tindih status bar
+      style: "Dark",
+      backgroundColor: "#0a1020",
+      overlaysWebView: false, // Mencegah konten tertimpa ikon baterai/jam HP
     },
     Geolocation: {},
     Camera: {},
+  },
+  android: {
+    allowMixedContent: false,
+    webContentsDebuggingEnabled: false,
   },
 };
 

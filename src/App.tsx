@@ -356,7 +356,12 @@ function App() {
   const [adminMapBearing, setAdminMapBearing] = useState(0);
   const adminMapRef = useRef<L.Map | null>(null);
   // Lokasi user aktif untuk peta admin (hanya saat simulasi)
-  const [activeUsers, setActiveUsers] = useState<Record<string, { id: string; name: string; lat: number; lng: number; ts: number }>>({})
+  const [activeUsers, setActiveUsers] = useState<
+    Record<
+      string,
+      { id: string; name: string; lat: number; lng: number; ts: number }
+    >
+  >({});
 
   // â”€â”€ URL-based Admin Detection â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   // Admin mode: URL contains ?admin OR ?key=aegis2024 OR hash #admin
@@ -779,8 +784,11 @@ function App() {
       if (active) {
         setTsunamiAlert(true);
         setActivePage("navigate");
-        if (vibrateIntervalRef.current) clearInterval(vibrateIntervalRef.current);
-        const doVibrate = () => { if ("vibrate" in navigator) navigator.vibrate([800, 400]); };
+        if (vibrateIntervalRef.current)
+          clearInterval(vibrateIntervalRef.current);
+        const doVibrate = () => {
+          if ("vibrate" in navigator) navigator.vibrate([800, 400]);
+        };
         doVibrate();
         vibrateIntervalRef.current = setInterval(doVibrate, 1200);
         if (settings.soundAlert) alarmRef.current.start();
@@ -792,18 +800,30 @@ function App() {
       } else {
         setTsunamiAlert(false);
         alarmRef.current.stop();
-        if (vibrateIntervalRef.current) { clearInterval(vibrateIntervalRef.current); vibrateIntervalRef.current = null; }
+        if (vibrateIntervalRef.current) {
+          clearInterval(vibrateIntervalRef.current);
+          vibrateIntervalRef.current = null;
+        }
         if ("vibrate" in navigator) navigator.vibrate(0);
         sendTsunamiNotification(false);
         gpsAutoStartedRef.current = false;
-        setActiveUsers({});  // Bersihkan user aktif saat simulasi berhenti
+        setActiveUsers({}); // Bersihkan user aktif saat simulasi berhenti
       }
     }
     // Track lokasi user aktif untuk peta admin
-    if (event.type === 'LOCATION_UPDATE') {
+    if (event.type === "LOCATION_UPDATE") {
       const ev = event as any;
       if (ev.id && ev.lat && ev.lng) {
-        setActiveUsers(prev => ({ ...prev, [ev.id]: { id: ev.id, name: ev.name || ev.id, lat: ev.lat, lng: ev.lng, ts: Date.now() } }))
+        setActiveUsers((prev) => ({
+          ...prev,
+          [ev.id]: {
+            id: ev.id,
+            name: ev.name || ev.id,
+            lat: ev.lat,
+            lng: ev.lng,
+            ts: Date.now(),
+          },
+        }));
       }
     }
   });
@@ -1304,10 +1324,7 @@ function App() {
               maxZoom={20}
             />
             {/* CustomMapControls: locate button dihapus dari admin — hanya zoom */}
-            <CustomMapControls
-              userPosition={null}
-              onLocateClick={() => {}}
-            />
+            <CustomMapControls userPosition={null} onLocateClick={() => {}} />
             <LocationMarker onLocationSet={handleLocationSet} />
             {/* Fix blank white area when panel resizes map container */}
             <MapResizer
@@ -1415,22 +1432,38 @@ function App() {
             })}
 
             {/* ── LOKASI USER AKTIF — hanya tampil saat simulasi ── */}
-            {tsunamiAlert && Object.values(activeUsers).map((u) => {
-              const userDotIcon = L.divIcon({
-                className: '',
-                html: `<div style="background:#f59e0b;border:2.5px solid #fff;border-radius:50%;width:26px;height:26px;display:flex;align-items:center;justify-content:center;box-shadow:0 0 12px rgba(245,158,11,0.8);font-size:11px;">👤</div>`,
-                iconSize: [26, 26], iconAnchor: [13, 13], popupAnchor: [0, -15],
-              })
-              return (
-                <Marker key={`user-${u.id}`} position={[u.lat, u.lng]} icon={userDotIcon} zIndexOffset={900}>
-                  <Popup>
-                    <strong style={{ fontSize: 13 }}>{u.name}</strong>
-                    <div style={{ fontSize: 11, color: '#555', marginTop: 3 }}>📍 {u.lat.toFixed(5)}, {u.lng.toFixed(5)}</div>
-                    <div style={{ fontSize: 10, color: '#888', marginTop: 2 }}>🕐 {new Date(u.ts).toLocaleTimeString('id-ID')}</div>
-                  </Popup>
-                </Marker>
-              )
-            })}
+            {tsunamiAlert &&
+              Object.values(activeUsers).map((u) => {
+                const userDotIcon = L.divIcon({
+                  className: "",
+                  html: `<div style="background:#f59e0b;border:2.5px solid #fff;border-radius:50%;width:26px;height:26px;display:flex;align-items:center;justify-content:center;box-shadow:0 0 12px rgba(245,158,11,0.8);font-size:11px;">👤</div>`,
+                  iconSize: [26, 26],
+                  iconAnchor: [13, 13],
+                  popupAnchor: [0, -15],
+                });
+                return (
+                  <Marker
+                    key={`user-${u.id}`}
+                    position={[u.lat, u.lng]}
+                    icon={userDotIcon}
+                    zIndexOffset={900}
+                  >
+                    <Popup>
+                      <strong style={{ fontSize: 13 }}>{u.name}</strong>
+                      <div
+                        style={{ fontSize: 11, color: "#555", marginTop: 3 }}
+                      >
+                        📍 {u.lat.toFixed(5)}, {u.lng.toFixed(5)}
+                      </div>
+                      <div
+                        style={{ fontSize: 10, color: "#888", marginTop: 2 }}
+                      >
+                        🕐 {new Date(u.ts).toLocaleTimeString("id-ID")}
+                      </div>
+                    </Popup>
+                  </Marker>
+                );
+              })}
 
             {/* Admin: Lokasi admin sendiri tidak ditampilkan - hanya pantau user lain */}
 
