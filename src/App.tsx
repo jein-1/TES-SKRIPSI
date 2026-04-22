@@ -22,6 +22,7 @@ import FamilyPage    from './components/pages/FamilyPage'
 import GuidesPage    from './components/pages/GuidesPage'
 import { useAegisSync, aegisApi } from './lib/useAegisSync'
 import { requestNotifPermission, sendTsunamiNotification } from './lib/useTsunamiAlert'
+import { registerWebPush } from './lib/usePushNotification'
 // â”€â”€ UI Libraries â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 import {
   AlertTriangle, Shield, MapPin, Info, ChevronRight, ChevronLeft, X, Locate,
@@ -542,9 +543,19 @@ function App() {
   })
   // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => {
-    // Request notif permission saat app pertama kali buka
+    // 1. Request Capacitor local notif permission
     requestNotifPermission()
-    // Cek status tsunami saat app dibuka (kalau sudah aktif sebelumnya)
+    // 2. Daftar ke Web Push agar notif bisa masuk saat app DITUTUP
+    //    (works di browser + APK yang load dari Railway)
+    registerWebPush().catch(() => {})
+    // 3. AUTO-START GPS saat app dibuka (jika user sudah registrasi)
+    if (!isAdminURL) {
+      const isRegistered = !!localStorage.getItem('aegisRegistered')
+      if (isRegistered) {
+        setTimeout(() => startGpsTracking(), 800)
+      }
+    }
+    // 4. Cek status tsunami saat app dibuka (kalau sudah aktif sebelumnya)
     aegisApi.getTsunami().then(({ active }) => {
       if (active) { setTsunamiAlert(true); setActivePage('navigate') }
     })
