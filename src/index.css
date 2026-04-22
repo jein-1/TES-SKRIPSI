@@ -22,6 +22,8 @@ body {
   overflow: hidden;
   background: #0f172a;
   color: #e2e8f0;
+  -webkit-user-select: none;
+  user-select: none;
 }
 
 /* Use dynamic viewport height — correctly handles mobile browser URL bar show/hide */

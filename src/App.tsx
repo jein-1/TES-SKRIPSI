@@ -59,6 +59,7 @@ import {
 } from "./lib/useTsunamiAlert";
 import { registerWebPush } from "./lib/usePushNotification";
 import { Geolocation } from "@capacitor/geolocation";
+import { Haptics, ImpactStyle } from "@capacitor/haptics";
 // â”€â”€ UI Libraries â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 import {
   AlertTriangle,
@@ -552,6 +553,9 @@ function App() {
 
   // â”€â”€ GPS â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   const startGpsTracking = useCallback(async () => {
+    // Admin dashboard tidak boleh meminta lokasi atau melacak GPS-nya sendiri
+    if (isAdminURL) return;
+
     // Clear any existing watch first to prevent duplicate watchers
     if (gpsWatchRef.current !== null) {
       if (typeof gpsWatchRef.current === "string") {
@@ -578,7 +582,7 @@ function App() {
     
     try {
       const watchId = await Geolocation.watchPosition(
-        { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 },
+        { enableHighAccuracy: true, timeout: 10000, maximumAge: 2000 },
         (pos, err) => {
           if (err) {
             setIsCalculating(false);
@@ -712,8 +716,10 @@ function App() {
     setTsunamiAlert(true);
     setShowTsunamiConfirm(false);
     if (!alarmMuted && settings.soundAlert) alarmRef.current.start();
-    if (settings.vibrationAlert && "vibrate" in navigator)
-      navigator.vibrate([500, 200, 500, 200, 500]);
+    if (settings.vibrationAlert) {
+      if (typeof window !== "undefined" && "vibrate" in navigator) navigator.vibrate([500, 200, 500, 200, 500]);
+      else Haptics.vibrate({ duration: 1000 }).catch(()=>{});
+    }
     startGpsTracking();
     aegisApi.setTsunami(true);
   }, [
@@ -822,7 +828,9 @@ function App() {
         if (vibrateIntervalRef.current)
           clearInterval(vibrateIntervalRef.current);
         const doVibrate = () => {
-          if ("vibrate" in navigator) navigator.vibrate([800, 400]);
+          Haptics.vibrate({ duration: 800 }).catch(() => {
+            if (typeof window !== "undefined" && "vibrate" in navigator) navigator.vibrate([800, 400]);
+          });
         };
         doVibrate();
         vibrateIntervalRef.current = setInterval(doVibrate, 1200);
@@ -948,6 +956,7 @@ function App() {
               Icon: Navigation2,
               label: "NAVIGATE",
             },
+            { page: "history" as ActivePage, Icon: History, label: "HISTORY" },
             { page: "family" as ActivePage, Icon: Users, label: "FAMILY" },
             { page: "guides" as ActivePage, Icon: BookOpen, label: "GUIDES" },
           ].map(({ page, Icon, label }) => {
@@ -1237,11 +1246,6 @@ function App() {
                 <nav className="flex-1 mt-4">
                   {[
                     { page: "map" as ActivePage, Icon: MapIcon, label: "MAP" },
-                    {
-                      page: "history" as ActivePage,
-                      Icon: History,
-                      label: "HISTORY",
-                    },
                     {
                       page: "settings" as ActivePage,
                       Icon: SlidersHorizontal,
@@ -1784,7 +1788,6 @@ function App() {
         >
           {[
             { page: "map" as ActivePage, Icon: MapIcon, label: "MAP" },
-            { page: "history" as ActivePage, Icon: History, label: "HISTORY" },
             { page: "sensors" as ActivePage, Icon: Radio, label: "SENSORS" },
             {
               page: "settings" as ActivePage,
@@ -1843,6 +1846,7 @@ function App() {
               Icon: Navigation2,
               label: "NAVIGATE",
             },
+            { page: "history" as ActivePage, Icon: History, label: "HISTORY" },
             { page: "family" as ActivePage, Icon: Users, label: "FAMILY" },
             { page: "guides" as ActivePage, Icon: BookOpen, label: "GUIDES" },
           ].map(({ page, Icon, label }) => {
