@@ -645,7 +645,7 @@ function App() {
                 Math.cos(toRad(sh.lat)) *
                 Math.sin(dLng / 2) ** 2;
             const dist = R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-            return dist <= ARRIVAL_RADIUS_METERS;
+            return dist <= (sh.radiusMeters ?? ARRIVAL_RADIUS_METERS);
           });
           if (arrived) {
             arrivedFiredRef.current = true;
@@ -1458,7 +1458,7 @@ function App() {
                 <Circle
                   key={`arrival-${sh.id}`}
                   center={[sh.lat, sh.lng]}
-                  radius={ARRIVAL_RADIUS_METERS}
+                  radius={sh.radiusMeters ?? ARRIVAL_RADIUS_METERS}
                   pathOptions={{
                     color: isArrived
                       ? "#22c55e"
@@ -2147,7 +2147,7 @@ function App() {
                   <p className="text-center text-[10px] text-slate-500 mb-5 flex items-center justify-center gap-1.5">
                     <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 inline-block" />
                     GPS berhenti otomatis Â· dalam radius{" "}
-                    {ARRIVAL_RADIUS_METERS}m
+                    {shelters.find((s) => s.id === arrivedShelterId)?.radiusMeters ?? ARRIVAL_RADIUS_METERS}m
                   </p>
 
                   {/* Actions */}

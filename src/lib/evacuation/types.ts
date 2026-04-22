@@ -11,6 +11,7 @@ export interface Shelter extends Point {
   id: string;
   name: string;
   capacity: number;
+  radiusMeters?: number; // Custom radius kedatangan untuk masing-masing shelter
 }
 
 export interface RoadNode extends Point {

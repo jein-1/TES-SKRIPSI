@@ -12,6 +12,7 @@ export const shelters: Shelter[] = [
     lat: -0.89559,
     lng: 119.87235,
     capacity: 3000,
+    radiusMeters: 50,
   },
   {
     id: "S2",
@@ -20,6 +21,7 @@ export const shelters: Shelter[] = [
     lat: -0.8903,
     lng: 119.87088,
     capacity: 1500,
+    radiusMeters: 50,
   },
   {
     id: "S3",
@@ -28,6 +30,7 @@ export const shelters: Shelter[] = [
     lat: -0.87031,
     lng: 119.87852,
     capacity: 2000,
+    radiusMeters: 50,
   },
   {
     id: "S4",
@@ -36,6 +39,7 @@ export const shelters: Shelter[] = [
     lat: -0.89358,
     lng: 119.85226,
     capacity: 1000,
+    radiusMeters: 50,
   },
   {
     id: "S5",
@@ -44,6 +48,7 @@ export const shelters: Shelter[] = [
     lat: -0.90394,
     lng: 119.88947,
     capacity: 2000,
+    radiusMeters: 50,
   },
   {
     id: "S6",
@@ -52,6 +57,7 @@ export const shelters: Shelter[] = [
     lat: -0.900281,
     lng: 119.889075,
     capacity: 5000,
+    radiusMeters: 50,
   },
   {
     id: "S7",
@@ -60,5 +66,6 @@ export const shelters: Shelter[] = [
     lat: -0.90015,
     lng: 119.89056,
     capacity: 500,
+    radiusMeters: 50,
   },
 ];
