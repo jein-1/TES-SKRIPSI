@@ -181,7 +181,8 @@ export default function NavigatePage({ routes, selectedRoute, tsunamiAlert, user
   const [showRoutePanel, setShowRoutePanel] = useState(true)
   const [localPos, setLocalPos] = useState<[number,number] | null>(null)
   const mapRef = useRef<L.Map | null>(null)
-  const [showCalibration, setShowCalibration] = useState(() => !localStorage.getItem('compassCalibrated'))
+  // Kalibrasi muncul sekali per sesi (bukan per install) — tiap buka app baru akan muncul
+  const [showCalibration, setShowCalibration] = useState(() => !sessionStorage.getItem('compassCalibrated'))
 
   // GPS instant detection — NavigatePage punya GPS sendiri untuk langsung tampil
   useEffect(() => {
@@ -206,7 +207,7 @@ export default function NavigatePage({ routes, selectedRoute, tsunamiAlert, user
   const effectivePos = userPosition ?? localPos
 
   const handleCalibrate = () => {
-    localStorage.setItem('compassCalibrated', 'true')
+    sessionStorage.setItem('compassCalibrated', 'true')
     setShowCalibration(false)
   }
   const emergency = tsunamiAlert

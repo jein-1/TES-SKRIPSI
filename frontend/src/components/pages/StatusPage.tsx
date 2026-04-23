@@ -16,12 +16,17 @@ const PALU_CENTER: [number, number] = [-0.8917, 119.8577]
 
 const hereIcon = L.divIcon({
   className: '',
-  html: `<div style="display:flex;flex-direction:column;align-items:center;gap:3px;pointer-events:none">
-    <div style="width:14px;height:14px;border-radius:50%;background:#6366f1;border:2px solid white;box-shadow:0 0 10px rgba(99,102,241,0.8);animation:haloPulse 2s infinite"></div>
-    <span style="background:rgba(99,102,241,0.85);color:white;font-size:8px;font-weight:900;padding:1px 5px;border-radius:8px;white-space:nowrap;letter-spacing:0.05em">YOU ARE HERE</span>
+  html: `<div style="display:flex;flex-direction:column;align-items:center;gap:2px;pointer-events:none;position:relative">
+    <div style="position:relative;width:20px;height:20px;display:flex;align-items:center;justify-content:center">
+      <!-- Pulse ring -->
+      <div style="position:absolute;width:20px;height:20px;border-radius:50%;background:rgba(99,102,241,0.25);animation:haloPulse 2s infinite"></div>
+      <!-- Center solid dot -->
+      <div style="position:relative;width:12px;height:12px;border-radius:50%;background:#6366f1;border:2px solid white;box-shadow:0 0 8px rgba(99,102,241,0.9);z-index:1"></div>
+    </div>
+    <span style="background:rgba(99,102,241,0.9);color:white;font-size:8px;font-weight:900;padding:1px 6px;border-radius:8px;white-space:nowrap;letter-spacing:0.05em;margin-top:1px">YOU ARE HERE</span>
   </div>`,
-  iconSize: [80, 32],
-  iconAnchor: [40, 8],
+  iconSize: [90, 36],
+  iconAnchor: [45, 10],
 })
 
 function MiniMap() {

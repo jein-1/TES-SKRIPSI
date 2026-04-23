@@ -990,17 +990,24 @@ function App() {
     requestNotifPermission();
     // 2. Web Push agar notif masuk saat app ditutup
     registerWebPush().catch(() => {});
-    // 3. AUTO-START GPS saat app dibuka (user mode selalu, tanpa syarat registrasi)
+    // 3. Minta izin GPS (foreground + background) sebelum mulai tracking
+    Geolocation.requestPermissions().catch(() => {});
+    // 4. AUTO-START GPS saat app dibuka (user mode selalu, tanpa syarat registrasi)
     if (!isAdminURL) {
       setTimeout(() => startGpsTracking(), 600);
     }
-    // 4. Cek status tsunami saat app dibuka
+    // 5. Cek status tsunami saat app dibuka
     aegisApi.getTsunami().then(({ active }) => {
       if (active) {
         setTsunamiAlert(true);
         setActivePage("navigate");
       }
     });
+    // 6. Minta agar tidak dimatikan oleh battery optimizer (Android)
+    try {
+      const { App: CapApp } = require('@capacitor/app');
+      CapApp.addListener('appStateChange', () => {});
+    } catch {}
   }, []);
 
   // â”€â”€ PUBLIC USER layout â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
