@@ -354,7 +354,7 @@ app.post("/api/location", (req, res) => {
 // ══════════════════════════════════════════════════════════════
 // STATIC FILES
 // ══════════════════════════════════════════════════════════════
-const distPath = join(__dirname, "dist");
+const distPath = join(__dirname, "../www");
 if (existsSync(distPath)) {
   app.use(express.static(distPath, { dotfiles: "deny", index: false }));
   app.get("/{*path}", (req, res) => {

@@ -3,7 +3,7 @@ import type { CapacitorConfig } from "@capacitor/cli";
 const config: CapacitorConfig = {
   appId: "com.dimsstsu.app",
   appName: "AEGIS RESPONSE",
-  webDir: "dist",
+  webDir: "www",
   // Server config: saat development bisa pakai livereload dari PC
   // Untuk production APK, hapus/comment blok server ini
   // server: {
