@@ -227,14 +227,14 @@ export default function NavigatePage({ routes, selectedRoute, tsunamiAlert, user
         if (p === 'granted') window.addEventListener('deviceorientation', handler) 
       })
     } else {
-      if ('ondeviceorientationabsolute' in window) {
-        window.addEventListener('deviceorientationabsolute', handler)
+      if ('ondeviceorientationabsolute' in (window as any)) {
+        (window as any).addEventListener('deviceorientationabsolute', handler)
       } else {
         window.addEventListener('deviceorientation', handler)
       }
     }
     return () => {
-      window.removeEventListener('deviceorientationabsolute', handler)
+      (window as any).removeEventListener('deviceorientationabsolute', handler)
       window.removeEventListener('deviceorientation', handler)
     }
   }, [])
