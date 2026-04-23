@@ -93,10 +93,10 @@ a, button, [role="button"], input, select, textarea {
   100% { transform: scale(3.5); opacity: 0; }
 }
 @keyframes dashAnim {
-  to { stroke-dashoffset: -20; }
+  to { stroke-dashoffset: -24; }
 }
 .animated-route-path {
-  animation: dashAnim 1s linear infinite;
+  animation: dashAnim 0.6s linear infinite;
 }
 
 .hide-scrollbar::-webkit-scrollbar { display: none; }

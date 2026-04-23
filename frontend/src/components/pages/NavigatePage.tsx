@@ -11,9 +11,9 @@ import 'leaflet/dist/leaflet.css'
 import 'leaflet-rotate'
 import {
   AlertTriangle, Navigation2, Phone, ChevronLeft,
-  MapPin, Compass, Lock, Unlock, ChevronRight, ArrowRight
+  MapPin, Compass, Lock, Unlock, ChevronRight, ArrowRight, Radio
 } from 'lucide-react'
-import { motion } from 'motion/react'
+import { motion, AnimatePresence } from 'motion/react'
 import type { RouteResult } from '../../lib/evacuation'
 import { shelters, hazardZones } from '../../lib/evacuation'
 import { TILE_NORMAL } from '../../constants/mapConfig'
@@ -25,6 +25,9 @@ interface Props {
   tsunamiAlert: boolean
   userPosition: [number, number] | null
   onBack?: () => void
+  adminPing?: { fromName: string; role: string; fromId: string } | null
+  onAdminPingDismiss?: () => void
+  onStartGps?: () => void
 }
 
 // ── Helpers ────────────────────────────────────────────────────
@@ -169,15 +172,38 @@ function BearingTracker({ onBearing }: { onBearing: (b: number) => void }) {
 }
 
 // ── MAIN ──────────────────────────────────────────────────────
-export default function NavigatePage({ routes, selectedRoute, tsunamiAlert, userPosition, onBack }: Props) {
+export default function NavigatePage({ routes, selectedRoute, tsunamiAlert, userPosition, onBack, adminPing, onAdminPingDismiss, onStartGps }: Props) {
   const [showMedical, setShowMedical]     = useState(false)
   const [deviceHeading, setDeviceHeading] = useState<number | null>(null)
   const [mapBearing, setMapBearing]       = useState(0)
   const [headingLocked, setHeadingLocked] = useState(true)
   const [activeRouteIdx, setActiveRouteIdx] = useState(selectedRoute)
   const [showRoutePanel, setShowRoutePanel] = useState(true)
+  const [localPos, setLocalPos] = useState<[number,number] | null>(null)
   const mapRef = useRef<L.Map | null>(null)
   const [showCalibration, setShowCalibration] = useState(() => !localStorage.getItem('compassCalibrated'))
+
+  // GPS instant detection — NavigatePage punya GPS sendiri untuk langsung tampil
+  useEffect(() => {
+    if (userPosition) { setLocalPos(userPosition); return }
+    if (!navigator.geolocation) return
+    const w = navigator.geolocation.watchPosition(
+      p => setLocalPos([p.coords.latitude, p.coords.longitude]),
+      () => {},
+      { enableHighAccuracy: true, maximumAge: 5000 }
+    )
+    return () => navigator.geolocation.clearWatch(w)
+  }, [userPosition])
+
+  // Notify parent to start GPS tracking if not yet started
+  useEffect(() => {
+    if (!userPosition && onStartGps) {
+      const t = setTimeout(() => onStartGps(), 500)
+      return () => clearTimeout(t)
+    }
+  }, [])
+
+  const effectivePos = userPosition ?? localPos
 
   const handleCalibrate = () => {
     localStorage.setItem('compassCalibrated', 'true')
@@ -186,15 +212,14 @@ export default function NavigatePage({ routes, selectedRoute, tsunamiAlert, user
   const emergency = tsunamiAlert
 
   // Selalu hitung index shelter terdekat dari posisi user saat ini
-  // agar rute aktif tetap konsisten "paling dekat".
-  const nearestIdx = userPosition
+  const nearestIdx = effectivePos
     ? (() => {
         if (routes.length === 0) return 0
         let minDist = Infinity, idx = 0
         routes.forEach((r, i) => {
           const sp = r.coordinates[r.coordinates.length - 1] as [number, number]
           if (!sp) return
-          const d = haversineM(userPosition, sp)
+          const d = haversineM(effectivePos, sp)
           if (d < minDist) { minDist = d; idx = i }
         })
         return idx
@@ -211,14 +236,14 @@ export default function NavigatePage({ routes, selectedRoute, tsunamiAlert, user
   const route       = routes[activeRouteIdx]
   const shelterPos  = route ? [shelters.find(s => s.id === route.shelterId)?.lat ?? route.coordinates[route.coordinates.length-1]?.[0], shelters.find(s => s.id === route.shelterId)?.lng ?? route.coordinates[route.coordinates.length-1]?.[1]] as [number, number] : undefined
 
-  const computedBearing = (userPosition && shelterPos) ? getBearing(userPosition, shelterPos) : 0
+  const computedBearing = (effectivePos && shelterPos) ? getBearing(effectivePos, shelterPos) : 0
   const heading = deviceHeading ?? computedBearing
 
-  const distanceM   = (userPosition && shelterPos) ? haversineM(userPosition, shelterPos) : (route?.totalDistance ? route.totalDistance * 1000 : 0)
+  const distanceM   = (effectivePos && shelterPos) ? haversineM(effectivePos, shelterPos) : (route?.totalDistance ? route.totalDistance * 1000 : 0)
   const distLabel   = distanceM < 1000 ? `${Math.round(distanceM)}m` : `${(distanceM/1000).toFixed(1)} km`
   const etaMin      = Math.max(1, Math.ceil(distanceM / 1000 / 5 * 60))
   const { label: mainDir, icon: dirIcon } = bearingLabel(heading)
-  const mapCenter: [number, number]       = userPosition ?? [-0.8917, 119.8577]
+  const mapCenter: [number, number]       = effectivePos ?? [-0.8917, 119.8577]
 
   // Device compass
   useEffect(() => {
@@ -416,34 +441,35 @@ export default function NavigatePage({ routes, selectedRoute, tsunamiAlert, user
             )
           })}
 
-          {/* ─── GARIS LURUS BEELINE (khusus mode simulasi) ─── */}
+          {/* GARIS LURUS BEELINE — hanya saat emergency */}
           {emergency && userPosition && shelterPos && (
             <Polyline
               positions={[userPosition, shelterPos]}
-              color="#f59e0b" weight={3} opacity={0.9} dashArray="8 10"
+              color="#f59e0b" weight={3} opacity={0.9} dashArray="12 6"
+              className="animated-route-path"
             />
           )}
 
-          {/* Routes */}
-          {routes.map((route, i) => {
+          {/* Routes — hanya tampil saat ada rute */}
+          {routes.length > 0 && routes.map((route, i) => {
             const isSelected = i === activeRouteIdx;
             return (
               <Polyline
                 key={`road-${i}`}
                 positions={route.coordinates as [number, number][]}
                 pathOptions={{
-                  color: isSelected ? "#6366f1" : "#475569",
-                  weight: isSelected ? 6 : 4,
-                  opacity: isSelected ? 0.9 : 0.4,
-                  dashArray: emergency && isSelected ? "10 15" : undefined,
-                  className: emergency && isSelected ? "animated-route-path" : "",
+                  color: isSelected ? (emergency ? "#ef4444" : "#6366f1") : "#334155",
+                  weight: isSelected ? 6 : 3,
+                  opacity: isSelected ? 0.95 : 0.3,
+                  dashArray: isSelected ? "12 6" : "4 8",
+                  className: isSelected ? "animated-route-path" : "",
                 }}
               />
             );
           })}
 
           <NavMapController
-            userPos={userPosition}
+            userPos={effectivePos}
             heading={heading}
             emergency={emergency}
             headingLocked={headingLocked}
@@ -477,7 +503,7 @@ export default function NavigatePage({ routes, selectedRoute, tsunamiAlert, user
           <p className="text-[8px] text-slate-500">BEARING</p>
         </div>
 
-        {!userPosition && (
+        {!effectivePos && (
           <div className="absolute bottom-3 left-1/2 -translate-x-1/2 z-[500] px-3 py-1.5 rounded-xl bg-amber-900/80 border border-amber-700/60">
             <p className="text-[10px] font-bold text-amber-300">⏳ Mendeteksi GPS...</p>
           </div>
@@ -548,6 +574,42 @@ export default function NavigatePage({ routes, selectedRoute, tsunamiAlert, user
             className="w-full py-3 rounded-2xl bg-red-600 text-white font-black text-sm tracking-wide flex items-center justify-center gap-2">
             <span>🏥</span> BANTUAN MEDIS DARURAT
           </button>
+        </div>
+      )}
+
+      {/* ── ADMIN PING POPUP — muncul saat admin mengirim ping selama emergency ── */}
+      {adminPing && (
+        <div className="fixed inset-0 z-[3000] flex items-center justify-center bg-black/85 backdrop-blur-md p-4">
+          <motion.div
+            initial={{ scale: 0.85, y: 30, opacity: 0 }}
+            animate={{ scale: 1, y: 0, opacity: 1 }}
+            exit={{ scale: 0.85, y: 30, opacity: 0 }}
+            className="w-full max-w-xs bg-[#100508] border-2 border-red-500/60 rounded-3xl p-6 shadow-[0_0_60px_rgba(239,68,68,0.4)] relative overflow-hidden"
+          >
+            <div className="absolute inset-0 bg-red-500/5 animate-pulse pointer-events-none rounded-3xl" />
+            <div className="relative z-10 flex flex-col items-center text-center">
+              {/* Icon */}
+              <div className="w-20 h-20 rounded-full bg-red-600/20 border-2 border-red-500/50 flex items-center justify-center mb-4">
+                <Radio className="w-10 h-10 text-red-400 animate-ping" />
+              </div>
+              <p className="text-[10px] text-red-400 uppercase tracking-widest font-bold mb-1">PANGGILAN DARURAT</p>
+              <h2 className="text-2xl font-black text-white mb-1 tracking-wide">ADMIN MENGHUBUNGI</h2>
+              <div className="w-full p-3 rounded-2xl bg-red-950/60 border border-red-800/40 mb-4 text-left">
+                <p className="text-[10px] text-red-400 uppercase tracking-widest font-bold mb-0.5">Pengirim</p>
+                <p className="text-white font-black text-sm">{adminPing.fromName}</p>
+                <p className="text-[11px] text-red-300/70 mt-0.5">{adminPing.role}</p>
+              </div>
+              <p className="text-xs text-slate-400 mb-6 leading-relaxed">
+                Tim petugas sedang memantau situasi Anda. Konfirmasi bahwa Anda aman dan sedang dalam proses evakuasi.
+              </p>
+              <button
+                onClick={() => onAdminPingDismiss?.()}
+                className="w-full py-4 bg-red-600 hover:bg-red-500 text-white rounded-2xl font-black text-sm tracking-widest shadow-[0_4px_20px_rgba(239,68,68,0.5)] active:scale-95 transition-all"
+              >
+                SAYA AMAN — KONFIRMASI
+              </button>
+            </div>
+          </motion.div>
         </div>
       )}
     </motion.div>

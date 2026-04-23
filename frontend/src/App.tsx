@@ -923,11 +923,14 @@ function App() {
       const ev = event as any;
       if (ev.toId === terminalId || (!ev.toId && ev.fromId !== terminalId)) {
         if (ev.role) {
-          setAdminPing({
-            fromName: ev.fromName,
-            role: ev.role,
-            fromId: ev.fromId,
-          });
+          // Admin ping — only show popup during tsunami/emergency
+          if (tsunamiAlertRef.current && !isAdminURL) {
+            setAdminPing({
+              fromName: ev.fromName,
+              role: ev.role,
+              fromId: ev.fromId,
+            });
+          }
         } else {
           setHasFamilyPing(true);
         }
@@ -957,17 +960,17 @@ function App() {
     null,
   );
   useEffect(() => {
-    if (adminPing) {
+    if (adminPing && !isAdminURL) {
       const doVibrate = () => {
-        if ("vibrate" in navigator) navigator.vibrate([400, 200, 400]);
-        alarmRef.current.start();
+        Haptics.vibrate({ duration: 400 }).catch(() => {
+          if ("vibrate" in navigator) navigator.vibrate([400, 200, 400]);
+        });
       };
       doVibrate();
       adminPingIntervalRef.current = setInterval(doVibrate, 1500);
       return () => {
         if (adminPingIntervalRef.current)
           clearInterval(adminPingIntervalRef.current);
-        alarmRef.current.stop();
       };
     }
   }, [adminPing]);
@@ -1030,6 +1033,9 @@ function App() {
               tsunamiAlert={tsunamiAlert}
               userPosition={userPosition}
               onBack={() => setActivePage("status")}
+              adminPing={adminPing}
+              onAdminPingDismiss={() => setAdminPing(null)}
+              onStartGps={!gpsTracking ? startGpsTracking : undefined}
             />
           )}
           {activePage === "family" && (
@@ -1376,6 +1382,7 @@ function App() {
             { page: "guides" as ActivePage, Icon: BookOpen, label: "GUIDES" },
           ].map(({ page, Icon, label }) => {
             const isAlert = page === "navigate" && tsunamiAlert;
+            const isFamilyAlert = page === "family" && hasFamilyPing;
             const isActive = activePage === page;
             return (
               <button
@@ -1389,6 +1396,9 @@ function App() {
                   />
                   {isAlert && (
                     <span className="absolute -top-0.5 -right-0.5 w-2 h-2 rounded-full bg-red-400 animate-ping block" />
+                  )}
+                  {isFamilyAlert && (
+                    <span className="absolute -top-0.5 -right-0.5 w-2.5 h-2.5 rounded-full bg-red-500 block border-2 border-[#0a1020]" />
                   )}
                 </div>
                 <span className="text-[9px] font-bold tracking-wider">
