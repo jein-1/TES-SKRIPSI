@@ -16,7 +16,7 @@ import {
 import { motion } from 'motion/react'
 import type { RouteResult } from '../../lib/evacuation'
 import { shelters, hazardZones } from '../../lib/evacuation'
-import { TILE_DARK } from '../../constants/mapConfig'
+import { TILE_NORMAL } from '../../constants/mapConfig'
 import { CompassWidget } from '../map/MapRotation'
 
 interface Props {
@@ -214,16 +214,29 @@ export default function NavigatePage({ routes, selectedRoute, tsunamiAlert, user
 
   // Device compass
   useEffect(() => {
-    const handler = (e: DeviceOrientationEvent) => {
-      if (e.alpha !== null) setDeviceHeading((360 - e.alpha) % 360)
+    const handler = (e: any) => {
+      if (e.webkitCompassHeading !== undefined) {
+        setDeviceHeading(e.webkitCompassHeading)
+      } else if (e.alpha !== null) {
+        setDeviceHeading((360 - e.alpha) % 360)
+      }
     }
     const req = (DeviceOrientationEvent as any).requestPermission
     if (typeof req === 'function') {
-      req().then((p: string) => { if (p === 'granted') window.addEventListener('deviceorientation', handler) })
+      req().then((p: string) => { 
+        if (p === 'granted') window.addEventListener('deviceorientation', handler) 
+      })
     } else {
-      window.addEventListener('deviceorientation', handler)
+      if ('ondeviceorientationabsolute' in window) {
+        window.addEventListener('deviceorientationabsolute', handler)
+      } else {
+        window.addEventListener('deviceorientation', handler)
+      }
     }
-    return () => window.removeEventListener('deviceorientation', handler)
+    return () => {
+      window.removeEventListener('deviceorientationabsolute', handler)
+      window.removeEventListener('deviceorientation', handler)
+    }
   }, [])
 
   const resetNorth = useCallback(() => {
@@ -329,7 +342,7 @@ export default function NavigatePage({ routes, selectedRoute, tsunamiAlert, user
           ref={mapRef as any}
           {...({ rotate: true, touchRotate: true } as any)}
         >
-          <TileLayer url={TILE_DARK} maxNativeZoom={20} maxZoom={20}/>
+          <TileLayer url={TILE_NORMAL} maxNativeZoom={20} maxZoom={20}/>
 
           {/* Hazard zones */}
           {hazardZones.map((zone, i) => (

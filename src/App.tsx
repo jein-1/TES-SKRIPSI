@@ -582,7 +582,7 @@ function App() {
     
     try {
       const watchId = await Geolocation.watchPosition(
-        { enableHighAccuracy: true, timeout: 10000, maximumAge: 2000 },
+        { enableHighAccuracy: true, maximumAge: 0 },
         (pos, err) => {
           if (err) {
             setIsCalculating(false);
@@ -940,6 +940,308 @@ function App() {
             />
           )}
         </AnimatePresence>
+      {/* HISTORY PAGE â€” "TACTICAL ARCHIVE"                        */}
+      {/* â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• */}
+      <AnimatePresence>
+        {activePage === "history" && (
+          <motion.div
+            initial={{ opacity: 0, x: 40 }}
+            animate={{ opacity: 1, x: 0 }}
+            exit={{ opacity: 0, x: 40 }}
+            transition={{ duration: 0.22 }}
+            className="fixed inset-0 z-[1800] flex flex-col"
+            style={{ background: "#080e1a" }}
+          >
+            {/* AEGIS top bar */}
+            <div
+              className="flex items-center justify-between px-4 py-3 border-b border-slate-800/60 shrink-0"
+              style={{ background: "#0a1020" }}
+            >
+              <button
+                onClick={() => setActivePage("map")}
+                className="flex items-center gap-1.5 text-slate-400 hover:text-white transition-colors"
+              >
+                <ChevronLeft className="w-5 h-5" />
+                <span className="text-xs font-bold tracking-wide">KEMBALI</span>
+              </button>
+              <span className="text-sm font-black text-white tracking-widest">
+                TACTICAL ARCHIVE
+              </span>
+              <div className="w-9 h-9 rounded-full bg-indigo-500/20 border border-indigo-500/30 flex items-center justify-center">
+                <Shield className="w-4 h-4 text-indigo-400" />
+              </div>
+            </div>
+
+            {/* Title */}
+            <div className="px-5 pt-5 pb-3 shrink-0">
+              <p className="text-[10px] font-bold text-indigo-400 tracking-widest uppercase mb-1">
+                Tactical Archive
+              </p>
+              <h2 className="text-3xl font-black text-white tracking-tight leading-none">
+                EVACUATION
+                <br />
+                HISTORY
+              </h2>
+            </div>
+
+            {/* Avg Response card + Visual Gauge */}
+            <div className="px-5 pb-4 shrink-0">
+              <div
+                className="p-4 rounded-2xl border border-slate-700/40"
+                style={{ background: "#0f1a2e" }}
+              >
+                <div className="flex items-center justify-between mb-3">
+                  <div>
+                    <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-1">
+                      Avg. Response Time
+                    </p>
+                    {avgResponse ? (
+                      <p className="text-4xl font-black text-white">
+                        {avgResponse}
+                        <span className="text-xl text-slate-400 font-bold ml-1">
+                          m
+                        </span>
+                      </p>
+                    ) : (
+                      <p className="text-xl font-black text-slate-600">â€” m</p>
+                    )}
+                  </div>
+                  <div className="w-12 h-12 rounded-xl bg-indigo-500/20 border border-indigo-500/20 flex items-center justify-center">
+                    <Activity className="w-6 h-6 text-indigo-400" />
+                  </div>
+                </div>
+                {/* Visual Gauge - KPI performance bar */}
+                {avgResponse &&
+                  (() => {
+                    const val = parseFloat(avgResponse);
+                    const target = 30; // 30 menit = target ideal
+                    const pct = Math.min((val / target) * 100, 100);
+                    const color =
+                      val <= 20 ? "#22c55e" : val <= 35 ? "#f59e0b" : "#ef4444";
+                    const label =
+                      val <= 20
+                        ? "EXCELLENT"
+                        : val <= 35
+                          ? "GOOD"
+                          : "NEEDS IMPROVEMENT";
+                    return (
+                      <div>
+                        <div className="flex justify-between text-[9px] font-bold uppercase tracking-widest mb-1.5">
+                          <span className="text-slate-600">
+                            Performance KPI
+                          </span>
+                          <span style={{ color }}>{label}</span>
+                        </div>
+                        <div className="w-full h-2 rounded-full bg-slate-800 overflow-hidden">
+                          <div
+                            className="h-full rounded-full transition-all duration-700"
+                            style={{ width: `${pct}%`, background: color }}
+                          />
+                        </div>
+                        <div className="flex justify-between text-[8px] text-slate-600 mt-1">
+                          <span>0m</span>
+                          <span className="text-slate-500">
+                            Target â‰¤ {target}m
+                          </span>
+                          <span>{target}m+</span>
+                        </div>
+                        {/* Trend bars â€” last 5 logs */}
+                        {evacuationHistory.length > 1 && (
+                          <div className="mt-3 pt-3 border-t border-slate-800/60">
+                            <p className="text-[8px] text-slate-600 uppercase tracking-widest mb-1.5 font-bold">
+                              Last {Math.min(evacuationHistory.length, 6)}{" "}
+                              Sessions
+                            </p>
+                            <div className="flex items-end gap-1 h-8">
+                              {evacuationHistory
+                                .slice(0, 6)
+                                .reverse()
+                                .map((r, i) => {
+                                  const t = r.walkingTime ?? 0;
+                                  const h = Math.max(
+                                    Math.min((t / 60) * 100, 100),
+                                    10,
+                                  );
+                                  const c =
+                                    t <= 20
+                                      ? "#22c55e"
+                                      : t <= 35
+                                        ? "#f59e0b"
+                                        : "#ef4444";
+                                  return (
+                                    <div
+                                      key={i}
+                                      className="flex-1 rounded-sm transition-all"
+                                      style={{
+                                        height: `${h}%`,
+                                        background: c,
+                                        opacity: 0.7,
+                                      }}
+                                    />
+                                  );
+                                })}
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })()}
+                {!avgResponse && (
+                  <p className="text-[10px] text-slate-600">
+                    Jalankan simulasi untuk melihat statistik performa.
+                  </p>
+                )}
+              </div>
+            </div>
+
+            {/* Filter tabs */}
+            <div className="px-5 pb-3 flex gap-2 shrink-0 overflow-x-auto">
+              {[
+                { id: "all" as HistoryFilter, label: "âˆž ALL LOGS" },
+                { id: "real" as HistoryFilter, label: "â–² REAL ALERTS" },
+                { id: "simulation" as HistoryFilter, label: "â—ˆ SIMULATION" },
+              ].map((tab) => (
+                <button
+                  key={tab.id}
+                  onClick={() => setHistoryFilter(tab.id)}
+                  className={`px-3 py-1.5 rounded-full text-xs font-bold whitespace-nowrap transition-all
+                    ${historyFilter === tab.id ? "bg-indigo-600 text-white" : "bg-slate-800/60 text-slate-500 hover:text-slate-300"}`}
+                >
+                  {tab.label}
+                </button>
+              ))}
+            </div>
+
+            {/* Log list */}
+            <div className="flex-1 overflow-y-auto custom-scrollbar px-4 pb-4">
+              {evacuationHistory.length === 0 ? (
+                <div className="flex flex-col items-center justify-center h-full gap-4">
+                  <div className="w-20 h-20 rounded-full bg-slate-800/40 flex items-center justify-center">
+                    <History className="w-10 h-10 text-slate-600" />
+                  </div>
+                  <div className="text-center">
+                    <p className="text-slate-400 font-semibold">
+                      Tidak ada log
+                    </p>
+                    <p className="text-xs text-slate-600 mt-1 max-w-[240px]">
+                      Jalankan simulasi atau klik peta untuk mencatat riwayat
+                      evakuasi.
+                    </p>
+                  </div>
+                  <button
+                    onClick={() => setActivePage("map")}
+                    className="px-5 py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl font-bold text-sm transition-colors"
+                  >
+                    Buka Peta
+                  </button>
+                </div>
+              ) : filteredHistory.length === 0 ? (
+                <div className="flex flex-col items-center justify-center h-40 gap-2">
+                  <p className="text-slate-500 text-sm">
+                    Tidak ada log untuk filter ini
+                  </p>
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  {filteredHistory.map((record, idx) => (
+                    <div
+                      key={record.id}
+                      className="rounded-2xl border border-slate-800/60 overflow-hidden"
+                      style={{ background: "#0c1525" }}
+                    >
+                      {/* Card header */}
+                      <div className="px-4 pt-4 pb-3">
+                        <div className="flex items-start justify-between gap-2 mb-2">
+                          <span
+                            className={`text-[10px] font-black px-2 py-0.5 rounded uppercase tracking-wider shrink-0
+                            ${
+                              record.type === "real"
+                                ? "bg-red-500/20 text-red-400 border border-red-500/30"
+                                : "bg-indigo-500/20 text-indigo-300 border border-indigo-500/30"
+                            }`}
+                          >
+                            {record.type === "real"
+                              ? "Real Alert"
+                              : "Simulation"}
+                          </span>
+                          <span className="text-[10px] text-slate-600 text-right">
+                            {fmtDate(record.timestamp)}
+                          </span>
+                        </div>
+                        <h3 className="text-sm font-black text-white leading-tight mb-1">
+                          {record.eventName}
+                        </h3>
+                        <p className="text-xs text-slate-500 flex items-center gap-1">
+                          <Navigation2 className="w-3 h-3 shrink-0" />
+                          To {record.routeName} (Primary Shelter)
+                        </p>
+                      </div>
+
+                      {/* Stats + status */}
+                      <div className="px-4 pb-3 flex items-center justify-between">
+                        <span
+                          className={`text-[10px] font-bold uppercase tracking-widest
+                          ${record.type === "simulation" ? "text-indigo-500/50" : "text-red-500/60"}`}
+                        >
+                          {record.type === "simulation"
+                            ? "Simulation Complete"
+                            : "Alert Dismissed"}
+                        </span>
+                        <div className="flex items-center gap-5">
+                          <div className="text-right">
+                            <p className="text-xs font-black text-white">
+                              {record.walkingTime != null
+                                ? `${record.walkingTime}m`
+                                : "â€”"}
+                            </p>
+                            <p className="text-[9px] text-slate-600 uppercase tracking-wider">
+                              TIME
+                            </p>
+                          </div>
+                          <div className="text-right">
+                            <p className="text-xs font-black text-white">
+                              {record.distance != null
+                                ? `${record.distance.toFixed(1)}km`
+                                : "â€”"}
+                            </p>
+                            <p className="text-[9px] text-slate-600 uppercase tracking-wider">
+                              DIST
+                            </p>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Mini route map */}
+                      <div className="px-4 pb-4">
+                        <MiniRouteMap type={record.type} seed={idx} />
+                      </div>
+                    </div>
+                  ))}
+
+                  {/* Clear all */}
+                  <button
+                    onClick={() => {
+                      if (confirm("Hapus semua riwayat evakuasi?")) {
+                        setEvacuationHistory([]);
+                        localStorage.removeItem("evacuationHistory");
+                      }
+                    }}
+                    className="w-full py-3 border border-red-900/40 text-red-500/60 rounded-xl text-xs font-bold hover:bg-red-900/20 transition-colors flex items-center justify-center gap-2"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" /> Hapus Semua Riwayat
+                  </button>
+                  <div className="h-4" />
+                </div>
+              )}
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• */}
+      {/* SETTINGS PAGE â€” "SYSTEM CONFIGURATION"                   */}
+      {/* â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• */}
+      <AnimatePresence>
 
         {/* USER BOTTOM NAV â€” fixed z-[1900] sits on top of pages */}
         <nav
@@ -1007,6 +1309,152 @@ function App() {
         </nav>
 
         {/* First Visit Modal â€” shown when no name stored yet */}
+      {/* â•â• ARRIVAL MODAL â€” full-screen, muncul ketika simulasi selesai (dalam radius) â•â• */}
+      <AnimatePresence>
+        {arrivalSummary && (
+          <motion.div
+            key="arrival-modal"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-[2200] flex flex-col items-center justify-center bg-black/85 backdrop-blur-md p-4"
+          >
+            <motion.div
+              initial={{ scale: 0.85, opacity: 0, y: 40 }}
+              animate={{ scale: 1, opacity: 1, y: 0 }}
+              exit={{ scale: 0.85, opacity: 0, y: 40 }}
+              transition={{ type: "spring", damping: 22, stiffness: 280 }}
+              className="w-full max-w-sm relative"
+            >
+              {/* Card */}
+              <div className="relative overflow-hidden rounded-3xl border border-emerald-500/40 bg-[#071410] shadow-[0_20px_80px_rgba(34,197,94,0.35)]">
+                {/* Shimmer sweep */}
+                <div className="absolute inset-0 pointer-events-none overflow-hidden rounded-3xl">
+                  <div className="absolute -inset-2 bg-gradient-to-r from-transparent via-emerald-400/8 to-transparent animate-[shimmer_3s_infinite] -skew-x-12" />
+                </div>
+
+                {/* Top accent bar */}
+                <div className="h-1.5 w-full bg-gradient-to-r from-emerald-700 via-emerald-400 to-emerald-700" />
+
+                <div className="p-6">
+                  {/* Icon + pulse */}
+                  <div className="flex justify-center mb-5">
+                    <div className="relative">
+                      <div className="w-20 h-20 rounded-3xl bg-emerald-500/15 border border-emerald-500/30 flex items-center justify-center">
+                        <CheckCircle2 className="w-10 h-10 text-emerald-400" />
+                      </div>
+                      <div className="absolute inset-0 rounded-3xl border-2 border-emerald-400/60 animate-ping" />
+                      <div
+                        className="absolute inset-0 rounded-3xl border border-emerald-400/30 animate-ping"
+                        style={{ animationDelay: "0.4s" }}
+                      />
+                    </div>
+                  </div>
+
+                  {/* Title */}
+                  <p className="text-center text-[10px] font-bold text-emerald-400 tracking-[0.2em] uppercase mb-1">
+                    Navigasi Selesai
+                  </p>
+                  <h2 className="text-center text-2xl font-black text-white mb-1 leading-tight">
+                    ANDA TELAH TIBA
+                  </h2>
+                  <p className="text-center text-sm text-emerald-300/70 mb-6">
+                    di titik evakuasi aman
+                  </p>
+
+                  {/* Shelter name */}
+                  <div className="mb-5 p-4 rounded-2xl bg-emerald-950/60 border border-emerald-800/40">
+                    <div className="flex items-start gap-3">
+                      <div className="w-9 h-9 rounded-xl bg-emerald-500/20 flex items-center justify-center shrink-0 mt-0.5">
+                        <MapPin className="w-4.5 h-4.5 text-emerald-400" />
+                      </div>
+                      <div className="min-w-0">
+                        <p className="text-[10px] text-emerald-400/70 font-bold uppercase tracking-wider mb-0.5">
+                          Lokasi Evakuasi
+                        </p>
+                        <p className="text-white font-bold text-sm leading-snug">
+                          {arrivalSummary.shelter.name}
+                        </p>
+                        <p className="text-[11px] text-emerald-300/50 mt-0.5">
+                          Kapasitas{" "}
+                          {arrivalSummary.shelter.capacity.toLocaleString(
+                            "id-ID",
+                          )}{" "}
+                          orang
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Stats row */}
+                  <div className="grid grid-cols-2 gap-3 mb-6">
+                    <div className="p-3 rounded-xl bg-slate-900/60 border border-slate-700/40 text-center">
+                      <p className="text-[9px] text-slate-500 uppercase tracking-widest font-bold mb-1">
+                        Jarak Tempuh
+                      </p>
+                      <p className="text-xl font-black text-white">
+                        {arrivalSummary.distanceKm > 0
+                          ? arrivalSummary.distanceKm.toFixed(2)
+                          : "â€”"}
+                        <span className="text-xs font-bold text-slate-400 ml-1">
+                          km
+                        </span>
+                      </p>
+                    </div>
+                    <div className="p-3 rounded-xl bg-slate-900/60 border border-slate-700/40 text-center">
+                      <p className="text-[9px] text-slate-500 uppercase tracking-widest font-bold mb-1">
+                        Waktu Estimasi
+                      </p>
+                      <p className="text-xl font-black text-white">
+                        {arrivalSummary.walkingMin > 0
+                          ? arrivalSummary.walkingMin
+                          : "â€”"}
+                        <span className="text-xs font-bold text-slate-400 ml-1">
+                          min
+                        </span>
+                      </p>
+                    </div>
+                  </div>
+
+                  {/* Radius info */}
+                  <p className="text-center text-[10px] text-slate-500 mb-5 flex items-center justify-center gap-1.5">
+                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 inline-block" />
+                    GPS berhenti otomatis Â· dalam radius{" "}
+                    {shelters.find((s) => s.id === arrivedShelterId)?.radiusMeters ?? ARRIVAL_RADIUS_METERS}m
+                  </p>
+
+                  {/* Actions */}
+                  <div className="flex flex-col gap-2.5">
+                    <button
+                      onClick={() => {
+                        setArrivalSummary(null);
+                        setArrivedShelterId(null);
+                        setActivePage("history");
+                      }}
+                      className="w-full py-3.5 bg-emerald-600 hover:bg-emerald-500 active:bg-emerald-700 text-white rounded-2xl font-bold text-sm tracking-wide transition-colors flex items-center justify-center gap-2"
+                    >
+                      <History className="w-4 h-4" />
+                      Lihat Riwayat Evakuasi
+                    </button>
+                    <button
+                      onClick={() => {
+                        setArrivalSummary(null);
+                        setArrivedShelterId(null);
+                        setUserPosition(null);
+                        setRoutes([]);
+                      }}
+                      className="w-full py-3 bg-slate-800/80 hover:bg-slate-700 active:bg-slate-900 text-slate-300 rounded-2xl font-bold text-sm tracking-wide transition-colors"
+                    >
+                      Kembali ke Peta
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
         <AnimatePresence>
           {showFirstVisit && (
             <FirstVisitModal key="first-visit" onComplete={handleFirstVisit} />
@@ -1547,10 +1995,10 @@ function App() {
                 animate={{ y: 0 }}
                 exit={{ y: "100%" }}
                 transition={{ type: "spring", damping: 30, stiffness: 300 }}
-                className="fixed bottom-[60px] left-0 right-0 z-[500] max-h-[65vh] flex flex-col bg-[#0f172a]/98 backdrop-blur-xl rounded-t-2xl border-t border-slate-700/50 shadow-[0_-10px_40px_rgba(0,0,0,0.7)]"
+                className="fixed bottom-[60px] left-0 right-0 z-[500] max-h-[65vh] flex flex-col bg-slate-900 rounded-t-2xl border-t border-slate-700 shadow-[0_-10px_40px_rgba(0,0,0,0.7)]"
               >
                 <div className="flex justify-center pt-2 pb-1">
-                  <div className="w-10 h-1 rounded-full bg-slate-700" />
+                  <div className="w-10 h-1 rounded-full bg-slate-600" />
                 </div>
                 <div className="px-4 pb-3 flex items-start justify-between">
                   <div className="flex items-center gap-3">
@@ -1574,7 +2022,7 @@ function App() {
                       setShowPanel(false);
                       panelUserClosedRef.current = true;
                     }}
-                    className="w-9 h-9 rounded-xl bg-slate-700/80 hover:bg-slate-600 active:bg-red-900/50 flex items-center justify-center text-slate-300 hover:text-white active:text-red-400 transition-colors shrink-0"
+                    className="w-9 h-9 rounded-xl bg-slate-800 hover:bg-slate-700 active:bg-red-900/50 flex items-center justify-center text-slate-300 hover:text-white active:text-red-400 transition-colors shrink-0"
                   >
                     <X className="w-5 h-5" />
                   </button>
@@ -1594,8 +2042,8 @@ function App() {
                       className={`w-full text-left p-4 rounded-xl border transition-all duration-200 flex items-center gap-3
                         ${
                           selectedRoute === i
-                            ? "bg-[#1e293b]/80 border-indigo-500/50 shadow-[0_0_15px_rgba(99,102,241,0.1)]"
-                            : "bg-[#1e293b]/30 border-slate-800 active:bg-[#1e293b]/60"
+                            ? "bg-indigo-900/80 border-indigo-400 shadow-[0_0_15px_rgba(99,102,241,0.4)]"
+                            : "bg-slate-800 border-slate-700 active:bg-slate-700"
                         }`}
                     >
                       <div
@@ -1696,8 +2144,8 @@ function App() {
                     className={`w-full text-left p-4 rounded-xl border transition-all duration-300 relative group
                       ${
                         selectedRoute === i
-                          ? "bg-[#1e293b]/80 border-indigo-500/50 shadow-[0_0_20px_rgba(99,102,241,0.15)]"
-                          : "bg-[#1e293b]/30 border-slate-800 hover:bg-[#1e293b]/50 hover:border-slate-700"
+                          ? "bg-indigo-900/80 border-indigo-400 shadow-[0_0_15px_rgba(99,102,241,0.4)]"
+                          : "bg-slate-800 border-slate-700 hover:bg-slate-700 hover:border-slate-600"
                       }`}
                   >
                     <div className="flex justify-between items-center mb-2">
@@ -2036,455 +2484,7 @@ function App() {
         </div>
       )}
 
-      {/* â•â• ARRIVAL MODAL â€” full-screen, muncul ketika simulasi selesai (dalam radius) â•â• */}
-      <AnimatePresence>
-        {arrivalSummary && (
-          <motion.div
-            key="arrival-modal"
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            className="fixed inset-0 z-[2200] flex flex-col items-center justify-center bg-black/85 backdrop-blur-md p-4"
-          >
-            <motion.div
-              initial={{ scale: 0.85, opacity: 0, y: 40 }}
-              animate={{ scale: 1, opacity: 1, y: 0 }}
-              exit={{ scale: 0.85, opacity: 0, y: 40 }}
-              transition={{ type: "spring", damping: 22, stiffness: 280 }}
-              className="w-full max-w-sm relative"
-            >
-              {/* Card */}
-              <div className="relative overflow-hidden rounded-3xl border border-emerald-500/40 bg-[#071410] shadow-[0_20px_80px_rgba(34,197,94,0.35)]">
-                {/* Shimmer sweep */}
-                <div className="absolute inset-0 pointer-events-none overflow-hidden rounded-3xl">
-                  <div className="absolute -inset-2 bg-gradient-to-r from-transparent via-emerald-400/8 to-transparent animate-[shimmer_3s_infinite] -skew-x-12" />
-                </div>
-
-                {/* Top accent bar */}
-                <div className="h-1.5 w-full bg-gradient-to-r from-emerald-700 via-emerald-400 to-emerald-700" />
-
-                <div className="p-6">
-                  {/* Icon + pulse */}
-                  <div className="flex justify-center mb-5">
-                    <div className="relative">
-                      <div className="w-20 h-20 rounded-3xl bg-emerald-500/15 border border-emerald-500/30 flex items-center justify-center">
-                        <CheckCircle2 className="w-10 h-10 text-emerald-400" />
-                      </div>
-                      <div className="absolute inset-0 rounded-3xl border-2 border-emerald-400/60 animate-ping" />
-                      <div
-                        className="absolute inset-0 rounded-3xl border border-emerald-400/30 animate-ping"
-                        style={{ animationDelay: "0.4s" }}
-                      />
-                    </div>
-                  </div>
-
-                  {/* Title */}
-                  <p className="text-center text-[10px] font-bold text-emerald-400 tracking-[0.2em] uppercase mb-1">
-                    Navigasi Selesai
-                  </p>
-                  <h2 className="text-center text-2xl font-black text-white mb-1 leading-tight">
-                    ANDA TELAH TIBA
-                  </h2>
-                  <p className="text-center text-sm text-emerald-300/70 mb-6">
-                    di titik evakuasi aman
-                  </p>
-
-                  {/* Shelter name */}
-                  <div className="mb-5 p-4 rounded-2xl bg-emerald-950/60 border border-emerald-800/40">
-                    <div className="flex items-start gap-3">
-                      <div className="w-9 h-9 rounded-xl bg-emerald-500/20 flex items-center justify-center shrink-0 mt-0.5">
-                        <MapPin className="w-4.5 h-4.5 text-emerald-400" />
-                      </div>
-                      <div className="min-w-0">
-                        <p className="text-[10px] text-emerald-400/70 font-bold uppercase tracking-wider mb-0.5">
-                          Lokasi Evakuasi
-                        </p>
-                        <p className="text-white font-bold text-sm leading-snug">
-                          {arrivalSummary.shelter.name}
-                        </p>
-                        <p className="text-[11px] text-emerald-300/50 mt-0.5">
-                          Kapasitas{" "}
-                          {arrivalSummary.shelter.capacity.toLocaleString(
-                            "id-ID",
-                          )}{" "}
-                          orang
-                        </p>
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Stats row */}
-                  <div className="grid grid-cols-2 gap-3 mb-6">
-                    <div className="p-3 rounded-xl bg-slate-900/60 border border-slate-700/40 text-center">
-                      <p className="text-[9px] text-slate-500 uppercase tracking-widest font-bold mb-1">
-                        Jarak Tempuh
-                      </p>
-                      <p className="text-xl font-black text-white">
-                        {arrivalSummary.distanceKm > 0
-                          ? arrivalSummary.distanceKm.toFixed(2)
-                          : "â€”"}
-                        <span className="text-xs font-bold text-slate-400 ml-1">
-                          km
-                        </span>
-                      </p>
-                    </div>
-                    <div className="p-3 rounded-xl bg-slate-900/60 border border-slate-700/40 text-center">
-                      <p className="text-[9px] text-slate-500 uppercase tracking-widest font-bold mb-1">
-                        Waktu Estimasi
-                      </p>
-                      <p className="text-xl font-black text-white">
-                        {arrivalSummary.walkingMin > 0
-                          ? arrivalSummary.walkingMin
-                          : "â€”"}
-                        <span className="text-xs font-bold text-slate-400 ml-1">
-                          min
-                        </span>
-                      </p>
-                    </div>
-                  </div>
-
-                  {/* Radius info */}
-                  <p className="text-center text-[10px] text-slate-500 mb-5 flex items-center justify-center gap-1.5">
-                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 inline-block" />
-                    GPS berhenti otomatis Â· dalam radius{" "}
-                    {shelters.find((s) => s.id === arrivedShelterId)?.radiusMeters ?? ARRIVAL_RADIUS_METERS}m
-                  </p>
-
-                  {/* Actions */}
-                  <div className="flex flex-col gap-2.5">
-                    <button
-                      onClick={() => {
-                        setArrivalSummary(null);
-                        setArrivedShelterId(null);
-                        setActivePage("history");
-                      }}
-                      className="w-full py-3.5 bg-emerald-600 hover:bg-emerald-500 active:bg-emerald-700 text-white rounded-2xl font-bold text-sm tracking-wide transition-colors flex items-center justify-center gap-2"
-                    >
-                      <History className="w-4 h-4" />
-                      Lihat Riwayat Evakuasi
-                    </button>
-                    <button
-                      onClick={() => {
-                        setArrivalSummary(null);
-                        setArrivedShelterId(null);
-                        setUserPosition(null);
-                        setRoutes([]);
-                      }}
-                      className="w-full py-3 bg-slate-800/80 hover:bg-slate-700 active:bg-slate-900 text-slate-300 rounded-2xl font-bold text-sm tracking-wide transition-colors"
-                    >
-                      Kembali ke Peta
-                    </button>
-                  </div>
-                </div>
-              </div>
-            </motion.div>
-          </motion.div>
-        )}
-      </AnimatePresence>
-
       {/* â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• */}
-      {/* HISTORY PAGE â€” "TACTICAL ARCHIVE"                        */}
-      {/* â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• */}
-      <AnimatePresence>
-        {activePage === "history" && (
-          <motion.div
-            initial={{ opacity: 0, x: 40 }}
-            animate={{ opacity: 1, x: 0 }}
-            exit={{ opacity: 0, x: 40 }}
-            transition={{ duration: 0.22 }}
-            className="fixed inset-0 z-[1800] flex flex-col"
-            style={{ background: "#080e1a" }}
-          >
-            {/* AEGIS top bar */}
-            <div
-              className="flex items-center justify-between px-4 py-3 border-b border-slate-800/60 shrink-0"
-              style={{ background: "#0a1020" }}
-            >
-              <button
-                onClick={() => setActivePage("map")}
-                className="flex items-center gap-1.5 text-slate-400 hover:text-white transition-colors"
-              >
-                <ChevronLeft className="w-5 h-5" />
-                <span className="text-xs font-bold tracking-wide">KEMBALI</span>
-              </button>
-              <span className="text-sm font-black text-white tracking-widest">
-                TACTICAL ARCHIVE
-              </span>
-              <div className="w-9 h-9 rounded-full bg-indigo-500/20 border border-indigo-500/30 flex items-center justify-center">
-                <Shield className="w-4 h-4 text-indigo-400" />
-              </div>
-            </div>
-
-            {/* Title */}
-            <div className="px-5 pt-5 pb-3 shrink-0">
-              <p className="text-[10px] font-bold text-indigo-400 tracking-widest uppercase mb-1">
-                Tactical Archive
-              </p>
-              <h2 className="text-3xl font-black text-white tracking-tight leading-none">
-                EVACUATION
-                <br />
-                HISTORY
-              </h2>
-            </div>
-
-            {/* Avg Response card + Visual Gauge */}
-            <div className="px-5 pb-4 shrink-0">
-              <div
-                className="p-4 rounded-2xl border border-slate-700/40"
-                style={{ background: "#0f1a2e" }}
-              >
-                <div className="flex items-center justify-between mb-3">
-                  <div>
-                    <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-1">
-                      Avg. Response Time
-                    </p>
-                    {avgResponse ? (
-                      <p className="text-4xl font-black text-white">
-                        {avgResponse}
-                        <span className="text-xl text-slate-400 font-bold ml-1">
-                          m
-                        </span>
-                      </p>
-                    ) : (
-                      <p className="text-xl font-black text-slate-600">â€” m</p>
-                    )}
-                  </div>
-                  <div className="w-12 h-12 rounded-xl bg-indigo-500/20 border border-indigo-500/20 flex items-center justify-center">
-                    <Activity className="w-6 h-6 text-indigo-400" />
-                  </div>
-                </div>
-                {/* Visual Gauge - KPI performance bar */}
-                {avgResponse &&
-                  (() => {
-                    const val = parseFloat(avgResponse);
-                    const target = 30; // 30 menit = target ideal
-                    const pct = Math.min((val / target) * 100, 100);
-                    const color =
-                      val <= 20 ? "#22c55e" : val <= 35 ? "#f59e0b" : "#ef4444";
-                    const label =
-                      val <= 20
-                        ? "EXCELLENT"
-                        : val <= 35
-                          ? "GOOD"
-                          : "NEEDS IMPROVEMENT";
-                    return (
-                      <div>
-                        <div className="flex justify-between text-[9px] font-bold uppercase tracking-widest mb-1.5">
-                          <span className="text-slate-600">
-                            Performance KPI
-                          </span>
-                          <span style={{ color }}>{label}</span>
-                        </div>
-                        <div className="w-full h-2 rounded-full bg-slate-800 overflow-hidden">
-                          <div
-                            className="h-full rounded-full transition-all duration-700"
-                            style={{ width: `${pct}%`, background: color }}
-                          />
-                        </div>
-                        <div className="flex justify-between text-[8px] text-slate-600 mt-1">
-                          <span>0m</span>
-                          <span className="text-slate-500">
-                            Target â‰¤ {target}m
-                          </span>
-                          <span>{target}m+</span>
-                        </div>
-                        {/* Trend bars â€” last 5 logs */}
-                        {evacuationHistory.length > 1 && (
-                          <div className="mt-3 pt-3 border-t border-slate-800/60">
-                            <p className="text-[8px] text-slate-600 uppercase tracking-widest mb-1.5 font-bold">
-                              Last {Math.min(evacuationHistory.length, 6)}{" "}
-                              Sessions
-                            </p>
-                            <div className="flex items-end gap-1 h-8">
-                              {evacuationHistory
-                                .slice(0, 6)
-                                .reverse()
-                                .map((r, i) => {
-                                  const t = r.walkingTime ?? 0;
-                                  const h = Math.max(
-                                    Math.min((t / 60) * 100, 100),
-                                    10,
-                                  );
-                                  const c =
-                                    t <= 20
-                                      ? "#22c55e"
-                                      : t <= 35
-                                        ? "#f59e0b"
-                                        : "#ef4444";
-                                  return (
-                                    <div
-                                      key={i}
-                                      className="flex-1 rounded-sm transition-all"
-                                      style={{
-                                        height: `${h}%`,
-                                        background: c,
-                                        opacity: 0.7,
-                                      }}
-                                    />
-                                  );
-                                })}
-                            </div>
-                          </div>
-                        )}
-                      </div>
-                    );
-                  })()}
-                {!avgResponse && (
-                  <p className="text-[10px] text-slate-600">
-                    Jalankan simulasi untuk melihat statistik performa.
-                  </p>
-                )}
-              </div>
-            </div>
-
-            {/* Filter tabs */}
-            <div className="px-5 pb-3 flex gap-2 shrink-0 overflow-x-auto">
-              {[
-                { id: "all" as HistoryFilter, label: "âˆž ALL LOGS" },
-                { id: "real" as HistoryFilter, label: "â–² REAL ALERTS" },
-                { id: "simulation" as HistoryFilter, label: "â—ˆ SIMULATION" },
-              ].map((tab) => (
-                <button
-                  key={tab.id}
-                  onClick={() => setHistoryFilter(tab.id)}
-                  className={`px-3 py-1.5 rounded-full text-xs font-bold whitespace-nowrap transition-all
-                    ${historyFilter === tab.id ? "bg-indigo-600 text-white" : "bg-slate-800/60 text-slate-500 hover:text-slate-300"}`}
-                >
-                  {tab.label}
-                </button>
-              ))}
-            </div>
-
-            {/* Log list */}
-            <div className="flex-1 overflow-y-auto custom-scrollbar px-4 pb-4">
-              {evacuationHistory.length === 0 ? (
-                <div className="flex flex-col items-center justify-center h-full gap-4">
-                  <div className="w-20 h-20 rounded-full bg-slate-800/40 flex items-center justify-center">
-                    <History className="w-10 h-10 text-slate-600" />
-                  </div>
-                  <div className="text-center">
-                    <p className="text-slate-400 font-semibold">
-                      Tidak ada log
-                    </p>
-                    <p className="text-xs text-slate-600 mt-1 max-w-[240px]">
-                      Jalankan simulasi atau klik peta untuk mencatat riwayat
-                      evakuasi.
-                    </p>
-                  </div>
-                  <button
-                    onClick={() => setActivePage("map")}
-                    className="px-5 py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl font-bold text-sm transition-colors"
-                  >
-                    Buka Peta
-                  </button>
-                </div>
-              ) : filteredHistory.length === 0 ? (
-                <div className="flex flex-col items-center justify-center h-40 gap-2">
-                  <p className="text-slate-500 text-sm">
-                    Tidak ada log untuk filter ini
-                  </p>
-                </div>
-              ) : (
-                <div className="space-y-4">
-                  {filteredHistory.map((record, idx) => (
-                    <div
-                      key={record.id}
-                      className="rounded-2xl border border-slate-800/60 overflow-hidden"
-                      style={{ background: "#0c1525" }}
-                    >
-                      {/* Card header */}
-                      <div className="px-4 pt-4 pb-3">
-                        <div className="flex items-start justify-between gap-2 mb-2">
-                          <span
-                            className={`text-[10px] font-black px-2 py-0.5 rounded uppercase tracking-wider shrink-0
-                            ${
-                              record.type === "real"
-                                ? "bg-red-500/20 text-red-400 border border-red-500/30"
-                                : "bg-indigo-500/20 text-indigo-300 border border-indigo-500/30"
-                            }`}
-                          >
-                            {record.type === "real"
-                              ? "Real Alert"
-                              : "Simulation"}
-                          </span>
-                          <span className="text-[10px] text-slate-600 text-right">
-                            {fmtDate(record.timestamp)}
-                          </span>
-                        </div>
-                        <h3 className="text-sm font-black text-white leading-tight mb-1">
-                          {record.eventName}
-                        </h3>
-                        <p className="text-xs text-slate-500 flex items-center gap-1">
-                          <Navigation2 className="w-3 h-3 shrink-0" />
-                          To {record.routeName} (Primary Shelter)
-                        </p>
-                      </div>
-
-                      {/* Stats + status */}
-                      <div className="px-4 pb-3 flex items-center justify-between">
-                        <span
-                          className={`text-[10px] font-bold uppercase tracking-widest
-                          ${record.type === "simulation" ? "text-indigo-500/50" : "text-red-500/60"}`}
-                        >
-                          {record.type === "simulation"
-                            ? "Simulation Complete"
-                            : "Alert Dismissed"}
-                        </span>
-                        <div className="flex items-center gap-5">
-                          <div className="text-right">
-                            <p className="text-xs font-black text-white">
-                              {record.walkingTime != null
-                                ? `${record.walkingTime}m`
-                                : "â€”"}
-                            </p>
-                            <p className="text-[9px] text-slate-600 uppercase tracking-wider">
-                              TIME
-                            </p>
-                          </div>
-                          <div className="text-right">
-                            <p className="text-xs font-black text-white">
-                              {record.distance != null
-                                ? `${record.distance.toFixed(1)}km`
-                                : "â€”"}
-                            </p>
-                            <p className="text-[9px] text-slate-600 uppercase tracking-wider">
-                              DIST
-                            </p>
-                          </div>
-                        </div>
-                      </div>
-
-                      {/* Mini route map */}
-                      <div className="px-4 pb-4">
-                        <MiniRouteMap type={record.type} seed={idx} />
-                      </div>
-                    </div>
-                  ))}
-
-                  {/* Clear all */}
-                  <button
-                    onClick={() => {
-                      if (confirm("Hapus semua riwayat evakuasi?")) {
-                        setEvacuationHistory([]);
-                        localStorage.removeItem("evacuationHistory");
-                      }
-                    }}
-                    className="w-full py-3 border border-red-900/40 text-red-500/60 rounded-xl text-xs font-bold hover:bg-red-900/20 transition-colors flex items-center justify-center gap-2"
-                  >
-                    <Trash2 className="w-3.5 h-3.5" /> Hapus Semua Riwayat
-                  </button>
-                  <div className="h-4" />
-                </div>
-              )}
-            </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
-
-      {/* â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• */}
-      {/* SETTINGS PAGE â€” "SYSTEM CONFIGURATION"                   */}
-      {/* â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• */}
-      <AnimatePresence>
         {activePage === "settings" && (
           <motion.div
             initial={{ opacity: 0, x: 40 }}
