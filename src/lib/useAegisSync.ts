@@ -24,6 +24,18 @@ export interface AegisSyncEvent {
     | "PING"
     | "PING_REPLY"
     | "LOCATION_UPDATE";
+  fromId?: string;
+  fromName?: string;
+  toId?: string;
+  role?: string;
+  id?: string;
+  name?: string;
+  deviceModel?: string;
+  lat?: number;
+  lng?: number;
+  battery?: number;
+  active?: boolean;
+  ts?: number;
   [key: string]: unknown;
 }
 
@@ -56,17 +68,20 @@ export const aegisApi = {
   notifyFamilyJoin: (fromId: string, fromName: string, toId: string) =>
     apiPost("/api/family/join", { fromId, fromName, toId }),
 
-  /** Ping all connected devices */
-  ping: (fromId: string, fromName: string) =>
-    apiPost("/api/ping", { fromId, fromName }),
+  /** Ping a specific device (or all if toId is missing) */
+  ping: (fromId: string, fromName: string, toId?: string, role?: string) =>
+    apiPost("/api/ping", { fromId, fromName, toId, role }),
+
+  adminPing: (fromId: string, fromName: string, toId: string, role: string) =>
+    apiPost("/api/ping", { fromId, fromName, toId, role }, true),
 
   /** Reply to a ping */
   pingReply: (fromId: string, fromName: string, toId: string) =>
     apiPost("/api/ping/reply", { fromId, fromName, toId }),
 
   /** Broadcast user location to admin dashboard */
-  broadcastLocation: (id: string, name: string, deviceModel: string, lat: number, lng: number) =>
-    apiPost('/api/location', { id, name, deviceModel, lat, lng }),
+  broadcastLocation: (id: string, name: string, deviceModel: string, lat: number, lng: number, battery: number) =>
+    apiPost('/api/location', { id, name, deviceModel, lat, lng, battery }),
 
   /** Get current tsunami state on mount */
   getTsunami: async (): Promise<{ active: boolean; ts: number }> => {

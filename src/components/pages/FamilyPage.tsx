@@ -273,9 +273,12 @@ function AddMemberModal({ onClose, onAdd }: { onClose: () => void; onAdd: (m: Fa
 
 
 // ── Main FamilyPage ───────────────────────────────────────────
-interface Props { onBack?: () => void }
+interface Props {
+  onBack: () => void
+  onPingClear?: () => void
+}
 
-export default function FamilyPage({ onBack }: Props) {
+export default function FamilyPage({ onBack, onPingClear }: Props) {
   const myId = getMyAegisId()
   const [members, setMembers] = useState<FamilyMember[]>(loadFamily)
   const [showQR, setShowQR] = useState(false)
@@ -283,6 +286,31 @@ export default function FamilyPage({ onBack }: Props) {
   const [viewMember, setViewMember] = useState<FamilyMember | null>(null)
   const [pinging, setPinging] = useState(false)
   const [pingBanner, setPingBanner] = useState('')
+  const [incomingPing, setIncomingPing] = useState<{fromId: string, fromName: string} | null>(null)
+  const alarmRef = useRef<HTMLAudioElement | null>(null);
+  const familyPingIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  useEffect(() => {
+    onPingClear?.();
+    alarmRef.current = new Audio("/alarm.mp3");
+    alarmRef.current.loop = true;
+    return () => alarmRef.current?.pause();
+  }, [onPingClear]);
+
+  useEffect(() => {
+    if (incomingPing) {
+      const doVibrate = () => {
+        if ("vibrate" in navigator) navigator.vibrate([300, 100, 300]);
+        alarmRef.current?.play?.().catch(() => {});
+      };
+      doVibrate();
+      familyPingIntervalRef.current = setInterval(doVibrate, 1500);
+      return () => {
+        if (familyPingIntervalRef.current) clearInterval(familyPingIntervalRef.current);
+        alarmRef.current?.pause?.();
+      };
+    }
+  }, [incomingPing]);
 
   const save = useCallback((m: FamilyMember[]) => { setMembers(m); saveFamily(m) }, [])
 
@@ -295,7 +323,7 @@ export default function FamilyPage({ onBack }: Props) {
       saveMemberLoc(myId, lat, lng)
       // Broadcast via server if online
       const deviceInfo = (window as any).__DEVICE_MODEL__ || navigator.userAgent;
-      aegisApi.broadcastLocation(myId, getMyName(), deviceInfo, lat, lng).catch(() => {})
+      aegisApi.broadcastLocation(myId, getMyName(), deviceInfo, lat, lng, 100).catch(() => {})
     }, () => {}, { enableHighAccuracy: true })
     return () => navigator.geolocation.clearWatch(w)
   }, [myId])
@@ -322,9 +350,9 @@ export default function FamilyPage({ onBack }: Props) {
       if (id && lat && lng) saveMemberLoc(id, lat, lng)
     }
     if (event.type === 'PING' && event.fromId !== myId) {
-      if ('vibrate' in navigator) navigator.vibrate([300, 100, 300])
-      setPingBanner(`📡 Ping dari ${event.fromName as string}`)
-      setTimeout(() => { aegisApi.pingReply(myId, getMyName(), event.fromId as string); setPingBanner('') }, 1500)
+      if (!event.role) { // Family ping
+        setIncomingPing({fromId: event.fromId as string, fromName: event.fromName as string})
+      }
     }
     if (event.type === 'PING_REPLY' && event.toId === myId) {
       const current = loadFamily()
@@ -463,7 +491,41 @@ export default function FamilyPage({ onBack }: Props) {
             Lokasi anggota disimpan di perangkat Anda. Saat online, lokasi diperbarui otomatis via SSE.
             Saat offline, lokasi terakhir yang tersimpan tetap bisa dilihat di peta.
           </p>
+          {/* INCOMING PING MODAL */}
         </div>
+        <AnimatePresence>
+          {incomingPing && (
+            <motion.div
+              initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+              className="fixed inset-0 z-[3000] flex items-center justify-center bg-black/80 backdrop-blur-md p-4"
+            >
+              <motion.div
+                initial={{ scale: 0.9, y: 20 }} animate={{ scale: 1, y: 0 }} exit={{ scale: 0.9, y: 20 }}
+                className="w-full max-w-xs bg-slate-900 border-2 border-emerald-500/50 rounded-3xl p-6 shadow-[0_0_50px_rgba(16,185,129,0.3)] relative overflow-hidden"
+              >
+                <div className="absolute inset-0 bg-emerald-500/10 animate-pulse pointer-events-none" />
+                <div className="relative z-10 flex flex-col items-center text-center">
+                  <div className="w-16 h-16 bg-emerald-600/20 rounded-full flex items-center justify-center mb-4 border border-emerald-500/50">
+                    <Radio className="w-8 h-8 text-emerald-400 animate-ping" />
+                  </div>
+                  <h2 className="text-xl font-black text-white mb-1 tracking-wide">PING KELUARGA</h2>
+                  <p className="text-sm text-slate-300 mb-6 leading-relaxed">
+                    <b className="text-white">{incomingPing.fromName}</b> memanggil Anda. Segera konfirmasi bahwa Anda aman!
+                  </p>
+                  <button
+                    onClick={() => {
+                      aegisApi.pingReply(myId, getMyName(), incomingPing.fromId);
+                      setIncomingPing(null);
+                    }}
+                    className="w-full py-4 bg-emerald-600 hover:bg-emerald-500 text-white rounded-2xl font-black text-sm tracking-widest shadow-[0_4px_20px_rgba(16,185,129,0.5)] active:scale-95 transition-all"
+                  >
+                    BALAS PING (SAYA AMAN)
+                  </button>
+                </div>
+              </motion.div>
+            </motion.div>
+          )}
+        </AnimatePresence>
       </div>
     </motion.div>
 

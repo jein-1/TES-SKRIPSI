@@ -102,11 +102,12 @@ function makeUserIcon(bearing: number, emergency = false): L.DivIcon {
 }
 
 // ── Map controller — hanya center SEKALI saat pertama / awal emergency ──
-function NavMapController({ userPos, heading, emergency, headingLocked }: {
+function NavMapController({ userPos, heading, emergency, headingLocked, mapBearing }: {
   userPos: [number, number] | null
   heading: number
   emergency: boolean
   headingLocked: boolean
+  mapBearing: number
 }) {
   const map = useMap()
   const userMarker = useRef<L.Marker | null>(null)
@@ -142,6 +143,7 @@ function NavMapController({ userPos, heading, emergency, headingLocked }: {
   // User marker
   useEffect(() => {
     if (!userPos) return
+    // Ensure the marker cone offsets map rotation
     const icon = makeUserIcon(heading, emergency)
     if (!userMarker.current) {
       userMarker.current = L.marker(userPos, { icon, zIndexOffset: 1000 }).addTo(map)
@@ -149,7 +151,7 @@ function NavMapController({ userPos, heading, emergency, headingLocked }: {
       userMarker.current.setLatLng(userPos)
       userMarker.current.setIcon(icon)
     }
-  }, [map, userPos, heading, emergency])
+  }, [map, userPos, heading, mapBearing, emergency])
 
   useEffect(() => () => { userMarker.current?.remove() }, [])
   return null
@@ -175,6 +177,12 @@ export default function NavigatePage({ routes, selectedRoute, tsunamiAlert, user
   const [activeRouteIdx, setActiveRouteIdx] = useState(selectedRoute)
   const [showRoutePanel, setShowRoutePanel] = useState(true)
   const mapRef = useRef<L.Map | null>(null)
+  const [showCalibration, setShowCalibration] = useState(() => !localStorage.getItem('compassCalibrated'))
+
+  const handleCalibrate = () => {
+    localStorage.setItem('compassCalibrated', 'true')
+    setShowCalibration(false)
+  }
   const emergency = tsunamiAlert
 
   // Selalu hitung index shelter terdekat dari posisi user saat ini
@@ -253,6 +261,27 @@ export default function NavigatePage({ routes, selectedRoute, tsunamiAlert, user
 
   const headerBg = emergency ? '#0f0505' : '#0a1020'
   const headerBorder = emergency ? 'border-red-900/40' : 'border-slate-800/60'
+
+  if (showCalibration) return (
+    <div className="fixed inset-0 z-[1900] flex items-center justify-center bg-black/95 p-6">
+      <motion.div initial={{ scale:0.85,opacity:0 }} animate={{ scale:1,opacity:1 }}
+        className="w-full max-w-sm p-6 rounded-3xl border border-indigo-500/40 bg-[#0a1020] text-center">
+        <div className="w-20 h-20 rounded-full bg-indigo-500/20 border border-indigo-500/30 flex items-center justify-center mx-auto mb-6">
+          <svg className="w-10 h-10 text-indigo-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M8 16l2.879-2.879m0 0a3 3 0 104.243-4.242 3 3 0 00-4.243 4.242zM21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+          </svg>
+        </div>
+        <h2 className="text-xl font-black text-white tracking-wide mb-3">KALIBRASI KOMPAS</h2>
+        <p className="text-sm text-slate-400 leading-relaxed mb-6">
+          Untuk mendapatkan akurasi arah yang maksimal, mohon gerakkan HP Anda membentuk <b>angka 8</b> di udara beberapa kali.
+        </p>
+        <button onClick={handleCalibrate}
+          className="w-full py-3.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl font-bold tracking-widest text-sm shadow-[0_0_20px_rgba(79,70,229,0.4)]">
+          SAYA MENGERTI
+        </button>
+      </motion.div>
+    </div>
+  )
 
   if (showMedical) return (
     <div className="fixed inset-0 z-[1900] flex items-center justify-center bg-black/90 p-6">
@@ -395,11 +424,30 @@ export default function NavigatePage({ routes, selectedRoute, tsunamiAlert, user
             />
           )}
 
+          {/* Routes */}
+          {routes.map((route, i) => {
+            const isSelected = i === activeRouteIdx;
+            return (
+              <Polyline
+                key={`road-${i}`}
+                positions={route.coordinates as [number, number][]}
+                pathOptions={{
+                  color: isSelected ? "#6366f1" : "#475569",
+                  weight: isSelected ? 6 : 4,
+                  opacity: isSelected ? 0.9 : 0.4,
+                  dashArray: emergency && isSelected ? "10 15" : undefined,
+                  className: emergency && isSelected ? "animated-route-path" : "",
+                }}
+              />
+            );
+          })}
+
           <NavMapController
             userPos={userPosition}
             heading={heading}
             emergency={emergency}
             headingLocked={headingLocked}
+            mapBearing={mapBearing}
           />
           <BearingTracker onBearing={setMapBearing}/>
         </MapContainer>

@@ -9,10 +9,10 @@ import { motion, AnimatePresence } from 'motion/react'
 export type UserRole = 'admin' | 'user'
 
 interface Props {
-  onLogin: (role: UserRole, name: string) => void
+  onLogin: (role: UserRole, name: string, specificRole?: string) => void
 }
 
-const ADMIN_CREDENTIALS = { username: 'admin', password: 'aegis2024' }
+import { ADMIN_ACCOUNTS } from '../../constants/adminAccounts'
 
 function TacticalGrid() {
   return (
@@ -35,9 +35,10 @@ export default function LoginPage({ onLogin }: Props) {
   const [loading, setLoading] = useState(false)
 
   const handleLogin = () => {
-    if (username === ADMIN_CREDENTIALS.username && password === ADMIN_CREDENTIALS.password) {
+    const acc = ADMIN_ACCOUNTS.find(a => a.username === username && a.password === password);
+    if (acc) {
       setLoading(true)
-      setTimeout(() => onLogin('admin', username), 900)
+      setTimeout(() => onLogin('admin', acc.name, acc.role), 900)
     } else {
       setError('Username atau password tidak valid.')
     }
@@ -164,7 +165,8 @@ export default function LoginPage({ onLogin }: Props) {
           {/* Demo hint */}
           <div className="mt-4 p-3 rounded-xl bg-slate-800/40 border border-slate-700/40">
             <p className="text-[10px] text-slate-500 font-bold uppercase tracking-wider mb-1">Demo Credentials</p>
-            <p className="text-[11px] text-slate-400 font-mono">admin / aegis2024</p>
+            <p className="text-[11px] text-slate-400 font-mono">admin1 / password123</p>
+            <p className="text-[11px] text-slate-400 font-mono">sar1 / sarpassword</p>
           </div>
         </div>
 

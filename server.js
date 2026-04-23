@@ -317,9 +317,11 @@ app.post("/api/family/join", (req, res) => {
 app.post("/api/ping", (req, res) => {
   const fromId = sanitizeStr(req.body?.fromId);
   const fromName = sanitizeStr(req.body?.fromName);
+  const toId = sanitizeStr(req.body?.toId);
+  const role = sanitizeStr(req.body?.role);
   if (!fromId || !fromName)
     return res.status(400).json({ error: "Missing fields." });
-  broadcast({ type: "PING", fromId, fromName });
+  broadcast({ type: "PING", fromId, fromName, toId, role });
   res.json({ ok: true });
 });
 
@@ -341,10 +343,11 @@ app.post("/api/location", (req, res) => {
   const deviceModel = sanitizeStr(req.body?.deviceModel) || "Unknown Device";
   const lat = Number(req.body?.lat);
   const lng = Number(req.body?.lng);
+  const battery = Number(req.body?.battery) || 0;
   if (!id) return res.status(400).json({ error: "ID tidak valid." });
   if (!isValidCoord(lat, lng))
     return res.status(400).json({ error: "Koordinat GPS tidak valid." });
-  broadcast({ type: "LOCATION_UPDATE", id, name, deviceModel, lat, lng });
+  broadcast({ type: "LOCATION_UPDATE", id, name, deviceModel, lat, lng, battery });
   res.json({ ok: true });
 });
 

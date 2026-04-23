@@ -20,5 +20,18 @@ export default defineConfig({
         changeOrigin: true,
       },
     },
+  },
+  build: {
+    chunkSizeWarningLimit: 1000,
+    rollupOptions: {
+      output: {
+        manualChunks: {
+          vendor: ['react', 'react-dom'],
+          map: ['leaflet', 'react-leaflet'],
+          ui: ['framer-motion', 'lucide-react'],
+          capacitor: ['@capacitor/core', '@capacitor/preferences', '@capacitor/device', '@capacitor/geolocation']
+        }
+      }
+    }
   }
 })

@@ -83,3 +83,21 @@ a, button, [role="button"], input, select, textarea {
   0%   { transform: translateX(-120%) skewX(-12deg); }
   100% { transform: translateX(220%)  skewX(-12deg); }
 }
+
+@keyframes haloPulse {
+  0% { transform: scale(1); opacity: 0.8; }
+  100% { transform: scale(3); opacity: 0; }
+}
+@keyframes haloPulseFast {
+  0% { transform: scale(1); opacity: 0.9; }
+  100% { transform: scale(3.5); opacity: 0; }
+}
+@keyframes dashAnim {
+  to { stroke-dashoffset: -20; }
+}
+.animated-route-path {
+  animation: dashAnim 1s linear infinite;
+}
+
+.hide-scrollbar::-webkit-scrollbar { display: none; }
+.hide-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
