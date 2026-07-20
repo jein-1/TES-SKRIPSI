@@ -29,7 +29,7 @@ export default defineConfig({
       output: {
         manualChunks: {
           vendor: ['react', 'react-dom'],
-          map: ['leaflet', 'react-leaflet'],
+          map: ['maplibre-gl'],
           ui: ['lucide-react'],
           capacitor: ['@capacitor/core', '@capacitor/preferences', '@capacitor/device', '@capacitor/geolocation']
         }

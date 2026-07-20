@@ -2,9 +2,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { UserPlus, AlertTriangle, CheckCircle, Clock, ChevronLeft, QrCode, Camera, Image, X, Trash2, Share2, Radio, MapPin, Navigation2 } from 'lucide-react'
 import { motion, AnimatePresence } from 'motion/react'
-import { MapContainer, TileLayer, Marker, Popup } from 'react-leaflet'
-import L from 'leaflet'
-import 'leaflet/dist/leaflet.css'
+import { Map, MapMarker, MarkerContent } from '@/components/ui/map'
 import QRCode from 'qrcode'
 import { Geolocation } from '@capacitor/geolocation'
 import { useAegisSync, aegisApi } from '../../lib/useAegisSync'
@@ -40,11 +38,6 @@ function StatusChip({ status }: { status: FamilyMember['status'] }) {
 }
 
 // ── Member Location Map Modal ─────────────────────────────────
-const memberIcon = L.divIcon({
-  className: '',
-  html: `<div style="width:14px;height:14px;border-radius:50%;background:#6366f1;border:2.5px solid white;box-shadow:0 0 10px rgba(99,102,241,0.8)"></div>`,
-  iconSize: [14, 14], iconAnchor: [7, 7],
-})
 
 function MemberMapModal({ member, onClose }: { member: FamilyMember; onClose: () => void }) {
   const locs = loadMemberLocs()
@@ -67,17 +60,26 @@ function MemberMapModal({ member, onClose }: { member: FamilyMember; onClose: ()
           </button>
         </div>
         <div className="h-64 relative">
-          <MapContainer center={center} zoom={loc ? 15 : 12} zoomControl={false} attributionControl={false}
-            className="w-full h-full">
-            <TileLayer url="https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png" maxNativeZoom={20} maxZoom={20}/>
+          <Map
+            viewport={{
+              center: [center[1], center[0]],
+              zoom: loc ? 15 : 12
+            }}
+            interactive={true}
+          >
             {loc && (
-              <Marker position={[loc.lat, loc.lng]} icon={memberIcon}>
-                <Popup><span className="text-xs font-bold">{member.name}</span></Popup>
-              </Marker>
+              <MapMarker longitude={loc.lng} latitude={loc.lat}>
+                <MarkerContent>
+                  <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2, pointerEvents: 'none' }}>
+                    <div style={{ width:14, height:14, borderRadius:'50%', background:'#6366f1', border:'2.5px solid white', boxShadow:'0 0 10px rgba(99,102,241,0.8)' }}></div>
+                    <span style={{ background: '#0a1020', border: '1px solid #1e293b', color: 'white', fontSize: 10, fontWeight: 900, padding: '2px 8px', borderRadius: 8, whiteSpace: 'nowrap' }}>{member.name}</span>
+                  </div>
+                </MarkerContent>
+              </MapMarker>
             )}
-          </MapContainer>
+          </Map>
           {!loc && (
-            <div className="absolute inset-0 flex flex-col items-center justify-center bg-[#060d1a]/80 pointer-events-none">
+            <div className="absolute inset-0 flex flex-col items-center justify-center bg-[#060d1a]/80 pointer-events-none z-10">
               <MapPin className="w-8 h-8 text-slate-500 mb-2"/>
               <p className="text-slate-400 text-sm font-bold">Lokasi belum tersedia</p>
               <p className="text-slate-600 text-[11px] mt-1">Anggota belum membagikan lokasi</p>

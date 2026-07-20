@@ -1,18 +1,5 @@
 import { useState, useCallback, useEffect, useRef } from "react";
-import {
-  MapContainer,
-  TileLayer,
-  Marker,
-  Popup,
-  Polyline,
-  Polygon,
-  Circle,
-  useMap,
-  useMapEvents,
-} from "react-leaflet";
-import "leaflet/dist/leaflet.css";
-import L from "leaflet";
-import "leaflet-rotate";
+import { Map, MapMarker, MarkerContent, MapRoute, MapGeoJSON, type MapRef, type MapViewport } from '@/components/ui/map'
 // â”€â”€ Modules â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 import {
   shelters,
@@ -27,13 +14,7 @@ import {
   routeColors,
   routeBadgeColors,
 } from "./constants/mapConfig";
-import { shelterIcon, userIcon, userIconAlert } from "./components/map/icons";
-import {
-  FlyToController,
-  MapResizer,
-  CustomMapControls,
-} from "./components/map/MapComponents";
-import { CompassWidget } from "./components/map/MapRotation";
+// Map components Removed
 import type {
   ActivePage,
   HistoryFilter,
@@ -161,38 +142,7 @@ function createAlarmSound(): { start: () => void; stop: () => void } {
 // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 // MAP CHILD COMPONENTS
 // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
-function LocationMarker({
-  onLocationSet,
-}: {
-  onLocationSet: (lat: number, lng: number) => void;
-}) {
-  useMapEvents({
-    click(e) {
-      onLocationSet(e.latlng.lat, e.latlng.lng);
-    },
-  });
-  return null;
-}
-
-// FIX: only flies on mount (key prop forces remount per unique position)
-// onComplete resets flyToPos to null so it doesn't re-fly
-function MapFlyTo({
-  position,
-  zoom,
-  onComplete,
-}: {
-  position: [number, number];
-  zoom?: number;
-  onComplete: () => void;
-}) {
-  const map = useMap();
-  useEffect(() => {
-    map.flyTo(position, zoom ?? 15, { duration: 1.2 });
-    onComplete();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []); // intentionally empty â€” new key prop forces fresh mount
-  return null;
-}
+// Leaflet helper components Removed
 
 // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 // MINI ROUTE MAP â€” decorative SVG for history log cards
@@ -303,30 +253,7 @@ function fmtDate(d: Date) {
 // â”€â”€ Arrival detection radius (metres)
 const ARRIVAL_RADIUS_METERS = 50;
 
-// â”€â”€ AdminBearingTracker â€” reads admin map rotation bearing â”€â”€â”€â”€â”€
-function AdminBearingTracker({
-  onBearing,
-}: {
-  onBearing: (b: number) => void;
-}) {
-  const map = useMap();
-  useEffect(() => {
-    const m = map as any;
-    if (m.touchRotate) {
-      try {
-        m.touchRotate.enable();
-      } catch {}
-    }
-    const handler = () => {
-      if (typeof m.getBearing === "function") onBearing(m.getBearing());
-    };
-    map.on("rotate" as any, handler);
-    return () => {
-      map.off("rotate" as any, handler);
-    };
-  }, [map, onBearing]);
-  return null;
-}
+// AdminBearingTracker Removed
 
 function App() {
   // â”€â”€ Map state â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
@@ -360,7 +287,13 @@ function App() {
   const [showShelters, setShowShelters] = useState(false);
   const [showLeftSidebar, setShowLeftSidebar] = useState(true);
   const [adminMapBearing, setAdminMapBearing] = useState(0);
-  const adminMapRef = useRef<L.Map | null>(null);
+  const adminMapRef = useRef<MapRef | null>(null);
+  const [viewport, setViewport] = useState<MapViewport>({
+    center: [119.8577, -0.8917], // [lng, lat]
+    zoom: 14,
+    bearing: 0,
+    pitch: 0
+  });
   // Lokasi user aktif untuk peta admin (hanya saat simulasi)
   const [activeUsers, setActiveUsers] = useState<
     Record<
@@ -1914,265 +1847,105 @@ function App() {
 
           {/* Admin: Desktop GPS controls dihapus - admin hanya memantau */}
 
-          {/* Compass overlay â€” floating over the map, outside MapContainer */}
-          <div className="absolute top-16 right-4 z-[1000] flex flex-col gap-2 pointer-events-auto">
-            <CompassWidget
-              bearing={adminMapBearing}
-              onReset={() => {
-                const m = adminMapRef.current as any;
-                if (m?.setBearing) {
-                  m.setBearing(0);
-                  setAdminMapBearing(0);
-                }
+            {/* Compass overlay */}
+            <div className="absolute top-16 right-4 z-[1000] flex flex-col gap-2 pointer-events-auto">
+              <button onClick={() => {
+                setViewport(v => ({ ...v, bearing: 0 }));
+                setAdminMapBearing(0);
               }}
-            />
-          </div>
+                className="w-11 h-11 rounded-full flex items-center justify-center bg-slate-900/80 border border-slate-700/60 shadow-lg"
+                style={{ transform: `rotate(${-adminMapBearing}deg)`, transition: 'transform 0.1s' }}
+              >
+                <div style={{width: 20, height: 20, borderRadius: '50%', border: '2px solid red', display: 'flex', alignItems: 'center', justifyContent: 'center'}}>N</div>
+              </button>
+            </div>
 
           {/* Map â€” rotation enabled via leaflet-rotate (2-finger mobile, Shift+drag desktop) */}
-          <MapContainer
-            center={[-0.8917, 119.8577]}
-            zoom={14}
-            minZoom={10}
-            maxZoom={20}
-            className="w-full h-full"
-            zoomControl={false}
-            dragging={true}
-            touchZoom={true}
-            scrollWheelZoom={true}
-            doubleClickZoom={true}
-            ref={adminMapRef as any}
-            {...({ rotate: true, touchRotate: true } as any)}
+          <Map
+            ref={adminMapRef}
+            viewport={viewport}
+            onViewportChange={(v) => {
+              setViewport(v);
+              setAdminMapBearing(v.bearing);
+            }}
           >
-            <TileLayer
-              url={mapTileUrl}
-              key={mapTileKey}
-              attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
-              maxNativeZoom={mapMaxNativeZoom}
-              maxZoom={20}
-            />
-            {/* CustomMapControls: locate button dihapus dari admin — hanya zoom */}
-            <CustomMapControls userPosition={null} onLocateClick={() => {}} />
-            <LocationMarker onLocationSet={handleLocationSet} />
-            {/* Fix blank white area when panel resizes map container */}
-            <MapResizer
-              showPanel={showPanel}
-              showLeftSidebar={showLeftSidebar}
-            />
-            {/* Bearing tracker for compass widget */}
-            <AdminBearingTracker onBearing={setAdminMapBearing} />
-
-            {/* FIX: key forces fresh mount per unique position; onComplete resets flyToPos */}
-            {flyToPos && (
-              <MapFlyTo
-                key={`${flyToPos[0].toFixed(5)}-${flyToPos[1].toFixed(5)}`}
-                position={flyToPos}
-                zoom={15}
-                onComplete={() => setFlyToPos(null)}
-              />
-            )}
-
             {/* Hazard zones */}
             {settings.showHazardZones &&
               hazardZones.map((zone, i) => (
-                <Polygon
-                  key={i}
-                  positions={zone.coords}
-                  pathOptions={{
-                    color: tsunamiAlert ? "#ff0000" : "#ef4444",
-                    fillColor: tsunamiAlert ? "#ff0000" : "#ef4444",
-                    fillOpacity: tsunamiAlert ? 0.35 : 0.15,
-                    weight: tsunamiAlert ? 3 : 1,
+                <MapGeoJSON 
+                  key={`hazard-${i}`}
+                  data={{
+                    type: 'Feature',
+                    properties: {},
+                    geometry: {
+                      type: 'Polygon',
+                      coordinates: [zone.coords.map(c => [c[1], c[0]])] // [lat, lng] to [lng, lat]
+                    }
                   }}
+                  fillPaint={{ 'fill-color': tsunamiAlert ? '#ff0000' : '#ef4444', 'fill-opacity': tsunamiAlert ? 0.35 : 0.15 }}
+                  linePaint={{ 'line-color': tsunamiAlert ? '#ff0000' : '#ef4444', 'line-width': tsunamiAlert ? 3 : 1 }}
                 />
               ))}
 
             {/* Shelters */}
             {shelters.map((shelter) => (
-              <Marker
+              <MapMarker
                 key={shelter.id}
-                position={[shelter.lat, shelter.lng]}
-                icon={shelterIcon}
+                longitude={shelter.lng}
+                latitude={shelter.lat}
               >
-                <Popup className="shelter-popup">
-                  <div className="font-bold text-slate-800">{shelter.name}</div>
-                  <div className="text-sm text-slate-600">
-                    Kapasitas: {shelter.capacity} orang
-                  </div>
-                  {!isCalculating && !tsunamiAlert && (
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        if (userPosition) {
-                          setIsCalculating(true);
-                          setTimeout(() => {
-                            const r = findOptimalEvacuationRoutes(
-                              userPosition[0],
-                              userPosition[1],
-                            );
-                            setRoutes(r);
-                            setSelectedRoute(0);
-                            setShowPanel(true);
-                            setIsCalculating(false);
-                          }, 300);
-                        } else
-                          alert(
-                            "Klik peta terlebih dahulu untuk menentukan lokasi Anda!",
-                          );
-                      }}
-                      className="mt-2 w-full px-3 py-1 bg-indigo-600 text-white rounded text-xs hover:bg-indigo-700"
-                    >
-                      Evakuasi ke Sini
-                    </button>
-                  )}
-                </Popup>
-              </Marker>
+                <MarkerContent>
+                  <div style={{
+                    width:30,height:30,background:'#334155',border:'2.5px solid #fff',borderRadius:'50%',
+                    display:'flex',alignItems:'center',justifyContent:'center',boxShadow:'0 0 12px rgba(0,0,0,0.5)',
+                    fontSize:13,lineHeight:1
+                  }}>🏠</div>
+                </MarkerContent>
+              </MapMarker>
             ))}
-
-            {/* Arrival radius circles â€” shown around all shelters, pulse on target */}
-            {shelters.map((sh) => {
-              const isTarget =
-                routes.length > 0 &&
-                routes[selectedRoute]?.shelterName === sh.name;
-              return (
-                <Circle
-                  key={`arrival-${sh.id}`}
-                  center={[sh.lat, sh.lng]}
-                  radius={sh.radiusMeters ?? ARRIVAL_RADIUS_METERS}
-                  pathOptions={{
-                    color: isTarget ? "#6366f1" : "#64748b",
-                    fillColor: isTarget ? "#6366f1" : "#64748b",
-                    fillOpacity: isTarget ? 0.12 : 0.05,
-                    weight: isTarget ? 2 : 1,
-                    dashArray: "6 4",
-                  }}
-                />
-              );
-            })}
 
             {/* ── LOKASI USER AKTIF — hanya tampil saat simulasi ── */}
             {tsunamiAlert &&
-              Object.values(activeUsers).map((u) => {
-                const userDotIcon = L.divIcon({
-                  className: "",
-                  html: `<div style="background:#f59e0b;border:2.5px solid #fff;border-radius:50%;width:26px;height:26px;display:flex;align-items:center;justify-content:center;box-shadow:0 0 12px rgba(245,158,11,0.8);font-size:11px;">👤</div>`,
-                  iconSize: [26, 26],
-                  iconAnchor: [13, 13],
-                  popupAnchor: [0, -15],
-                });
-                return (
-                  <Marker
-                    key={`user-${u.id}`}
-                    position={[u.lat, u.lng]}
-                    icon={userDotIcon}
-                    zIndexOffset={900}
-                  >
-                    <Popup>
-                      <strong style={{ fontSize: 13 }}>{u.name}</strong>
-                      <div
-                        style={{
-                          fontSize: 11,
-                          color: "#555",
-                          marginTop: 3,
-                          fontWeight: "500",
-                        }}
-                      >
-                        📱 {u.deviceModel}
-                      </div>
-                      <div
-                        style={{ fontSize: 11, color: "#888", marginTop: 3 }}
-                      >
-                        📍 {u.lat.toFixed(5)}, {u.lng.toFixed(5)}
-                      </div>
-                      <div
-                        style={{ fontSize: 10, color: "#aaa", marginTop: 2 }}
-                      >
-                        🕐 {new Date(u.ts).toLocaleTimeString("id-ID")}
-                      </div>
-                      <div
-                        style={{
-                          fontSize: 11,
-                          color: "#555",
-                          marginTop: 3,
-                          fontWeight: "500",
-                        }}
-                      >
-                        🔋 Baterai:{" "}
-                        <b
-                          style={{
-                            color:
-                              (u.battery ?? 100) > 20 ? "#22c55e" : "#ef4444",
-                          }}
-                        >
-                          {u.battery ?? 100}%
-                        </b>
-                      </div>
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          if (!tsunamiAlert) {
-                            alert(
-                              "Ping hanya bisa dilakukan saat mode darurat/simulasi aktif!",
-                            );
-                            return;
-                          }
-                          if (confirm(`Kirim ping ke ${u.name}?`)) {
-                            aegisApi
-                              .adminPing(
-                                terminalId,
-                                userName || "Admin",
-                                u.id,
-                                adminRole,
-                              )
-                              .then(() => {
-                                alert(`Ping terkirim ke ${u.name}!`);
-                              })
-                              .catch(() => {
-                                alert(`Gagal mengirim ping ke ${u.name}`);
-                              });
-                          }
-                        }}
-                        style={{
-                          width: "100%",
-                          padding: "6px",
-                          marginTop: "8px",
-                          background: "#ef4444",
-                          color: "white",
-                          border: "none",
-                          borderRadius: "6px",
-                          fontWeight: "bold",
-                          cursor: "pointer",
-                          fontSize: "11px",
-                        }}
-                      >
-                        PING PENGGUNA INI
-                      </button>
-                    </Popup>
-                  </Marker>
-                );
-              })}
+              Object.values(activeUsers).map((u) => (
+                <MapMarker
+                  key={`user-${u.id}`}
+                  longitude={u.lng}
+                  latitude={u.lat}
+                >
+                  <MarkerContent>
+                    <div style={{
+                      background: '#f59e0b', border: '2.5px solid #fff', borderRadius: '50%',
+                      width: 26, height: 26, display: 'flex', alignItems: 'center', justifyContent: 'center',
+                      boxShadow: '0 0 12px rgba(245,158,11,0.8)', fontSize: 11, cursor: 'pointer'
+                    }}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      if (!tsunamiAlert) { alert("Ping hanya bisa dilakukan saat mode darurat/simulasi aktif!"); return; }
+                      if (confirm(`Kirim ping ke ${u.name}?`)) {
+                        aegisApi.adminPing(terminalId, userName || "Admin", u.id, adminRole)
+                          .then(() => alert(`Ping terkirim ke ${u.name}!`))
+                          .catch(() => alert(`Gagal mengirim ping ke ${u.name}`));
+                      }
+                    }}>👤</div>
+                  </MarkerContent>
+                </MapMarker>
+              ))}
 
-            {/* Admin: Lokasi admin sendiri tidak ditampilkan - hanya pantau user lain */}
-            {/* Routes — dual layer display:
-                Layer 1: thin dashed reference path (Dijkstra via road network) */}
             {!isAdminURL &&
               routes.map((route, i) => {
                 const isSelected = i === selectedRoute;
                 return (
-                  <Polyline
+                  <MapRoute
                     key={`road-${i}`}
-                    positions={route.coordinates}
-                    pathOptions={{
-                      color: routeColors[i],
-                      weight: isSelected ? 3 : 2,
-                      opacity: isSelected ? 0.45 : 0.2,
-                      dashArray: "8 6",
-                    }}
+                    coordinates={route.coordinates.map(c => [c[0], c[1]])}
+                    color={routeColors[i]}
+                    width={isSelected ? 3 : 2}
+                    opacity={isSelected ? 0.45 : 0.2}
+                    dashArray={isSelected ? undefined : [8, 6]}
                   />
                 );
               })}
-
-            {/* Beeline dihapus dari admin - admin hanya memantau, bukan navigasi */}
-          </MapContainer>
+          </Map>
 
           {/* â•â•â• MOBILE BOTTOM SHEET â•â•â• */}
           <AnimatePresence>

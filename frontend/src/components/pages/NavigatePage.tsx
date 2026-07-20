@@ -1,14 +1,9 @@
 // ═══════════════════════════════════════════════════════════════
-// NAVIGATE PAGE — Peta interaktif shelter, rute & simulasi
-// Normal: tampilkan semua shelter + pilih rute, BEBAS gerak peta
-// Emergency: rute aktif (merah), arah ke shelter terdekat
-// Admin: TIDAK ditampilkan (admin pakai admin map)
+// NAVIGATE PAGE — Peta interaktif shelter, rute & simulasi (MAPCN VERSION)
 // ═══════════════════════════════════════════════════════════════
-import { useState, useEffect, useRef, useCallback } from 'react'
-import { MapContainer, TileLayer, Polyline, Polygon, Marker, Popup, useMap } from 'react-leaflet'
-import L from 'leaflet'
-import 'leaflet/dist/leaflet.css'
-import 'leaflet-rotate'
+import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
+import { Map, MapMarker, MarkerContent, MapRoute, MapGeoJSON, type MapViewport, type MapRef } from '@/components/ui/map'
+import { fetchOsrmRoute, type OsrmRouteData } from '../../lib/osrm'
 import {
   AlertTriangle, Navigation2, Phone, ChevronLeft,
   MapPin, Compass, Lock, Unlock, ChevronRight, ArrowRight, Radio
@@ -16,9 +11,8 @@ import {
 import { motion, AnimatePresence } from 'motion/react'
 import type { RouteResult } from '../../lib/evacuation'
 import { shelters, hazardZones, findOptimalEvacuationRoutes } from '../../lib/evacuation'
-import { TILE_NORMAL } from '../../constants/mapConfig'
-import { CompassWidget } from '../map/MapRotation'
 import { Geolocation } from '@capacitor/geolocation'
+import type * as GeoJSON from 'geojson'
 
 interface Props {
   routes: RouteResult[]
@@ -57,135 +51,31 @@ function bearingLabel(b: number): { label: string; icon: string } {
   return { label: 'Kiri Diagonal', icon: '↖' }
 }
 
-// ── Shelter icon menggunakan div CSS (bukan SVG inline agar muncul di WebView) ──
-function makeShelterIcon(isNearest: boolean, isEmergency: boolean): L.DivIcon {
-  const bg    = isNearest && isEmergency ? '#ef4444' : isNearest ? '#22c55e' : '#334155'
-  const shadow = isNearest ? (isEmergency ? 'rgba(239,68,68,0.7)' : 'rgba(34,197,94,0.7)') : 'none'
-  return L.divIcon({
-    className: '',
-    html: `<div style="
-      width:30px;height:30px;
-      background:${bg};
-      border:2.5px solid #fff;
-      border-radius:50%;
-      display:flex;align-items:center;justify-content:center;
-      box-shadow:0 0 12px ${shadow};
-      font-size:13px;line-height:1;
-    ">🏠</div>`,
-    iconSize: [30, 30],
-    iconAnchor: [15, 15],
-    popupAnchor: [0, -16],
-  })
-}
-
-// ── User position icon ─────────────────────────────────────────
-function makeUserIcon(bearing: number, emergency = false): L.DivIcon {
-  const col = emergency ? '#ef4444' : '#3b82f6'
-  const pulseAnim = emergency ? 'haloPulseFast' : 'haloPulse'
-  return L.divIcon({
-    className: '',
-    html: `<div style="position:relative;width:60px;height:60px;">
-      <!-- Flashlight / Beam -->
-      <svg style="position:absolute;top:0;left:0;width:100%;height:100%;transform:rotate(${bearing}deg);transform-origin:50% 50%;" viewBox="0 0 100 100">
-         <defs>
-           <radialGradient id="grad-${emergency ? 'red' : 'blue'}" cx="50%" cy="50%" r="50%">
-             <stop offset="0%" stop-color="${col}" stop-opacity="0.6" />
-             <stop offset="100%" stop-color="${col}" stop-opacity="0" />
-           </radialGradient>
-         </defs>
-         <polygon points="50,50 20,5 80,5" fill="url(#grad-${emergency ? 'red' : 'blue'})" />
-      </svg>
-      <!-- Pulsing Halo -->
-      <div style="position:absolute;top:18px;left:18px;width:24px;height:24px;background:${col};border-radius:50%;animation:${pulseAnim} ${emergency ? '1s' : '2s'} infinite;"></div>
-      <!-- Center Dot -->
-      <div style="position:absolute;top:22px;left:22px;width:16px;height:16px;background:${col};border:2.5px solid white;border-radius:50%;box-shadow:0 0 6px rgba(0,0,0,0.4);"></div>
-    </div>`,
-    iconSize: [60, 60],
-    iconAnchor: [30, 30],
-  })
-}
-
-// ── Map controller — hanya center SEKALI saat pertama / awal emergency ──
-function NavMapController({ userPos, heading, emergency, headingLocked, mapBearing }: {
-  userPos: [number, number] | null
-  heading: number
-  emergency: boolean
-  headingLocked: boolean
-  mapBearing: number
-}) {
-  const map = useMap()
-  const userMarker = useRef<L.Marker | null>(null)
-  const centeredRef = useRef(false)   // hanya center sekali
-
-  useEffect(() => {
-    const m = map as any
-    if (m.touchRotate) { try { m.touchRotate.enable() } catch {} }
-  }, [map])
-
-  // Auto-rotate bearing saat emergency + locked
-  useEffect(() => {
-    if (!emergency || !headingLocked) return
-    const m = map as any
-    if (typeof m.setBearing === 'function') m.setBearing(heading)
-  }, [map, heading, emergency, headingLocked])
-
-  // Center HANYA saat pertama kali dapat GPS, atau saat emergency pertama kali aktif
-  useEffect(() => {
-    if (!userPos) return
-    if (!centeredRef.current) {
-      map.setView(userPos, 16, { animate: true, duration: 0.7 })
-      centeredRef.current = true
-    }
-  }, [map, userPos])
-
-  // Re-center saat emergency baru aktif
-  useEffect(() => {
-    if (!emergency || !userPos) return
-    map.setView(userPos, 16, { animate: true, duration: 0.7 })
-  }, [map, emergency]) // eslint-disable-line react-hooks/exhaustive-deps
-
-  // User marker
-  useEffect(() => {
-    if (!userPos) return
-    // Ensure the marker cone offsets map rotation
-    const icon = makeUserIcon(heading, emergency)
-    if (!userMarker.current) {
-      userMarker.current = L.marker(userPos, { icon, zIndexOffset: 1000 }).addTo(map)
-    } else {
-      userMarker.current.setLatLng(userPos)
-      userMarker.current.setIcon(icon)
-    }
-  }, [map, userPos, heading, mapBearing, emergency])
-
-  useEffect(() => () => { userMarker.current?.remove() }, [])
-  return null
-}
-
-function BearingTracker({ onBearing }: { onBearing: (b: number) => void }) {
-  const map = useMap()
-  useEffect(() => {
-    const m = map as any
-    const h = () => { if (m.getBearing) onBearing(m.getBearing()) }
-    map.on('rotate' as any, h)
-    return () => { map.off('rotate' as any, h) }
-  }, [map, onBearing])
-  return null
-}
-
 // ── MAIN ──────────────────────────────────────────────────────
 export default function NavigatePage({ routes, selectedRoute, tsunamiAlert, userPosition, onBack, adminPing, onAdminPingDismiss, onStartGps }: Props) {
   const [showMedical, setShowMedical]     = useState(false)
   const [deviceHeading, setDeviceHeading] = useState<number | null>(null)
-  const [mapBearing, setMapBearing]       = useState(0)
   const [headingLocked, setHeadingLocked] = useState(true)
   const [activeRouteIdx, setActiveRouteIdx] = useState(selectedRoute)
   const [showRoutePanel, setShowRoutePanel] = useState(true)
   const [localPos, setLocalPos] = useState<[number,number] | null>(null)
-  const mapRef = useRef<L.Map | null>(null)
-  // Kalibrasi muncul sekali per sesi (bukan per install) — tiap buka app baru akan muncul
+  const mapRef = useRef<MapRef | null>(null)
   const [showCalibration, setShowCalibration] = useState(() => !sessionStorage.getItem('compassCalibrated'))
+  
+  // OSRM Data
+  const [osrmRoutes, setOsrmRoutes] = useState<OsrmRouteData[]>([])
 
-  // GPS instant detection — NavigatePage punya GPS sendiri untuk langsung tampil
+  const [viewport, setViewport] = useState<MapViewport>({
+    center: [119.8577, -0.8917], // MapLibre uses [lng, lat]
+    zoom: 14,
+    bearing: 0,
+    pitch: 0
+  })
+
+  // Convert to [lng, lat] for MapLibre
+  const effectivePosRaw = userPosition ?? localPos
+  const effectivePos: [number, number] | null = effectivePosRaw ? [effectivePosRaw[1], effectivePosRaw[0]] : null
+
   useEffect(() => {
     if (userPosition) { setLocalPos(userPosition); return }
     let watchId: string | null = null;
@@ -203,7 +93,6 @@ export default function NavigatePage({ routes, selectedRoute, tsunamiAlert, user
     };
   }, [userPosition])
 
-  // Notify parent to start GPS tracking if not yet started
   useEffect(() => {
     if (!userPosition && onStartGps) {
       const t = setTimeout(() => onStartGps(), 500)
@@ -211,50 +100,65 @@ export default function NavigatePage({ routes, selectedRoute, tsunamiAlert, user
     }
   }, [])
 
-  const effectivePos = userPosition ?? localPos
-
   const handleCalibrate = () => {
     sessionStorage.setItem('compassCalibrated', 'true')
     setShowCalibration(false)
   }
   const emergency = tsunamiAlert
 
-  // Selalu hitung index shelter terdekat dari posisi user saat ini
-  const activeRoutes = routes.length > 0 ? routes : (effectivePos ? findOptimalEvacuationRoutes(effectivePos[0], effectivePos[1]) : [])
-  const nearestIdx = effectivePos
+  const activeRoutes = routes.length > 0 ? routes : (effectivePosRaw ? findOptimalEvacuationRoutes(effectivePosRaw[0], effectivePosRaw[1]) : [])
+  const nearestIdx = effectivePosRaw
     ? (() => {
         if (activeRoutes.length === 0) return 0
         let minDist = Infinity, idx = 0
         activeRoutes.forEach((r, i) => {
           const sp = r.coordinates[r.coordinates.length - 1] as [number, number]
           if (!sp) return
-          const d = haversineM(effectivePos, sp)
+          const d = haversineM(effectivePosRaw, sp)
           if (d < minDist) { minDist = d; idx = i }
         })
         return idx
       })()
     : selectedRoute
 
-  // Sync rute aktif ke shelter terdekat saat data/posisi berubah
   useEffect(() => {
     setActiveRouteIdx(nearestIdx)
   }, [nearestIdx])
 
-  useEffect(() => { setHeadingLocked(true) }, [tsunamiAlert])
-
   const route       = activeRoutes[activeRouteIdx]
-  const shelterPos  = route ? [shelters.find(s => s.id === route.shelterId)?.lat ?? route.coordinates[route.coordinates.length-1]?.[0], shelters.find(s => s.id === route.shelterId)?.lng ?? route.coordinates[route.coordinates.length-1]?.[1]] as [number, number] : undefined
+  const shelterPosRaw  = route ? [shelters.find(s => s.id === route.shelterId)?.lat ?? route.coordinates[route.coordinates.length-1]?.[0], shelters.find(s => s.id === route.shelterId)?.lng ?? route.coordinates[route.coordinates.length-1]?.[1]] as [number, number] : undefined
+  const shelterPos: [number, number] | undefined = shelterPosRaw ? [shelterPosRaw[1], shelterPosRaw[0]] : undefined
 
-  const computedBearing = (effectivePos && shelterPos) ? getBearing(effectivePos, shelterPos) : 0
+  // Fetch OSRM Route when origin/destination changes
+  useEffect(() => {
+    if (effectivePos && shelterPos) {
+      fetchOsrmRoute(effectivePos[0], effectivePos[1], shelterPos[0], shelterPos[1])
+        .then(data => setOsrmRoutes(data))
+        .catch(() => setOsrmRoutes([]))
+    }
+  }, [effectivePos?.[0], effectivePos?.[1], shelterPos?.[0], shelterPos?.[1]])
+
+  const computedBearing = (effectivePosRaw && shelterPosRaw) ? getBearing(effectivePosRaw, shelterPosRaw) : 0
   const heading = deviceHeading ?? computedBearing
 
-  const distanceM   = (effectivePos && shelterPos) ? haversineM(effectivePos, shelterPos) : (route?.totalDistance ? route.totalDistance * 1000 : 0)
-  const distLabel   = distanceM < 1000 ? `${Math.round(distanceM)}m` : `${(distanceM/1000).toFixed(1)} km`
-  const etaMin      = Math.max(1, Math.ceil(distanceM / 1000 / 5 * 60))
-  const { label: mainDir, icon: dirIcon } = bearingLabel(heading)
-  const mapCenter: [number, number]       = effectivePos ?? [-0.8917, 119.8577]
+  // Map viewport control
+  useEffect(() => {
+    if (effectivePos) {
+      setViewport(v => ({
+        ...v,
+        center: effectivePos,
+        zoom: 16,
+        pitch: emergency ? 60 : 0,
+        bearing: (emergency && headingLocked) ? heading : v.bearing
+      }))
+    }
+  }, [effectivePos?.[0], effectivePos?.[1], emergency, heading, headingLocked])
 
-  // Device compass
+  const distanceM   = (effectivePosRaw && shelterPosRaw) ? haversineM(effectivePosRaw, shelterPosRaw) : (route?.totalDistance ? route.totalDistance * 1000 : 0)
+  const distLabel   = osrmRoutes.length > 0 ? (osrmRoutes[0].distance < 1000 ? `${Math.round(osrmRoutes[0].distance)}m` : `${(osrmRoutes[0].distance/1000).toFixed(1)} km`) : (distanceM < 1000 ? `${Math.round(distanceM)}m` : `${(distanceM/1000).toFixed(1)} km`)
+  const etaMin      = osrmRoutes.length > 0 ? Math.round(osrmRoutes[0].duration / 60) : Math.max(1, Math.ceil(distanceM / 1000 / 5 * 60))
+  const { label: mainDir, icon: dirIcon } = bearingLabel(heading)
+
   useEffect(() => {
     const handler = (e: any) => {
       if (e.webkitCompassHeading !== undefined) {
@@ -282,16 +186,16 @@ export default function NavigatePage({ routes, selectedRoute, tsunamiAlert, user
   }, [])
 
   const resetNorth = useCallback(() => {
-    const m = mapRef.current as any
-    if (m?.setBearing) { m.setBearing(0); setMapBearing(0) }
+    setHeadingLocked(false)
+    setViewport(v => ({ ...v, bearing: 0, pitch: 0 }))
   }, [])
 
-  // Re-center button
   const recenterMap = useCallback(() => {
-    if (userPosition && mapRef.current) {
-      mapRef.current.setView(userPosition, 16, { animate: true, duration: 0.5 })
+    if (effectivePos) {
+      setHeadingLocked(true)
+      setViewport(v => ({ ...v, center: effectivePos, zoom: 16 }))
     }
-  }, [userPosition])
+  }, [effectivePos])
 
   const headerBg = emergency ? '#0f0505' : '#0a1020'
   const headerBorder = emergency ? 'border-red-900/40' : 'border-slate-800/60'
@@ -398,98 +302,108 @@ export default function NavigatePage({ routes, selectedRoute, tsunamiAlert, user
 
       {/* MAP */}
       <div className="flex-1 relative overflow-hidden min-h-0">
-        <MapContainer
-          center={mapCenter} zoom={14}
-          zoomControl={false} attributionControl={false}
-          className="w-full h-full"
-          ref={mapRef as any}
-          {...({ rotate: true, touchRotate: true } as any)}
+        <Map
+          ref={mapRef}
+          viewport={viewport}
+          onViewportChange={setViewport}
         >
-          <TileLayer url={TILE_NORMAL} maxNativeZoom={20} maxZoom={20}/>
-
-          {/* Hazard zones */}
+          {/* Hazard Zones MapGeoJSON */}
           {hazardZones.map((zone, i) => (
-            <Polygon key={i}
-              positions={zone.coords as [number,number][]}
-              pathOptions={{ color:'#ef4444', fillColor:'#ef4444', fillOpacity:0.12, weight:1.5, dashArray:'5 5' }}
+            <MapGeoJSON 
+              key={`hazard-${i}`}
+              data={{
+                type: 'Feature',
+                properties: {},
+                geometry: {
+                  type: 'Polygon',
+                  coordinates: [zone.coords.map(c => [c[1], c[0]])] // [lat, lng] to [lng, lat]
+                }
+              }}
+              fillPaint={{ 'fill-color': '#ef4444', 'fill-opacity': 0.12 }}
+              linePaint={{ 'line-color': '#ef4444', 'line-width': 1.5, 'line-dasharray': [5, 5] }}
             />
           ))}
 
-          {/* Shelter markers — selalu tampil */}
+          {/* Shelters */}
           {shelters.map((s, i) => {
             const isNearest = routes.length > 0 && routes[activeRouteIdx]?.shelterName === s.name
-            const pos: [number, number] = [s.lat, s.lng]
-            const distKm = userPosition ? (haversineM(userPosition, pos)/1000).toFixed(2) : null
+            const pos: [number, number] = [s.lng, s.lat]
+            const bg = isNearest && emergency ? '#ef4444' : isNearest ? '#22c55e' : '#334155'
+            const shadow = isNearest ? (emergency ? 'rgba(239,68,68,0.7)' : 'rgba(34,197,94,0.7)') : 'none'
             return (
-              <Marker key={s.id} position={pos} icon={makeShelterIcon(isNearest, emergency)}>
-                <Popup>
-                  <div style={{ minWidth: 160, background: '#0f1a2e', padding: 4, borderRadius: 8 }}>
-                    <p style={{ fontWeight: 900, fontSize: 13, color: '#fff', margin: '0 0 4px' }}>{s.name}</p>
-                    <p style={{ fontSize: 11, color: '#94a3b8', margin: '0 0 2px' }}>
-                      👥 Kapasitas: <b style={{ color: '#22c55e' }}>{s.capacity.toLocaleString()} orang</b>
-                    </p>
-                    {distKm && (
-                      <p style={{ fontSize: 11, color: '#94a3b8', margin: '0 0 8px' }}>
-                        📍 Jarak: <b style={{ color: '#818cf8' }}>{distKm} km</b>
-                      </p>
-                    )}
-                    {activeRoutes.length > 0 && (() => {
-                      const idx = activeRoutes.findIndex(r => r.shelterName === s.name)
-                      if (idx < 0) return null
-                      return (
-                        <button
-                          style={{ width:'100%', padding:'6px 0', background: isNearest ? '#22c55e' : '#6366f1', color:'#fff', border:'none', borderRadius:8, fontWeight:900, fontSize:12, cursor:'pointer' }}
-                          onClick={() => setActiveRouteIdx(idx)}>
-                          {isNearest ? '✓ Rute Aktif' : '🗺️ Pilih Rute Ini'}
-                        </button>
-                      )
-                    })()}
-                  </div>
-                </Popup>
-              </Marker>
+              <MapMarker key={s.id} longitude={pos[0]} latitude={pos[1]}>
+                <MarkerContent>
+                  <div style={{
+                    width:30, height:30, background:bg, border:'2.5px solid #fff', borderRadius:'50%',
+                    display:'flex', alignItems:'center', justifyContent:'center', boxShadow:`0 0 12px ${shadow}`,
+                    fontSize:13, lineHeight:1
+                  }}>🏠</div>
+                </MarkerContent>
+              </MapMarker>
             )
           })}
 
-          {/* GARIS LURUS BEELINE — hanya saat emergency */}
-          {emergency && userPosition && shelterPos && (
-            <Polyline
-              positions={[userPosition, shelterPos]}
-              color="#f59e0b" weight={3} opacity={0.9} dashArray="12 6"
-              className="animated-route-path"
+          {/* Routes (OSRM or straight line) */}
+          {osrmRoutes.length > 0 ? (
+            <MapRoute 
+              coordinates={osrmRoutes[0].coordinates} 
+              color={emergency ? "#ef4444" : "#6366f1"}
+              width={6}
+              opacity={0.9}
             />
+          ) : (
+            effectivePos && shelterPos && (
+              <MapRoute 
+                coordinates={[effectivePos, shelterPos]} 
+                color={emergency ? "#ef4444" : "#6366f1"}
+                width={4}
+                opacity={0.9}
+                dashArray={[2, 2]}
+              />
+            )
           )}
 
-          {/* Routes — hanya tampil saat ada rute */}
-          {activeRoutes.length > 0 && activeRoutes.map((route, i) => {
-            const isSelected = i === activeRouteIdx;
-            return (
-              <Polyline
-                key={`road-${i}`}
-                positions={route.coordinates as [number, number][]}
-                pathOptions={{
-                  color: isSelected ? (emergency ? "#ef4444" : "#6366f1") : "#334155",
-                  weight: isSelected ? 6 : 3,
-                  opacity: isSelected ? 0.95 : 0.3,
-                  dashArray: isSelected ? "12 6" : "4 8",
-                  className: isSelected ? "animated-route-path" : "",
-                }}
-              />
-            );
-          })}
+          {/* User Location Marker with Flashlight */}
+          {effectivePos && (
+            <MapMarker longitude={effectivePos[0]} latitude={effectivePos[1]} rotation={heading} rotationAlignment="map">
+              <MarkerContent>
+                <div style={{ position:'relative', width:60, height:60 }}>
+                  <svg style={{ position:'absolute', top:0, left:0, width:'100%', height:'100%' }} viewBox="0 0 100 100">
+                    <defs>
+                      <radialGradient id={`grad-${emergency ? 'red' : 'blue'}`} cx="50%" cy="50%" r="50%">
+                        <stop offset="0%" stopColor={emergency ? '#ef4444' : '#3b82f6'} stopOpacity="0.6" />
+                        <stop offset="100%" stopColor={emergency ? '#ef4444' : '#3b82f6'} stopOpacity="0" />
+                      </radialGradient>
+                    </defs>
+                    <polygon points="50,50 20,5 80,5" fill={`url(#grad-${emergency ? 'red' : 'blue'})`} />
+                  </svg>
+                  <div style={{
+                    position:'absolute', top:18, left:18, width:24, height:24, 
+                    background: emergency ? '#ef4444' : '#3b82f6', borderRadius:'50%',
+                    animation: emergency ? 'haloPulseFast 1s infinite' : 'haloPulse 2s infinite'
+                  }}></div>
+                  <div style={{
+                    position:'absolute', top:22, left:22, width:16, height:16, 
+                    background: emergency ? '#ef4444' : '#3b82f6', border:'2.5px solid white', 
+                    borderRadius:'50%', boxShadow:'0 0 6px rgba(0,0,0,0.4)'
+                  }}></div>
+                </div>
+              </MarkerContent>
+            </MapMarker>
+          )}
 
-          <NavMapController
-            userPos={effectivePos}
-            heading={heading}
-            emergency={emergency}
-            headingLocked={headingLocked}
-            mapBearing={mapBearing}
-          />
-          <BearingTracker onBearing={setMapBearing}/>
-        </MapContainer>
+        </Map>
 
         {/* Controls */}
         <div className="absolute top-3 right-3 z-[500] flex flex-col gap-2">
-          <CompassWidget bearing={mapBearing} onReset={resetNorth}/>
+          {/* Compass */}
+          <button onClick={resetNorth}
+            className="w-11 h-11 rounded-full flex items-center justify-center bg-slate-900/80 border border-slate-700/60 shadow-lg"
+            style={{ transform: `rotate(${-viewport.bearing}deg)`, transition: 'transform 0.1s' }}
+          >
+            <Compass className="w-5 h-5 text-red-500"/>
+          </button>
+          
           {/* Re-center button */}
           <button onClick={recenterMap}
             className="w-11 h-11 rounded-full flex items-center justify-center bg-slate-900/80 border border-slate-700/60 text-white shadow-lg"
@@ -508,7 +422,7 @@ export default function NavigatePage({ routes, selectedRoute, tsunamiAlert, user
 
         {/* Bearing */}
         <div className="absolute bottom-3 left-3 z-[500] px-2 py-1.5 rounded-xl bg-slate-900/80 border border-slate-700/60">
-          <p className="text-[10px] font-black text-white">{Math.round(mapBearing)}°</p>
+          <p className="text-[10px] font-black text-white">{Math.round(viewport.bearing)}°</p>
           <p className="text-[8px] text-slate-500">BEARING</p>
         </div>
 

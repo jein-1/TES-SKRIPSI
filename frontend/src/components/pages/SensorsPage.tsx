@@ -2,8 +2,7 @@
 // SENSORS PAGE — System Diagnostics & Sensor Array Status
 // ═══════════════════════════════════════════════════════════════
 import { useState, useEffect } from 'react'
-import { MapContainer, TileLayer, Marker, Popup, useMap } from 'react-leaflet'
-import L from 'leaflet'
+import { Map, MapMarker, MarkerContent } from '@/components/ui/map'
 import { Wifi, WifiOff, Activity, AlertTriangle, CheckCircle, RefreshCw, Radio, ChevronLeft } from 'lucide-react'
 import { motion } from 'motion/react'
 import type { SensorNode, SensorStatus } from '../../types'
@@ -42,20 +41,6 @@ const SENSOR_NODES: SensorNode[] = [
 ]
 
 // ── Custom sensor marker icons ──────────────────────────────────
-function makeSensorIcon(status: SensorStatus) {
-  const color = status === 'online' ? '#22c55e' : status === 'degraded' ? '#f59e0b' : '#ef4444'
-  return L.divIcon({
-    className: '',
-    html: `<div style="
-      width:14px;height:14px;border-radius:50%;
-      background:${color};border:2px solid #0f172a;
-      box-shadow:0 0 8px ${color}88;
-    "></div>`,
-    iconSize: [14, 14],
-    iconAnchor: [7, 7],
-  })
-}
-
 // ── Sparkline bars component ────────────────────────────────────
 function Sparkline({ bars, status }: { bars: number[]; status: SensorStatus }) {
   const color = status === 'online' ? '#22c55e' : status === 'degraded' ? '#f59e0b' : '#ef4444'
@@ -108,15 +93,6 @@ function NodeIcon({ type }: { type: SensorNode['type'] }) {
 }
 
 // ── Map fit bounds helper ───────────────────────────────────────
-function FitBounds() {
-  const map = useMap()
-  useEffect(() => {
-    const bounds = L.latLngBounds(SENSOR_NODES.map(n => [n.lat, n.lng]))
-    map.fitBounds(bounds, { padding: [30, 30] })
-  }, [map])
-  return null
-}
-
 // ── Main SensorsPage ─────────────────────────────────────────────
 export default function SensorsPage({ onBack }: { onBack?: () => void }) {
   const [lastSync] = useState(() => {
@@ -285,28 +261,32 @@ export default function SensorsPage({ onBack }: { onBack?: () => void }) {
             <Activity className="w-3.5 h-3.5 text-indigo-400" /> Node Deployment
           </h3>
           <div className="rounded-2xl overflow-hidden border border-slate-700/40" style={{ height: 220 }}>
-            <MapContainer
-              center={[-0.8917, 119.8577]}
-              zoom={11}
-              className="w-full h-full"
-              zoomControl={true}
-              attributionControl={false}
+            <Map
+              viewport={{
+                center: [119.8577, -0.8917], // [lng, lat]
+                zoom: 10,
+              }}
+              interactive={true}
             >
-              <TileLayer url={TILE_DARK} maxNativeZoom={20} maxZoom={20} />
-              <FitBounds />
-              {SENSOR_NODES.map(node => (
-                <Marker
-                  key={node.id}
-                  position={[node.lat, node.lng]}
-                  icon={makeSensorIcon(node.status)}
-                >
-                  <Popup>
-                    <div className="text-xs font-bold">{node.name}</div>
-                    <div className="text-xs text-slate-500">{node.nodeId}</div>
-                  </Popup>
-                </Marker>
-              ))}
-            </MapContainer>
+              {SENSOR_NODES.map(node => {
+                const color = node.status === 'online' ? '#22c55e' : node.status === 'degraded' ? '#f59e0b' : '#ef4444'
+                return (
+                  <MapMarker
+                    key={node.id}
+                    longitude={node.lng}
+                    latitude={node.lat}
+                  >
+                    <MarkerContent>
+                      <div style={{
+                        width: 14, height: 14, borderRadius: '50%',
+                        background: color, border: '2px solid #0f172a',
+                        boxShadow: `0 0 8px ${color}88`
+                      }}></div>
+                    </MarkerContent>
+                  </MapMarker>
+                )
+              })}
+            </Map>
           </div>
           {/* Legend */}
           <div className="flex items-center gap-4 mt-2 px-1">

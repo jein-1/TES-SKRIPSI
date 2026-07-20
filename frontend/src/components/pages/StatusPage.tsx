@@ -2,10 +2,7 @@
 // STATUS PAGE — Public User Home "I AM SAFE"
 // ═══════════════════════════════════════════════════════════════
 import { useState, useEffect, useRef } from 'react'
-import { MapContainer, TileLayer } from 'react-leaflet'
-import L from 'leaflet'
-import 'leaflet/dist/leaflet.css'
-import 'leaflet-rotate'
+import { Map, MapMarker, MarkerContent } from '@/components/ui/map'
 import { MapPin, Users, BookOpen, ChevronRight, CheckCircle, Heart, Activity, ChevronLeft, Locate } from 'lucide-react'
 import { motion, AnimatePresence } from 'motion/react'
 import { loadFamily } from './FamilyPage'
@@ -14,59 +11,45 @@ import { loadFamily } from './FamilyPage'
 import { TILE_NORMAL } from '../../constants/mapConfig'
 const PALU_CENTER: [number, number] = [-0.8917, 119.8577]
 
-const hereIcon = L.divIcon({
-  className: '',
-  html: `<div style="display:flex;flex-direction:column;align-items:center;gap:2px;pointer-events:none;position:relative">
-    <div style="position:relative;width:20px;height:20px;display:flex;align-items:center;justify-content:center">
-      <!-- Pulse ring -->
-      <div style="position:absolute;width:20px;height:20px;border-radius:50%;background:rgba(99,102,241,0.25);animation:haloPulse 2s infinite"></div>
-      <!-- Center solid dot -->
-      <div style="position:relative;width:12px;height:12px;border-radius:50%;background:#6366f1;border:2px solid white;box-shadow:0 0 8px rgba(99,102,241,0.9);z-index:1"></div>
-    </div>
-    <span style="background:rgba(99,102,241,0.9);color:white;font-size:8px;font-weight:900;padding:1px 6px;border-radius:8px;white-space:nowrap;letter-spacing:0.05em;margin-top:1px">YOU ARE HERE</span>
-  </div>`,
-  iconSize: [90, 36],
-  iconAnchor: [45, 10],
-})
-
 function MiniMap() {
-  const mapRef = useRef<L.Map | null>(null)
-  const markerRef = useRef<L.Marker | null>(null)
   const [pos, setPos] = useState<[number, number] | null>(null)
 
   useEffect(() => {
     if (!navigator.geolocation) return
     const w = navigator.geolocation.watchPosition(
-      p => setPos([p.coords.latitude, p.coords.longitude]),
+      p => setPos([p.coords.longitude, p.coords.latitude]), // lng, lat for MapLibre
       () => {},
       { enableHighAccuracy: true }
     )
     return () => navigator.geolocation.clearWatch(w)
   }, [])
 
-  useEffect(() => {
-    const m = mapRef.current
-    if (!m || !pos) return
-    m.setView(pos, 16, { animate: true })
-    if (markerRef.current) { markerRef.current.setLatLng(pos) }
-    else { markerRef.current = L.marker(pos, { icon: hereIcon }).addTo(m) }
-  }, [pos])
-
   return (
     <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.25 }}
-      className="h-36 rounded-2xl border border-slate-700/40 overflow-hidden relative">
-      <MapContainer
-        center={pos ?? PALU_CENTER} zoom={pos ? 16 : 13}
-        zoomControl={false} attributionControl={false}
-        dragging={false} touchZoom={false} scrollWheelZoom={false}
-        doubleClickZoom={false} keyboard={false}
-        className="w-full h-full"
-        ref={mapRef as any}
+      className="h-36 rounded-2xl border border-slate-700/40 overflow-hidden relative pointer-events-none">
+      <Map
+        viewport={{
+          center: pos ?? [PALU_CENTER[1], PALU_CENTER[0]],
+          zoom: pos ? 16 : 13
+        }}
+        interactive={false}
       >
-        <TileLayer url={TILE_NORMAL} maxNativeZoom={20} maxZoom={20}/>
-      </MapContainer>
+        {pos && (
+          <MapMarker longitude={pos[0]} latitude={pos[1]}>
+            <MarkerContent>
+              <div style={{ display:'flex', flexDirection:'column', alignItems:'center', gap:2, pointerEvents:'none', position:'relative' }}>
+                <div style={{ position:'relative', width:20, height:20, display:'flex', alignItems:'center', justifyContent:'center' }}>
+                  <div style={{ position:'absolute', width:20, height:20, borderRadius:'50%', background:'rgba(99,102,241,0.25)', animation:'haloPulse 2s infinite' }}></div>
+                  <div style={{ position:'relative', width:12, height:12, borderRadius:'50%', background:'#6366f1', border:'2px solid white', boxShadow:'0 0 8px rgba(99,102,241,0.9)', zIndex:1 }}></div>
+                </div>
+                <span style={{ background:'rgba(99,102,241,0.9)', color:'white', fontSize:8, fontWeight:900, padding:'1px 6px', borderRadius:8, whiteSpace:'nowrap', letterSpacing:'0.05em', marginTop:1 }}>YOU ARE HERE</span>
+              </div>
+            </MarkerContent>
+          </MapMarker>
+        )}
+      </Map>
       {!pos && (
-        <div className="absolute inset-0 flex flex-col items-center justify-center bg-[#060d1a]/70">
+        <div className="absolute inset-0 flex flex-col items-center justify-center bg-[#060d1a]/70 z-10">
           <MapPin className="w-6 h-6 text-slate-500 mb-1"/>
           <p className="text-[10px] text-slate-500">GPS belum aktif</p>
         </div>
