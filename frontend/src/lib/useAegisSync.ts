@@ -59,8 +59,17 @@ async function apiPost(path: string, body: object, isAdmin = false) {
 const broadcastChannel = supabase.channel("aegis-events");
 
 export const aegisApi = {
-  /** Admin: activate or deactivate tsunami alert via serverless (triggers Web Push) */
-  setTsunami: (active: boolean) => apiPost("/api/tsunami", { active }, true),
+  /** Admin: activate or deactivate tsunami alert via serverless (triggers Web Push) and broadcast immediately */
+  setTsunami: async (active: boolean) => {
+    // 1. Broadcast immediately for fast admin-user sync
+    await broadcastChannel.send({
+      type: "broadcast",
+      event: "TSUNAMI",
+      payload: { active, ts: Date.now() },
+    });
+    // 2. Persist to API
+    return apiPost("/api/tsunami", { active }, true);
+  },
 
   /** When A scans B's QR, notify B so it adds A (Supabase Broadcast) */
   notifyFamilyJoin: async (fromId: string, fromName: string, toId: string) => {
@@ -175,6 +184,9 @@ export function useAegisSync(onEvent: SyncEventHandler) {
       })
       .on("broadcast", { event: "LOCATION_UPDATE" }, (payload) => {
         handlerRef.current({ type: "LOCATION_UPDATE", ...payload.payload });
+      })
+      .on("broadcast", { event: "TSUNAMI" }, (payload) => {
+        handlerRef.current({ type: "TSUNAMI", ...payload.payload });
       })
       .subscribe();
 

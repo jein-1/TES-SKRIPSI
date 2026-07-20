@@ -4,7 +4,7 @@
 // ─────────────────────────────────────────────────────────────────────────────
 import type { Shelter } from "./types";
 
-export const shelters: Shelter[] = [
+const defaultShelters: Shelter[] = [
   {
     id: "S1",
     name: "Taman GOR Palu",
@@ -67,5 +67,31 @@ export const shelters: Shelter[] = [
     lng: 119.89056,
     capacity: 500,
     radiusMeters: 50,
-  },
 ];
+
+export const shelters: Shelter[] = [];
+
+export function loadShelters() {
+  shelters.length = 0;
+  shelters.push(...defaultShelters);
+  try {
+    const custom = JSON.parse(localStorage.getItem("aegisCustomShelters") || "[]");
+    shelters.push(...custom);
+  } catch (e) {
+    console.error("Failed to load custom shelters", e);
+  }
+}
+
+export function addCustomShelter(shelter: Shelter) {
+  shelters.push(shelter);
+  try {
+    const custom = JSON.parse(localStorage.getItem("aegisCustomShelters") || "[]");
+    custom.push(shelter);
+    localStorage.setItem("aegisCustomShelters", JSON.stringify(custom));
+  } catch (e) {
+    console.error("Failed to save custom shelter", e);
+  }
+}
+
+// Load on initialization
+loadShelters();

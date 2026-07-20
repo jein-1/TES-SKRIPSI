@@ -343,8 +343,8 @@ export default function NavigatePage({ routes, selectedRoute, tsunamiAlert, user
             )
           })}
 
-          {/* Routes (OSRM or straight line) */}
-          {osrmRoutes.length > 0 ? (
+          {/* Routes (OSRM or straight line) - HANYA MUNCUL SAAT DARURAT */}
+          {emergency && (osrmRoutes.length > 0 ? (
             <MapRoute 
               coordinates={osrmRoutes[0].coordinates} 
               color={emergency ? "#ef4444" : "#6366f1"}
@@ -361,7 +361,7 @@ export default function NavigatePage({ routes, selectedRoute, tsunamiAlert, user
                 dashArray={[2, 2]}
               />
             )
-          )}
+          ))}
 
           {/* User Location Marker with Flashlight */}
           {effectivePos && (
@@ -433,8 +433,8 @@ export default function NavigatePage({ routes, selectedRoute, tsunamiAlert, user
         )}
       </div>
 
-      {/* Route panel (normal mode) */}
-      {!emergency && showRoutePanel && activeRoutes.length > 0 && (
+      {/* Route panel (normal mode) - Dihapus karena instruksi: tidak menunjukkan rute saat normal */}
+      {false && !emergency && showRoutePanel && activeRoutes.length > 0 && (
         <div className="shrink-0 border-t border-slate-800/50" style={{background:'#0a1020', maxHeight: 210, overflowY: 'auto'}}>
           <p className="text-[9px] text-slate-500 uppercase tracking-widest font-bold px-3 pt-2 pb-0.5">Pilih Rute Evakuasi</p>
           {activeRoutes.slice(0, 10).map((r, i) => {

@@ -5,6 +5,7 @@ import {
   shelters,
   hazardZones,
   findOptimalEvacuationRoutes,
+  addCustomShelter,
   type RouteResult,
 } from "./lib/evacuation";
 import {
@@ -47,6 +48,7 @@ import {
   Shield,
   MapPin,
   Info,
+  Plus,
   ChevronRight,
   ChevronLeft,
   X,
@@ -285,6 +287,8 @@ function App() {
   const [alarmMuted, setAlarmMuted] = useState(false);
   const [showTsunamiConfirm, setShowTsunamiConfirm] = useState(false);
   const [showShelters, setShowShelters] = useState(false);
+  const [showAddShelter, setShowAddShelter] = useState(false);
+  const [newShelter, setNewShelter] = useState({ name: '', lat: '', lng: '', capacity: '', radius: '50' });
   const [showLeftSidebar, setShowLeftSidebar] = useState(true);
   const [adminMapBearing, setAdminMapBearing] = useState(0);
   const adminMapRef = useRef<MapRef | null>(null);
@@ -1785,6 +1789,15 @@ function App() {
                 </nav>
                 <div className="p-6 mt-auto">
                   <button
+                    onClick={() => setShowAddShelter(true)}
+                    className="flex items-center gap-3 text-indigo-400 hover:text-indigo-300 transition-colors mb-4"
+                  >
+                    <Plus className="w-5 h-5" />
+                    <span className="font-semibold text-sm tracking-wide">
+                      TAMBAH SHELTER
+                    </span>
+                  </button>
+                  <button
                     onClick={() => setShowShelters(true)}
                     className="flex items-center gap-3 text-slate-500 hover:text-indigo-400 transition-colors"
                   >
@@ -2945,6 +2958,55 @@ function App() {
       <AnimatePresence>
         {isAdminURL && !userRole && (
           <LoginPage key="login" onLogin={handleLogin} />
+        )}
+      </AnimatePresence>
+
+      {/* ─── ADD SHELTER MODAL ─── */}
+      <AnimatePresence>
+        {showAddShelter && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-[3000] flex items-center justify-center bg-black/80 backdrop-blur-md p-4"
+          >
+            <motion.div
+              initial={{ scale: 0.9, y: 20 }}
+              animate={{ scale: 1, y: 0 }}
+              exit={{ scale: 0.9, y: 20 }}
+              className="w-full max-w-sm bg-slate-900 border border-slate-700 rounded-2xl p-6 shadow-xl relative"
+            >
+              <h2 className="text-lg font-black text-white mb-4">Tambah Shelter Manual</h2>
+              <div className="space-y-3">
+                <input type="text" placeholder="Nama Shelter" className="w-full bg-slate-800 text-white rounded-xl px-4 py-2 text-sm" value={newShelter.name} onChange={e => setNewShelter({...newShelter, name: e.target.value})} />
+                <div className="flex gap-3">
+                  <input type="number" placeholder="Latitude" className="w-full bg-slate-800 text-white rounded-xl px-4 py-2 text-sm" value={newShelter.lat} onChange={e => setNewShelter({...newShelter, lat: e.target.value})} />
+                  <input type="number" placeholder="Longitude" className="w-full bg-slate-800 text-white rounded-xl px-4 py-2 text-sm" value={newShelter.lng} onChange={e => setNewShelter({...newShelter, lng: e.target.value})} />
+                </div>
+                <div className="flex gap-3">
+                  <input type="number" placeholder="Kapasitas" className="w-full bg-slate-800 text-white rounded-xl px-4 py-2 text-sm" value={newShelter.capacity} onChange={e => setNewShelter({...newShelter, capacity: e.target.value})} />
+                  <input type="number" placeholder="Radius Aman (m)" className="w-full bg-slate-800 text-white rounded-xl px-4 py-2 text-sm" value={newShelter.radius} onChange={e => setNewShelter({...newShelter, radius: e.target.value})} />
+                </div>
+              </div>
+              <div className="flex items-center gap-3 mt-6">
+                <button onClick={() => setShowAddShelter(false)} className="flex-1 py-3 text-slate-400 font-bold text-sm bg-slate-800 rounded-xl hover:bg-slate-700">Batal</button>
+                <button onClick={() => {
+                  if(!newShelter.name || !newShelter.lat || !newShelter.lng) return alert('Data tidak lengkap');
+                  addCustomShelter({
+                    id: 'C'+Date.now(),
+                    name: newShelter.name,
+                    lat: parseFloat(newShelter.lat),
+                    lng: parseFloat(newShelter.lng),
+                    capacity: parseInt(newShelter.capacity) || 0,
+                    radiusMeters: parseInt(newShelter.radius) || 50
+                  });
+                  alert('Shelter ditambahkan!');
+                  setShowAddShelter(false);
+                  setNewShelter({ name: '', lat: '', lng: '', capacity: '', radius: '50' });
+                }} className="flex-1 py-3 text-white font-bold text-sm bg-indigo-600 rounded-xl hover:bg-indigo-500">Simpan</button>
+              </div>
+            </motion.div>
+          </motion.div>
         )}
       </AnimatePresence>
     </div>
