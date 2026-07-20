@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect, useRef } from "react";
+import { useState, useCallback, useEffect, useRef, useMemo } from "react";
 import { Map, MapMarker, MarkerContent, MapRoute, MapGeoJSON, type MapRef, type MapViewport } from '@/components/ui/map'
 // â”€â”€ Modules â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 import {
@@ -369,6 +369,32 @@ function App() {
   const { gempa } = useBMKG();
   const [historyFilter, setHistoryFilter] = useState<HistoryFilter>("all");
   const [dismissedGempaTime, setDismissedGempaTime] = useState<string | null>(null);
+
+  const isGempaDismissed = useMemo(() => {
+    if (!gempa) return true;
+    if (dismissedGempaTime === gempa.DateTime) return true;
+    try {
+      const history = JSON.parse(localStorage.getItem('dismissedGempas') || '[]');
+      return history.includes(gempa.DateTime);
+    } catch {
+      return false;
+    }
+  }, [gempa, dismissedGempaTime]);
+
+  const handleDismissGempa = useCallback(() => {
+    if (!gempa) return;
+    try {
+      let history = JSON.parse(localStorage.getItem('dismissedGempas') || '[]');
+      if (!history.includes(gempa.DateTime)) {
+        history.push(gempa.DateTime);
+        if (history.length > 7) {
+          history = history.slice(-7); // Maksimal 7 riwayat
+        }
+        localStorage.setItem('dismissedGempas', JSON.stringify(history));
+      }
+    } catch (e) {}
+    setDismissedGempaTime(gempa.DateTime);
+  }, [gempa]);
 
   // â”€â”€ Persistent Terminal ID â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   const [terminalId] = useState(() => {
@@ -1820,11 +1846,11 @@ function App() {
           {/* Admin: GPS badges dihapus - admin hanya memantau, tidak navigasi */}
 
           {/* BMKG OVERLAY */}
-          {gempa && dismissedGempaTime !== gempa.DateTime && (
-            <div className="absolute top-4 left-1/2 -translate-x-1/2 z-[600] bg-slate-900/90 backdrop-blur-md border border-slate-700 rounded-2xl p-4 shadow-2xl flex items-center gap-4 max-w-sm w-[90%]">
+          {gempa && !isGempaDismissed && (
+            <div className="absolute top-4 left-1/2 -translate-x-1/2 z-[600] bg-slate-900/90 backdrop-blur-md border border-slate-700 rounded-2xl p-4 shadow-2xl flex items-center gap-4 max-w-sm w-[90%] pr-10">
               <button 
-                onClick={() => setDismissedGempaTime(gempa.DateTime)}
-                className="absolute top-2 right-2 p-1 text-slate-400 hover:text-white hover:bg-slate-800 rounded-full transition-colors"
+                onClick={handleDismissGempa}
+                className="absolute top-3 right-3 p-1.5 text-slate-400 hover:text-white hover:bg-slate-800 rounded-full transition-colors"
                 title="Tutup Notifikasi"
               >
                 <X className="w-4 h-4" />
