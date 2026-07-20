@@ -283,7 +283,7 @@ function App() {
   const [gpsError, setGpsError] = useState<string | null>(null);
   const [tsunamiAlert, setTsunamiAlert] = useState(() => {
     if (typeof window !== "undefined") {
-      return sessionStorage.getItem("aegisSimulating") === "true";
+      return sessionStorage.getItem("aegisSimulating") === "true" || localStorage.getItem("aegisRealTsunami") === "true";
     }
     return false;
   });
@@ -368,8 +368,10 @@ function App() {
   // â”€â”€ Navigation â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   // Admin starts on 'map', public user starts on 'status'
   const [activePage, setActivePage] = useState<ActivePage>(() => {
-    if (typeof window !== "undefined" && sessionStorage.getItem("aegisSimulating") === "true") {
-      return "navigate";
+    if (typeof window !== "undefined") {
+      const isSimulating = sessionStorage.getItem("aegisSimulating") === "true";
+      const isRealTsunami = localStorage.getItem("aegisRealTsunami") === "true";
+      if (isSimulating || isRealTsunami) return "navigate";
     }
     if (!isAdminURL) return "status";
     const role = sessionStorage.getItem("aegisRole") as UserRole;
@@ -869,6 +871,7 @@ function App() {
     if (event.type === "TSUNAMI") {
       const active = event.active as boolean;
       if (active) {
+        if (typeof window !== "undefined") localStorage.setItem("aegisRealTsunami", "true");
         setTsunamiAlert(true);
         setActivePage("navigate");
         if (vibrateIntervalRef.current)
@@ -888,6 +891,7 @@ function App() {
         }
         sendTsunamiNotification(true);
       } else {
+        if (typeof window !== "undefined") localStorage.removeItem("aegisRealTsunami");
         setTsunamiAlert(false);
         alarmRef.current.stop();
         if (vibrateIntervalRef.current) {
@@ -980,8 +984,15 @@ function App() {
     // 5. Cek status tsunami saat app dibuka
     aegisApi.getTsunami().then(({ active }) => {
       if (active) {
+        if (typeof window !== "undefined") localStorage.setItem("aegisRealTsunami", "true");
         setTsunamiAlert(true);
         setActivePage("navigate");
+      } else {
+        if (typeof window !== "undefined" && localStorage.getItem("aegisRealTsunami") === "true") {
+          localStorage.removeItem("aegisRealTsunami");
+          setTsunamiAlert(false);
+          if (!isAdminURL) setActivePage("status");
+        }
       }
     });
     // 6. Minta agar tidak dimatikan oleh battery optimizer (Android)
