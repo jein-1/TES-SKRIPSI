@@ -22,7 +22,7 @@ export default defineConfig({
     },
   },
   build: {
-    outDir: process.env.VERCEL ? 'dist' : '../www',      // output ke root/www agar Capacitor bisa baca (kecuali Vercel)
+    outDir: process.env.VERCEL ? '../dist' : '../www',      // output ke root/dist untuk Vercel, root/www untuk Capacitor
     emptyOutDir: true,
     chunkSizeWarningLimit: 1000,
     rollupOptions: {
