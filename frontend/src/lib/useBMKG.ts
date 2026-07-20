@@ -53,7 +53,20 @@ export function useBMKG() {
         }
 
         if (mounted) {
-          setGempa(data as GempaData);
+          setGempa((prev) => {
+            // Jika ada gempa baru (berdasarkan DateTime) yang mag >= 4.0
+            if (prev && prev.DateTime !== data.DateTime && data.Magnitude && parseFloat(data.Magnitude) >= 4.0) {
+              if (Notification.permission === "granted") {
+                new Notification("Info Gempa BMKG Terkini", {
+                  body: `Mag: ${data.Magnitude}, Kd: ${data.Kedalaman}. ${data.Wilayah}`,
+                });
+              }
+            } else if (!prev && Notification.permission !== "denied" && Notification.permission !== "granted") {
+              // Minta izin notifikasi saat load pertama (bisa diabaikan oleh browser modern jika tidak di-trigger oleh user click)
+              Notification.requestPermission().catch(() => {});
+            }
+            return data as GempaData;
+          });
           setError(null);
         }
       } catch (err: any) {

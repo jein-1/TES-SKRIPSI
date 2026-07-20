@@ -309,30 +309,7 @@ export default function NavigatePage({ routes, selectedRoute, tsunamiAlert, user
           viewport={viewport}
           onViewportChange={setViewport}
         >
-          {/* BMKG GEMPA TERKINI (Epicenter & Radius) */}
-          {gempa && !isNaN(gempa.lat) && !isNaN(gempa.lng) && (
-            <>
-              <MapMarker longitude={gempa.lng} latitude={gempa.lat}>
-                <MarkerContent>
-                  <div style={{
-                    width: 40, height: 40, background: 'rgba(239, 68, 68, 0.2)', border: '2px solid #ef4444',
-                    borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center',
-                    boxShadow: '0 0 20px rgba(239, 68, 68, 0.6)', animation: 'ping 2s cubic-bezier(0, 0, 0.2, 1) infinite'
-                  }}>
-                    <div style={{width: 12, height: 12, background: '#ef4444', borderRadius: '50%'}}></div>
-                  </div>
-                </MarkerContent>
-              </MapMarker>
-              
-              {gempa.Potensi.toLowerCase().includes('tsunami') && (
-                <MapGeoJSON
-                  data={createCirclePolygon(gempa.lat, gempa.lng, 100) as any}
-                  fillPaint={{ 'fill-color': '#ef4444', 'fill-opacity': 0.15 }}
-                  linePaint={{ 'line-color': '#ef4444', 'line-width': 2 }}
-                />
-              )}
-            </>
-          )}
+          {/* BMKG GEMPA TERKINI (Epicenter & Radius) - Removed from User POV to avoid squished view, but Overlay widget is kept at the top */}
 
           {/* Hazard Zones MapGeoJSON */}
           {hazardZones.map((zone, i) => (
