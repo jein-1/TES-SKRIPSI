@@ -35,7 +35,7 @@ import NavigatePage from "./components/pages/NavigatePage";
 import FamilyPage from "./components/pages/FamilyPage";
 import GuidesPage from "./components/pages/GuidesPage";
 import { useAegisSync, aegisApi } from "./lib/useAegisSync";
-import { useBMKG } from "./lib/useBMKG";
+import { useBMKG, createCirclePolygon } from "./lib/useBMKG";
 import {
   requestNotifPermission,
   sendTsunamiNotification,
@@ -1919,24 +1919,12 @@ function App() {
                   </MarkerContent>
                 </MapMarker>
                 
-                {/* Simulated danger radius (e.g. 50km from epicenter if Tsunami potential) */}
+                {/* Simulated danger radius (e.g. 100km from epicenter if Tsunami potential) */}
                 {gempa.Potensi.toLowerCase().includes('tsunami') && (
                   <MapGeoJSON
-                    data={{
-                      type: 'Feature',
-                      properties: {},
-                      geometry: {
-                        type: 'Point',
-                        coordinates: [gempa.lng, gempa.lat]
-                      }
-                    }}
-                    circlePaint={{
-                      'circle-radius': 100, // Visual representation
-                      'circle-color': '#ef4444',
-                      'circle-opacity': 0.15,
-                      'circle-stroke-color': '#ef4444',
-                      'circle-stroke-width': 2
-                    }}
+                    data={createCirclePolygon(gempa.lat, gempa.lng, 100) as any}
+                    fillPaint={{ 'fill-color': '#ef4444', 'fill-opacity': 0.15 }}
+                    linePaint={{ 'line-color': '#ef4444', 'line-width': 2 }}
                   />
                 )}
               </>

@@ -43,7 +43,7 @@ export function useBMKG() {
         const fields = ["Tanggal", "Jam", "DateTime", "Coordinates", "Lintang", "Bujur", "Magnitude", "Kedalaman", "Wilayah", "Potensi", "Dirasakan", "Shakemap"];
         
         fields.forEach(field => {
-          data[field as keyof GempaData] = gempaNode.querySelector(field)?.textContent || "";
+          (data as any)[field] = gempaNode.querySelector(field)?.textContent || "";
         });
 
         if (data.Coordinates) {
@@ -74,4 +74,27 @@ export function useBMKG() {
   }, []);
 
   return { gempa, loading, error };
+}
+
+export function createCirclePolygon(lat: number, lng: number, radiusKm: number) {
+  const points = 64;
+  const coords = [];
+  const distanceX = radiusKm / (111.320 * Math.cos(lat * Math.PI / 180));
+  const distanceY = radiusKm / 110.574;
+  for (let i = 0; i < points; i++) {
+    const theta = (i / points) * (2 * Math.PI);
+    const x = distanceX * Math.cos(theta);
+    const y = distanceY * Math.sin(theta);
+    coords.push([lng + x, lat + y]);
+  }
+  coords.push(coords[0]); // close the polygon
+  
+  return {
+    type: 'Feature' as const,
+    properties: {},
+    geometry: {
+      type: 'Polygon' as const,
+      coordinates: [coords]
+    }
+  };
 }

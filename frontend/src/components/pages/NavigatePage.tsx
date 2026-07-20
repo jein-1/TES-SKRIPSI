@@ -10,7 +10,7 @@ import {
 } from 'lucide-react'
 import { motion, AnimatePresence } from 'motion/react'
 import { findOptimalEvacuationRoutes, type RouteResult } from "../../lib/evacuation";
-import { useBMKG } from "../../lib/useBMKG";
+import { useBMKG, createCirclePolygon } from "../../lib/useBMKG";
 import { shelters, hazardZones } from '../../lib/evacuation'
 import { Geolocation } from '@capacitor/geolocation'
 import type * as GeoJSON from 'geojson'
@@ -326,21 +326,9 @@ export default function NavigatePage({ routes, selectedRoute, tsunamiAlert, user
               
               {gempa.Potensi.toLowerCase().includes('tsunami') && (
                 <MapGeoJSON
-                  data={{
-                    type: 'Feature',
-                    properties: {},
-                    geometry: {
-                      type: 'Point',
-                      coordinates: [gempa.lng, gempa.lat]
-                    }
-                  }}
-                  circlePaint={{
-                    'circle-radius': 100, // Visual representation
-                    'circle-color': '#ef4444',
-                    'circle-opacity': 0.15,
-                    'circle-stroke-color': '#ef4444',
-                    'circle-stroke-width': 2
-                  }}
+                  data={createCirclePolygon(gempa.lat, gempa.lng, 100) as any}
+                  fillPaint={{ 'fill-color': '#ef4444', 'fill-opacity': 0.15 }}
+                  linePaint={{ 'line-color': '#ef4444', 'line-width': 2 }}
                 />
               )}
             </>
