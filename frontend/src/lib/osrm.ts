@@ -11,7 +11,7 @@ export async function fetchOsrmRoute(
   endLat: number
 ): Promise<OsrmRouteData[]> {
   try {
-    const url = `https://router.project-osrm.org/route/v1/driving/${startLng},${startLat};${endLng},${endLat}?overview=full&geometries=geojson&alternatives=true`;
+    const url = `https://router.project-osrm.org/route/v1/foot/${startLng},${startLat};${endLng},${endLat}?overview=full&geometries=geojson&alternatives=true`;
     const response = await fetch(url);
     const data = await response.json();
     if (data.routes?.length > 0) {

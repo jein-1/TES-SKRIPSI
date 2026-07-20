@@ -326,6 +326,16 @@ const Map = forwardRef<MapRef, MapProps>(function Map(
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // Add ResizeObserver to fix "gepeng" (stretched) map issues
+  useEffect(() => {
+    if (!mapInstance || !containerRef.current) return;
+    const resizeObserver = new ResizeObserver(() => {
+      mapInstance.resize();
+    });
+    resizeObserver.observe(containerRef.current);
+    return () => resizeObserver.disconnect();
+  }, [mapInstance]);
+
   // Sync controlled viewport to map
   useEffect(() => {
     if (!mapInstance || !isControlled || !viewport) return;
