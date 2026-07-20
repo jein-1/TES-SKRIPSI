@@ -6,6 +6,7 @@ import { MapContainer, TileLayer, Marker, Popup } from 'react-leaflet'
 import L from 'leaflet'
 import 'leaflet/dist/leaflet.css'
 import QRCode from 'qrcode'
+import { Geolocation } from '@capacitor/geolocation'
 import { useAegisSync, aegisApi } from '../../lib/useAegisSync'
 import type { FamilyMember } from '../../types'
 
@@ -316,16 +317,24 @@ export default function FamilyPage({ onBack, onPingClear }: Props) {
 
   // Broadcast my location to all members
   useEffect(() => {
-    if (!navigator.geolocation) return
-    const w = navigator.geolocation.watchPosition(pos => {
-      const { latitude: lat, longitude: lng } = pos.coords
-      // Save own location tagged as self (for others to see me when I join their family)
-      saveMemberLoc(myId, lat, lng)
-      // Broadcast via server if online
-      const deviceInfo = (window as any).__DEVICE_MODEL__ || navigator.userAgent;
-      aegisApi.broadcastLocation(myId, getMyName(), deviceInfo, lat, lng, 100).catch(() => {})
-    }, () => {}, { enableHighAccuracy: true })
-    return () => navigator.geolocation.clearWatch(w)
+    let watchId: string | null = null;
+    const startWatch = async () => {
+      try {
+        watchId = await Geolocation.watchPosition({ enableHighAccuracy: true }, (pos, err) => {
+          if (err || !pos) return;
+          const { latitude: lat, longitude: lng } = pos.coords
+          saveMemberLoc(myId, lat, lng)
+          const deviceInfo = (window as any).__DEVICE_MODEL__ || navigator.userAgent;
+          aegisApi.broadcastLocation(myId, getMyName(), deviceInfo, lat, lng, 100).catch(() => {})
+        });
+      } catch (e) {
+        console.warn("Family GPS error", e);
+      }
+    };
+    startWatch();
+    return () => {
+      if (watchId) Geolocation.clearWatch({ id: watchId }).catch(() => {});
+    };
   }, [myId])
 
   // SSE events

@@ -15,9 +15,10 @@ import {
 } from 'lucide-react'
 import { motion, AnimatePresence } from 'motion/react'
 import type { RouteResult } from '../../lib/evacuation'
-import { shelters, hazardZones } from '../../lib/evacuation'
+import { shelters, hazardZones, findOptimalEvacuationRoutes } from '../../lib/evacuation'
 import { TILE_NORMAL } from '../../constants/mapConfig'
 import { CompassWidget } from '../map/MapRotation'
+import { Geolocation } from '@capacitor/geolocation'
 
 interface Props {
   routes: RouteResult[]
@@ -187,13 +188,19 @@ export default function NavigatePage({ routes, selectedRoute, tsunamiAlert, user
   // GPS instant detection — NavigatePage punya GPS sendiri untuk langsung tampil
   useEffect(() => {
     if (userPosition) { setLocalPos(userPosition); return }
-    if (!navigator.geolocation) return
-    const w = navigator.geolocation.watchPosition(
-      p => setLocalPos([p.coords.latitude, p.coords.longitude]),
-      () => {},
-      { enableHighAccuracy: true, maximumAge: 5000 }
-    )
-    return () => navigator.geolocation.clearWatch(w)
+    let watchId: string | null = null;
+    const startWatch = async () => {
+      try {
+        watchId = await Geolocation.watchPosition({ enableHighAccuracy: true, maximumAge: 5000 }, (p, err) => {
+          if (err || !p) return;
+          setLocalPos([p.coords.latitude, p.coords.longitude]);
+        });
+      } catch (e) {}
+    };
+    startWatch();
+    return () => {
+      if (watchId) Geolocation.clearWatch({ id: watchId }).catch(() => {});
+    };
   }, [userPosition])
 
   // Notify parent to start GPS tracking if not yet started
@@ -213,11 +220,12 @@ export default function NavigatePage({ routes, selectedRoute, tsunamiAlert, user
   const emergency = tsunamiAlert
 
   // Selalu hitung index shelter terdekat dari posisi user saat ini
+  const activeRoutes = routes.length > 0 ? routes : (effectivePos ? findOptimalEvacuationRoutes(effectivePos[0], effectivePos[1]) : [])
   const nearestIdx = effectivePos
     ? (() => {
-        if (routes.length === 0) return 0
+        if (activeRoutes.length === 0) return 0
         let minDist = Infinity, idx = 0
-        routes.forEach((r, i) => {
+        activeRoutes.forEach((r, i) => {
           const sp = r.coordinates[r.coordinates.length - 1] as [number, number]
           if (!sp) return
           const d = haversineM(effectivePos, sp)
@@ -234,7 +242,7 @@ export default function NavigatePage({ routes, selectedRoute, tsunamiAlert, user
 
   useEffect(() => { setHeadingLocked(true) }, [tsunamiAlert])
 
-  const route       = routes[activeRouteIdx]
+  const route       = activeRoutes[activeRouteIdx]
   const shelterPos  = route ? [shelters.find(s => s.id === route.shelterId)?.lat ?? route.coordinates[route.coordinates.length-1]?.[0], shelters.find(s => s.id === route.shelterId)?.lng ?? route.coordinates[route.coordinates.length-1]?.[1]] as [number, number] : undefined
 
   const computedBearing = (effectivePos && shelterPos) ? getBearing(effectivePos, shelterPos) : 0
@@ -425,8 +433,8 @@ export default function NavigatePage({ routes, selectedRoute, tsunamiAlert, user
                         📍 Jarak: <b style={{ color: '#818cf8' }}>{distKm} km</b>
                       </p>
                     )}
-                    {routes.length > 0 && (() => {
-                      const idx = routes.findIndex(r => r.shelterName === s.name)
+                    {activeRoutes.length > 0 && (() => {
+                      const idx = activeRoutes.findIndex(r => r.shelterName === s.name)
                       if (idx < 0) return null
                       return (
                         <button
@@ -452,7 +460,7 @@ export default function NavigatePage({ routes, selectedRoute, tsunamiAlert, user
           )}
 
           {/* Routes — hanya tampil saat ada rute */}
-          {routes.length > 0 && routes.map((route, i) => {
+          {activeRoutes.length > 0 && activeRoutes.map((route, i) => {
             const isSelected = i === activeRouteIdx;
             return (
               <Polyline
@@ -512,10 +520,10 @@ export default function NavigatePage({ routes, selectedRoute, tsunamiAlert, user
       </div>
 
       {/* Route panel (normal mode) */}
-      {!emergency && showRoutePanel && routes.length > 0 && (
+      {!emergency && showRoutePanel && activeRoutes.length > 0 && (
         <div className="shrink-0 border-t border-slate-800/50" style={{background:'#0a1020', maxHeight: 210, overflowY: 'auto'}}>
           <p className="text-[9px] text-slate-500 uppercase tracking-widest font-bold px-3 pt-2 pb-0.5">Pilih Rute Evakuasi</p>
-          {routes.slice(0, 10).map((r, i) => {
+          {activeRoutes.slice(0, 10).map((r, i) => {
             const dKm  = r.totalDistance === Infinity ? '—' : `${r.totalDistance.toFixed(2)} km`
             const t    = r.totalDistance === Infinity ? '—' : `${r.walkingTime} mnt`
             const cap  = shelters.find(s => s.name === r.shelterName)?.capacity?.toLocaleString() ?? '—'

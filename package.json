@@ -1,6 +1,6 @@
 {
   "name": "tes-project-skripsi",
-  "version": "0.0.29",
+  "version": "0.0.30",
   "type": "module",
   "scripts": {
     "dev:frontend": "cd frontend && npm run dev",
