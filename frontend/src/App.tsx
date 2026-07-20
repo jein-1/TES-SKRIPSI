@@ -368,6 +368,7 @@ function App() {
   });
   const { gempa } = useBMKG();
   const [historyFilter, setHistoryFilter] = useState<HistoryFilter>("all");
+  const [dismissedGempaTime, setDismissedGempaTime] = useState<string | null>(null);
 
   // â”€â”€ Persistent Terminal ID â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   const [terminalId] = useState(() => {
@@ -1819,8 +1820,15 @@ function App() {
           {/* Admin: GPS badges dihapus - admin hanya memantau, tidak navigasi */}
 
           {/* BMKG OVERLAY */}
-          {gempa && (
+          {gempa && dismissedGempaTime !== gempa.DateTime && (
             <div className="absolute top-4 left-1/2 -translate-x-1/2 z-[600] bg-slate-900/90 backdrop-blur-md border border-slate-700 rounded-2xl p-4 shadow-2xl flex items-center gap-4 max-w-sm w-[90%]">
+              <button 
+                onClick={() => setDismissedGempaTime(gempa.DateTime)}
+                className="absolute top-2 right-2 p-1 text-slate-400 hover:text-white hover:bg-slate-800 rounded-full transition-colors"
+                title="Tutup Notifikasi"
+              >
+                <X className="w-4 h-4" />
+              </button>
               <div className={`w-12 h-12 rounded-full flex items-center justify-center shrink-0 ${gempa.Potensi.toLowerCase().includes('tsunami') ? 'bg-red-500/20 text-red-500' : 'bg-orange-500/20 text-orange-400'}`}>
                 <AlertTriangle className="w-6 h-6" />
               </div>

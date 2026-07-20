@@ -6,7 +6,7 @@ import { Map, MapMarker, MarkerContent, MapRoute, MapGeoJSON, type MapViewport, 
 import { fetchOsrmRoute, type OsrmRouteData } from '../../lib/osrm'
 import {
   AlertTriangle, Navigation2, Phone, ChevronLeft,
-  MapPin, Compass, Lock, Unlock, ChevronRight, ArrowRight, Radio
+  MapPin, Compass, Lock, Unlock, ChevronRight, ArrowRight, Radio, X
 } from 'lucide-react'
 import { motion, AnimatePresence } from 'motion/react'
 import { findOptimalEvacuationRoutes, type RouteResult } from "../../lib/evacuation";
@@ -60,6 +60,7 @@ export default function NavigatePage({ routes, selectedRoute, tsunamiAlert, user
   const [headingLocked, setHeadingLocked] = useState(true)
   const [activeRouteIdx, setActiveRouteIdx] = useState(selectedRoute)
   const [showRoutePanel, setShowRoutePanel] = useState(true)
+  const [dismissedGempaTime, setDismissedGempaTime] = useState<string | null>(null)
   const [localPos, setLocalPos] = useState<[number,number] | null>(null)
   const mapRef = useRef<MapRef | null>(null)
   const [showCalibration, setShowCalibration] = useState(() => !sessionStorage.getItem('compassCalibrated'))
@@ -437,8 +438,14 @@ export default function NavigatePage({ routes, selectedRoute, tsunamiAlert, user
         )}
 
         {/* BMKG OVERLAY */}
-        {gempa && (
+        {gempa && dismissedGempaTime !== gempa.DateTime && (
           <div className="absolute top-4 left-1/2 -translate-x-1/2 z-[500] bg-slate-900/90 backdrop-blur-md border border-slate-700 rounded-2xl p-4 shadow-2xl flex items-center gap-4 max-w-[90%] w-80">
+            <button 
+              onClick={() => setDismissedGempaTime(gempa.DateTime)}
+              className="absolute top-2 right-2 p-1 text-slate-400 hover:text-white hover:bg-slate-800 rounded-full transition-colors"
+            >
+              <X className="w-3 h-3" />
+            </button>
             <div className={`w-10 h-10 rounded-full flex items-center justify-center shrink-0 ${gempa.Potensi.toLowerCase().includes('tsunami') ? 'bg-red-500/20 text-red-500' : 'bg-orange-500/20 text-orange-400'}`}>
               <AlertTriangle className="w-5 h-5" />
             </div>
