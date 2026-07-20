@@ -1,6 +1,6 @@
 {
   "buildCommand": "npm run build",
-  "outputDirectory": "www",
+  "outputDirectory": "frontend/dist",
   "rewrites": [
     {
       "source": "/api/(.*)",
