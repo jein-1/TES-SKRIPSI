@@ -9,8 +9,9 @@ import {
   MapPin, Compass, Lock, Unlock, ChevronRight, ArrowRight, Radio
 } from 'lucide-react'
 import { motion, AnimatePresence } from 'motion/react'
-import type { RouteResult } from '../../lib/evacuation'
-import { shelters, hazardZones, findOptimalEvacuationRoutes } from '../../lib/evacuation'
+import { findOptimalEvacuationRoutes, type RouteResult } from "../../lib/evacuation";
+import { useBMKG } from "../../lib/useBMKG";
+import { shelters, hazardZones } from '../../lib/evacuation'
 import { Geolocation } from '@capacitor/geolocation'
 import type * as GeoJSON from 'geojson'
 
@@ -53,6 +54,7 @@ function bearingLabel(b: number): { label: string; icon: string } {
 
 // ── MAIN ──────────────────────────────────────────────────────
 export default function NavigatePage({ routes, selectedRoute, tsunamiAlert, userPosition, onBack, adminPing, onAdminPingDismiss, onStartGps }: Props) {
+  const { gempa } = useBMKG();
   const [showMedical, setShowMedical]     = useState(false)
   const [deviceHeading, setDeviceHeading] = useState<number | null>(null)
   const [headingLocked, setHeadingLocked] = useState(true)
@@ -307,6 +309,43 @@ export default function NavigatePage({ routes, selectedRoute, tsunamiAlert, user
           viewport={viewport}
           onViewportChange={setViewport}
         >
+          {/* BMKG GEMPA TERKINI (Epicenter & Radius) */}
+          {gempa && (
+            <>
+              <MapMarker longitude={gempa.lng} latitude={gempa.lat}>
+                <MarkerContent>
+                  <div style={{
+                    width: 40, height: 40, background: 'rgba(239, 68, 68, 0.2)', border: '2px solid #ef4444',
+                    borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    boxShadow: '0 0 20px rgba(239, 68, 68, 0.6)', animation: 'ping 2s cubic-bezier(0, 0, 0.2, 1) infinite'
+                  }}>
+                    <div style={{width: 12, height: 12, background: '#ef4444', borderRadius: '50%'}}></div>
+                  </div>
+                </MarkerContent>
+              </MapMarker>
+              
+              {gempa.Potensi.toLowerCase().includes('tsunami') && (
+                <MapGeoJSON
+                  data={{
+                    type: 'Feature',
+                    properties: {},
+                    geometry: {
+                      type: 'Point',
+                      coordinates: [gempa.lng, gempa.lat]
+                    }
+                  }}
+                  circlePaint={{
+                    'circle-radius': 100, // Visual representation
+                    'circle-color': '#ef4444',
+                    'circle-opacity': 0.15,
+                    'circle-stroke-color': '#ef4444',
+                    'circle-stroke-width': 2
+                  }}
+                />
+              )}
+            </>
+          )}
+
           {/* Hazard Zones MapGeoJSON */}
           {hazardZones.map((zone, i) => (
             <MapGeoJSON 
@@ -429,6 +468,23 @@ export default function NavigatePage({ routes, selectedRoute, tsunamiAlert, user
         {!effectivePos && (
           <div className="absolute bottom-3 left-1/2 -translate-x-1/2 z-[500] px-3 py-1.5 rounded-xl bg-amber-900/80 border border-amber-700/60">
             <p className="text-[10px] font-bold text-amber-300">⏳ Mendeteksi GPS...</p>
+          </div>
+        )}
+
+        {/* BMKG OVERLAY */}
+        {gempa && (
+          <div className="absolute top-4 left-1/2 -translate-x-1/2 z-[500] bg-slate-900/90 backdrop-blur-md border border-slate-700 rounded-2xl p-4 shadow-2xl flex items-center gap-4 max-w-[90%] w-80">
+            <div className={`w-10 h-10 rounded-full flex items-center justify-center shrink-0 ${gempa.Potensi.toLowerCase().includes('tsunami') ? 'bg-red-500/20 text-red-500' : 'bg-orange-500/20 text-orange-400'}`}>
+              <AlertTriangle className="w-5 h-5" />
+            </div>
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center justify-between mb-0.5">
+                <h3 className="text-[10px] font-black text-white uppercase tracking-wider">INFO GEMPA</h3>
+                <span className="text-[9px] font-bold text-slate-400">{gempa.Jam.split(' ')[0]}</span>
+              </div>
+              <p className="text-[11px] text-slate-300 font-medium truncate">Mag {gempa.Magnitude} • Kd {gempa.Kedalaman}</p>
+              <p className="text-[9px] text-slate-400 truncate">{gempa.Wilayah}</p>
+            </div>
           </div>
         )}
       </div>

@@ -35,6 +35,7 @@ import NavigatePage from "./components/pages/NavigatePage";
 import FamilyPage from "./components/pages/FamilyPage";
 import GuidesPage from "./components/pages/GuidesPage";
 import { useAegisSync, aegisApi } from "./lib/useAegisSync";
+import { useBMKG } from "./lib/useBMKG";
 import {
   requestNotifPermission,
   sendTsunamiNotification,
@@ -365,6 +366,7 @@ function App() {
     const role = sessionStorage.getItem("aegisRole") as UserRole;
     return role === "user" ? "status" : "map";
   });
+  const { gempa } = useBMKG();
   const [historyFilter, setHistoryFilter] = useState<HistoryFilter>("all");
 
   // â”€â”€ Persistent Terminal ID â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
@@ -1816,6 +1818,26 @@ function App() {
         <main className="flex-1 relative z-0 bg-[#0b1120]">
           {/* Admin: GPS badges dihapus - admin hanya memantau, tidak navigasi */}
 
+          {/* BMKG OVERLAY */}
+          {gempa && (
+            <div className="absolute top-4 left-1/2 -translate-x-1/2 z-[600] bg-slate-900/90 backdrop-blur-md border border-slate-700 rounded-2xl p-4 shadow-2xl flex items-center gap-4 max-w-sm w-[90%]">
+              <div className={`w-12 h-12 rounded-full flex items-center justify-center shrink-0 ${gempa.Potensi.toLowerCase().includes('tsunami') ? 'bg-red-500/20 text-red-500' : 'bg-orange-500/20 text-orange-400'}`}>
+                <AlertTriangle className="w-6 h-6" />
+              </div>
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center justify-between mb-1">
+                  <h3 className="text-xs font-black text-white uppercase tracking-wider">INFO GEMPA BMKG</h3>
+                  <span className="text-[10px] font-bold text-slate-400">{gempa.Jam.split(' ')[0]}</span>
+                </div>
+                <p className="text-xs text-slate-300 font-medium truncate">Mag: {gempa.Magnitude} • Kedalaman: {gempa.Kedalaman}</p>
+                <p className="text-[10px] text-slate-400 truncate">{gempa.Wilayah}</p>
+                <p className={`text-[10px] font-bold mt-1 ${gempa.Potensi.toLowerCase().includes('tsunami') ? 'text-red-400 animate-pulse' : 'text-emerald-400'}`}>
+                  {gempa.Potensi}
+                </p>
+              </div>
+            </div>
+          )}
+
           {/* Mobile floating LIHAT RUTE button */}
           <AnimatePresence>
             {routes.length > 0 && !showPanel && isMobile && (
@@ -1882,6 +1904,44 @@ function App() {
               setAdminMapBearing(v.bearing);
             }}
           >
+            {/* BMKG GEMPA TERKINI (Epicenter & Radius) */}
+            {gempa && (
+              <>
+                <MapMarker longitude={gempa.lng} latitude={gempa.lat}>
+                  <MarkerContent>
+                    <div style={{
+                      width: 40, height: 40, background: 'rgba(239, 68, 68, 0.2)', border: '2px solid #ef4444',
+                      borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center',
+                      boxShadow: '0 0 20px rgba(239, 68, 68, 0.6)', animation: 'ping 2s cubic-bezier(0, 0, 0.2, 1) infinite'
+                    }}>
+                      <div style={{width: 12, height: 12, background: '#ef4444', borderRadius: '50%'}}></div>
+                    </div>
+                  </MarkerContent>
+                </MapMarker>
+                
+                {/* Simulated danger radius (e.g. 50km from epicenter if Tsunami potential) */}
+                {gempa.Potensi.toLowerCase().includes('tsunami') && (
+                  <MapGeoJSON
+                    data={{
+                      type: 'Feature',
+                      properties: {},
+                      geometry: {
+                        type: 'Point',
+                        coordinates: [gempa.lng, gempa.lat]
+                      }
+                    }}
+                    circlePaint={{
+                      'circle-radius': 100, // Visual representation
+                      'circle-color': '#ef4444',
+                      'circle-opacity': 0.15,
+                      'circle-stroke-color': '#ef4444',
+                      'circle-stroke-width': 2
+                    }}
+                  />
+                )}
+              </>
+            )}
+
             {/* Hazard zones */}
             {settings.showHazardZones &&
               hazardZones.map((zone, i) => (
