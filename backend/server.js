@@ -379,10 +379,14 @@ app.use((err, req, res, _next) => {
     .json({ error: isProd ? "Terjadi kesalahan server." : err.message });
 });
 
-const PORT = process.env.PORT || 3001;
-app.listen(PORT, () => {
-  console.log(
-    `🛡️  Aegis Response running on port ${PORT} [${isProd ? "PRODUCTION" : "DEVELOPMENT"}]`,
-  );
-  console.log(`📣  Web Push: ${pushSubscriptions.size} subscribers`);
-});
+if (process.env.NODE_ENV !== "production" && !process.env.VERCEL) {
+  const PORT = process.env.PORT || 3001;
+  app.listen(PORT, () => {
+    console.log(
+      `🛡️  Aegis Response running on port ${PORT} [${isProd ? "PRODUCTION" : "DEVELOPMENT"}]`,
+    );
+    console.log(`📣  Web Push: ${pushSubscriptions.size} subscribers`);
+  });
+}
+
+export default app;
