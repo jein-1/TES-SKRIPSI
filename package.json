@@ -1,6 +1,6 @@
 {
   "name": "tes-project-skripsi",
-  "version": "0.0.26",
+  "version": "0.0.29",
   "type": "module",
   "scripts": {
     "dev:frontend": "cd frontend && npm run dev",
@@ -24,5 +24,9 @@
     "concurrently": "^9.2.1",
     "cors": "^2.8.6",
     "web-push": "^3.6.7"
+  },
+  "devDependencies": {
+    "ts-node": "^10.9.2",
+    "typescript": "^7.0.2"
   }
 }

@@ -41,8 +41,11 @@ async function apiPost(path: string, body: object, isAdmin = false) {
       const key = sessionStorage.getItem("aegisAdminKey") ?? "aegis2024";
       headers["X-Admin-Key"] = key;
     }
-    // Fetch directly from serverless function
-    await fetch(path, {
+    // Handle Capacitor environments by prepending Vercel URL if missing
+    const baseUrl = import.meta.env.VITE_API_URL || "https://tsunami-dimss.vercel.app";
+    const fullUrl = path.startsWith("/") ? `${baseUrl}${path}` : path;
+
+    await fetch(fullUrl, {
       method: "POST",
       headers,
       body: JSON.stringify(body),
