@@ -148,47 +148,57 @@ export const aegisApi = {
   },
 };
 
+// ── Global Listener Registry ────────────────────────────────────
+const listeners = new Set<SyncEventHandler>();
+
+// Subscribe ONCE at the module level
+const tsunamiChannel = supabase
+  .channel("public:tsunami_state")
+  .on(
+    "postgres_changes",
+    { event: "UPDATE", schema: "public", table: "tsunami_state" },
+    (payload) => {
+      const newDoc = payload.new;
+      listeners.forEach((fn) =>
+        fn({
+          type: "TSUNAMI",
+          active: newDoc.active,
+          ts: new Date(newDoc.updated_at).getTime(),
+        })
+      );
+    }
+  )
+  .subscribe();
+
+broadcastChannel
+  .on("broadcast", { event: "FAMILY_JOIN" }, (payload) => {
+    listeners.forEach((fn) => fn({ type: "FAMILY_JOIN", ...payload.payload }));
+  })
+  .on("broadcast", { event: "PING" }, (payload) => {
+    listeners.forEach((fn) => fn({ type: "PING", ...payload.payload }));
+  })
+  .on("broadcast", { event: "PING_REPLY" }, (payload) => {
+    listeners.forEach((fn) => fn({ type: "PING_REPLY", ...payload.payload }));
+  })
+  .on("broadcast", { event: "LOCATION_UPDATE" }, (payload) => {
+    listeners.forEach((fn) => fn({ type: "LOCATION_UPDATE", ...payload.payload }));
+  })
+  .on("broadcast", { event: "TSUNAMI" }, (payload) => {
+    listeners.forEach((fn) => fn({ type: "TSUNAMI", ...payload.payload }));
+  })
+  .subscribe();
+
 // ── Main hook ─────────────────────────────────────────────────
 export function useAegisSync(onEvent: SyncEventHandler) {
   const handlerRef = useRef(onEvent);
   handlerRef.current = onEvent;
 
   useEffect(() => {
-    // 1. Subscribe to Tsunami State changes (Postgres CDC)
-    const tsunamiChannel = supabase
-      .channel("public:tsunami_state")
-      .on(
-        "postgres_changes",
-        { event: "UPDATE", schema: "public", table: "tsunami_state" },
-        (payload) => {
-          const newDoc = payload.new;
-          handlerRef.current({
-            type: "TSUNAMI",
-            active: newDoc.active,
-            ts: new Date(newDoc.updated_at).getTime(),
-          });
-        }
-      )
-      .subscribe();
+    const handler = (e: any) => {
+      handlerRef.current(e);
+    };
 
-    // 2. Subscribe to Ephemeral Broadcasts (Ping, Location, Family)
-    broadcastChannel
-      .on("broadcast", { event: "FAMILY_JOIN" }, (payload) => {
-        handlerRef.current({ type: "FAMILY_JOIN", ...payload.payload });
-      })
-      .on("broadcast", { event: "PING" }, (payload) => {
-        handlerRef.current({ type: "PING", ...payload.payload });
-      })
-      .on("broadcast", { event: "PING_REPLY" }, (payload) => {
-        handlerRef.current({ type: "PING_REPLY", ...payload.payload });
-      })
-      .on("broadcast", { event: "LOCATION_UPDATE" }, (payload) => {
-        handlerRef.current({ type: "LOCATION_UPDATE", ...payload.payload });
-      })
-      .on("broadcast", { event: "TSUNAMI" }, (payload) => {
-        handlerRef.current({ type: "TSUNAMI", ...payload.payload });
-      })
-      .subscribe();
+    listeners.add(handler);
 
     // Fire INIT event with current state
     aegisApi.getTsunami().then((state) => {
@@ -199,9 +209,7 @@ export function useAegisSync(onEvent: SyncEventHandler) {
     });
 
     return () => {
-      tsunamiChannel.unsubscribe();
-      // Only unsubscribe if unmounting completely. Since multiple components 
-      // might use broadcastChannel, we don't destroy it here.
+      listeners.delete(handler);
     };
   }, []);
 }

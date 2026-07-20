@@ -1905,7 +1905,7 @@ function App() {
             }}
           >
             {/* BMKG GEMPA TERKINI (Epicenter & Radius) */}
-            {gempa && (
+            {gempa && !isNaN(gempa.lat) && !isNaN(gempa.lng) && (
               <>
                 <MapMarker longitude={gempa.lng} latitude={gempa.lat}>
                   <MarkerContent>

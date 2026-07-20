@@ -310,7 +310,7 @@ export default function NavigatePage({ routes, selectedRoute, tsunamiAlert, user
           onViewportChange={setViewport}
         >
           {/* BMKG GEMPA TERKINI (Epicenter & Radius) */}
-          {gempa && (
+          {gempa && !isNaN(gempa.lat) && !isNaN(gempa.lng) && (
             <>
               <MapMarker longitude={gempa.lng} latitude={gempa.lat}>
                 <MarkerContent>
