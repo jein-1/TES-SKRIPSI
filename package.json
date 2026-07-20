@@ -4,12 +4,11 @@
   "type": "module",
   "scripts": {
     "dev:frontend": "cd frontend && npm run dev",
-    "dev:backend": "cd backend && npm run dev",
-    "dev": "concurrently \"npm run dev:frontend\" \"npm run dev:backend\"",
+    "dev": "npm run dev:frontend",
     "build": "cd frontend && npm run build",
     "build:admin": "cd frontend && npm run build:admin",
     "bump": "node tools/bump-version.js",
-    "install:all": "npm install && cd frontend && npm install && cd ../backend && npm install",
+    "install:all": "npm install && cd frontend && npm install",
     "cap:sync": "node tools/bump-version.js && npm run build && npx cap sync android && npm run build:admin && node tools/cap-admin-sync.js",
     "cap:open": "npx cap open android",
     "cap:open:admin": "node tools/cap-admin-open.js",
@@ -21,6 +20,9 @@
     "@capacitor/android": "^8.3.1",
     "@capacitor/cli": "^8.3.1",
     "@capacitor/core": "^8.3.1",
-    "concurrently": "^9.2.1"
+    "@supabase/supabase-js": "^2.110.7",
+    "concurrently": "^9.2.1",
+    "cors": "^2.8.6",
+    "web-push": "^3.6.7"
   }
 }

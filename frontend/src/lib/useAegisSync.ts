@@ -1,18 +1,9 @@
 // ═══════════════════════════════════════════════════════════════
-// useAegisSync — Real-time sync hook via Server-Sent Events
-// Connects to /api/events and provides helper functions
-// Works cross-device on Railway deployment
+// useAegisSync — Real-time sync hook via Supabase
+// Connects to Postgres & Realtime broadcast channels
 // ═══════════════════════════════════════════════════════════════
 import { useEffect, useRef } from "react";
-import { Capacitor } from "@capacitor/core";
-
-// Detect API base URL:
-// - Native APK (Capacitor): gunakan Railway URL dari env var
-// - Web (Railway/browser): relative path '' (same origin)
-const IS_NATIVE = Capacitor.isNativePlatform();
-const API_BASE: string = IS_NATIVE
-  ? (import.meta.env.VITE_API_URL ?? "") // Set VITE_API_URL di .env.admin / .env.production
-  : ""; // Web: same-origin (Railway serve frontend+backend)
+import { supabase } from "./supabaseClient";
 
 export type SyncEventHandler = (event: AegisSyncEvent) => void;
 
@@ -50,7 +41,8 @@ async function apiPost(path: string, body: object, isAdmin = false) {
       const key = sessionStorage.getItem("aegisAdminKey") ?? "aegis2024";
       headers["X-Admin-Key"] = key;
     }
-    await fetch(`${API_BASE}${path}`, {
+    // Fetch directly from serverless function
+    await fetch(path, {
       method: "POST",
       headers,
       body: JSON.stringify(body),
@@ -60,34 +52,84 @@ async function apiPost(path: string, body: object, isAdmin = false) {
   }
 }
 
+// Broadcast channel for ephemeral events
+const broadcastChannel = supabase.channel("aegis-events");
+
 export const aegisApi = {
-  /** Admin: activate or deactivate tsunami alert */
+  /** Admin: activate or deactivate tsunami alert via serverless (triggers Web Push) */
   setTsunami: (active: boolean) => apiPost("/api/tsunami", { active }, true),
 
-  /** When A scans B's QR, notify B so it adds A */
-  notifyFamilyJoin: (fromId: string, fromName: string, toId: string) =>
-    apiPost("/api/family/join", { fromId, fromName, toId }),
+  /** When A scans B's QR, notify B so it adds A (Supabase Broadcast) */
+  notifyFamilyJoin: async (fromId: string, fromName: string, toId: string) => {
+    await broadcastChannel.send({
+      type: "broadcast",
+      event: "FAMILY_JOIN",
+      payload: { fromId, fromName, toId },
+    });
+  },
 
-  /** Ping a specific device (or all if toId is missing) */
-  ping: (fromId: string, fromName: string, toId?: string, role?: string) =>
-    apiPost("/api/ping", { fromId, fromName, toId, role }),
+  /** Ping a specific device (or all if toId is missing) (Supabase Broadcast) */
+  ping: async (fromId: string, fromName: string, toId?: string, role?: string) => {
+    await broadcastChannel.send({
+      type: "broadcast",
+      event: "PING",
+      payload: { fromId, fromName, toId, role },
+    });
+  },
 
-  adminPing: (fromId: string, fromName: string, toId: string, role: string) =>
-    apiPost("/api/ping", { fromId, fromName, toId, role }, true),
+  adminPing: async (fromId: string, fromName: string, toId: string, role: string) => {
+    await broadcastChannel.send({
+      type: "broadcast",
+      event: "PING",
+      payload: { fromId, fromName, toId, role }, // using broadcast since serverless is slow
+    });
+  },
 
-  /** Reply to a ping */
-  pingReply: (fromId: string, fromName: string, toId: string) =>
-    apiPost("/api/ping/reply", { fromId, fromName, toId }),
+  /** Reply to a ping (Supabase Broadcast) */
+  pingReply: async (fromId: string, fromName: string, toId: string) => {
+    await broadcastChannel.send({
+      type: "broadcast",
+      event: "PING_REPLY",
+      payload: { fromId, fromName, toId },
+    });
+  },
 
-  /** Broadcast user location to admin dashboard */
-  broadcastLocation: (id: string, name: string, deviceModel: string, lat: number, lng: number, battery: number) =>
-    apiPost('/api/location', { id, name, deviceModel, lat, lng, battery }),
+  /** Broadcast user location (Supabase Upsert & Broadcast) */
+  broadcastLocation: async (id: string, name: string, deviceModel: string, lat: number, lng: number, battery: number) => {
+    // 1. Broadcast immediately for fast admin dashboard update
+    await broadcastChannel.send({
+      type: "broadcast",
+      event: "LOCATION_UPDATE",
+      payload: { id, name, deviceModel, lat, lng, battery },
+    });
+    
+    // 2. Persist to Postgres for audit trail
+    await supabase.from("location_updates").upsert({
+      id,
+      name,
+      device_model: deviceModel,
+      lat,
+      lng,
+      battery,
+      updated_at: new Date().toISOString()
+    });
+  },
 
   /** Get current tsunami state on mount */
   getTsunami: async (): Promise<{ active: boolean; ts: number }> => {
     try {
-      const r = await fetch(`${API_BASE}/api/tsunami`);
-      return await r.json();
+      const { data, error } = await supabase
+        .from("tsunami_state")
+        .select("active, updated_at")
+        .eq("id", 1)
+        .single();
+      
+      if (error || !data) return { active: false, ts: 0 };
+      
+      return { 
+        active: data.active, 
+        ts: new Date(data.updated_at).getTime() 
+      };
     } catch {
       return { active: false, ts: 0 };
     }
@@ -96,36 +138,55 @@ export const aegisApi = {
 
 // ── Main hook ─────────────────────────────────────────────────
 export function useAegisSync(onEvent: SyncEventHandler) {
-  const esRef = useRef<EventSource | null>(null);
   const handlerRef = useRef(onEvent);
   handlerRef.current = onEvent;
 
   useEffect(() => {
-    let retryTimer: ReturnType<typeof setTimeout>;
+    // 1. Subscribe to Tsunami State changes (Postgres CDC)
+    const tsunamiChannel = supabase
+      .channel("public:tsunami_state")
+      .on(
+        "postgres_changes",
+        { event: "UPDATE", schema: "public", table: "tsunami_state" },
+        (payload) => {
+          const newDoc = payload.new;
+          handlerRef.current({
+            type: "TSUNAMI",
+            active: newDoc.active,
+            ts: new Date(newDoc.updated_at).getTime(),
+          });
+        }
+      )
+      .subscribe();
 
-    function connect() {
-      const es = new EventSource(`${API_BASE}/api/events`);
-      esRef.current = es;
+    // 2. Subscribe to Ephemeral Broadcasts (Ping, Location, Family)
+    broadcastChannel
+      .on("broadcast", { event: "FAMILY_JOIN" }, (payload) => {
+        handlerRef.current({ type: "FAMILY_JOIN", ...payload.payload });
+      })
+      .on("broadcast", { event: "PING" }, (payload) => {
+        handlerRef.current({ type: "PING", ...payload.payload });
+      })
+      .on("broadcast", { event: "PING_REPLY" }, (payload) => {
+        handlerRef.current({ type: "PING_REPLY", ...payload.payload });
+      })
+      .on("broadcast", { event: "LOCATION_UPDATE" }, (payload) => {
+        handlerRef.current({ type: "LOCATION_UPDATE", ...payload.payload });
+      })
+      .subscribe();
 
-      es.onmessage = (e) => {
-        try {
-          const data = JSON.parse(e.data) as AegisSyncEvent;
-          handlerRef.current(data);
-        } catch {}
-      };
-
-      es.onerror = () => {
-        es.close();
-        // Retry after 3s
-        retryTimer = setTimeout(connect, 3000);
-      };
-    }
-
-    connect();
+    // Fire INIT event with current state
+    aegisApi.getTsunami().then((state) => {
+      handlerRef.current({
+        type: "INIT",
+        tsunami: state,
+      });
+    });
 
     return () => {
-      esRef.current?.close();
-      clearTimeout(retryTimer);
+      tsunamiChannel.unsubscribe();
+      // Only unsubscribe if unmounting completely. Since multiple components 
+      // might use broadcastChannel, we don't destroy it here.
     };
   }, []);
 }
