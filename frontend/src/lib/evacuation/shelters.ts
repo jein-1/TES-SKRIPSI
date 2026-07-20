@@ -67,6 +67,7 @@ const defaultShelters: Shelter[] = [
     lng: 119.89056,
     capacity: 500,
     radiusMeters: 50,
+  },
 ];
 
 export const shelters: Shelter[] = [];
