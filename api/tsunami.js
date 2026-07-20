@@ -6,11 +6,13 @@ const supabase = createClient(
   process.env.SUPABASE_ANON_KEY || 'placeholder'
 );
 
-webpush.setVapidDetails(
-  'mailto:admin@aegis.com',
-  process.env.VAPID_PUBLIC_KEY || '',
-  process.env.VAPID_PRIVATE_KEY || ''
-);
+if (process.env.VAPID_PUBLIC_KEY && process.env.VAPID_PRIVATE_KEY) {
+  webpush.setVapidDetails(
+    'mailto:admin@aegis.com',
+    process.env.VAPID_PUBLIC_KEY,
+    process.env.VAPID_PRIVATE_KEY
+  );
+}
 
 export default async function handler(req, res) {
   // CORS Headers
