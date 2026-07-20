@@ -271,13 +271,7 @@ function App() {
   const [gpsAccuracy, setGpsAccuracy] = useState<number | null>(null); // metres
   const [arrivedShelterId, setArrivedShelterId] = useState<string | null>(null);
   // Arrival modal state â€” stores snapshot at time of arrival
-  type ActivePage = "status" | "map" | "navigate" | "history" | "family" | "guides";
-  const [activePage, setActivePage] = useState<ActivePage>(() => {
-    if (typeof window !== "undefined" && sessionStorage.getItem("aegisSimulating") === "true") {
-      return "navigate";
-    }
-    return "status";
-  });
+
   const [arrivalSummary, setArrivalSummary] = useState<{
     shelter: (typeof shelters)[0];
     distanceKm: number;
@@ -374,6 +368,9 @@ function App() {
   // â”€â”€ Navigation â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   // Admin starts on 'map', public user starts on 'status'
   const [activePage, setActivePage] = useState<ActivePage>(() => {
+    if (typeof window !== "undefined" && sessionStorage.getItem("aegisSimulating") === "true") {
+      return "navigate";
+    }
     if (!isAdminURL) return "status";
     const role = sessionStorage.getItem("aegisRole") as UserRole;
     return role === "user" ? "status" : "map";
