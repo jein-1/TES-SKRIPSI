@@ -271,6 +271,13 @@ function App() {
   const [gpsAccuracy, setGpsAccuracy] = useState<number | null>(null); // metres
   const [arrivedShelterId, setArrivedShelterId] = useState<string | null>(null);
   // Arrival modal state â€” stores snapshot at time of arrival
+  type ActivePage = "status" | "map" | "navigate" | "history" | "family" | "guides";
+  const [activePage, setActivePage] = useState<ActivePage>(() => {
+    if (typeof window !== "undefined" && sessionStorage.getItem("aegisSimulating") === "true") {
+      return "navigate";
+    }
+    return "status";
+  });
   const [arrivalSummary, setArrivalSummary] = useState<{
     shelter: (typeof shelters)[0];
     distanceKm: number;
@@ -280,8 +287,13 @@ function App() {
   // â”€â”€ GPS & Alert state â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   const [gpsTracking, setGpsTracking] = useState(false);
   const [gpsError, setGpsError] = useState<string | null>(null);
-  const [tsunamiAlert, setTsunamiAlert] = useState(false);
-  const tsunamiAlertRef = useRef(false);
+  const [tsunamiAlert, setTsunamiAlert] = useState(() => {
+    if (typeof window !== "undefined") {
+      return sessionStorage.getItem("aegisSimulating") === "true";
+    }
+    return false;
+  });
+  const tsunamiAlertRef = useRef(tsunamiAlert);
   useEffect(() => {
     tsunamiAlertRef.current = tsunamiAlert;
   }, [tsunamiAlert]);
@@ -742,6 +754,9 @@ function App() {
   // â”€â”€ Tsunami â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   const activateTsunamiAlert = useCallback(() => {
     setTsunamiAlert(true);
+    if (typeof window !== "undefined") {
+      sessionStorage.setItem("aegisSimulating", "true");
+    }
     setShowTsunamiConfirm(false);
     if (!alarmMuted && settings.soundAlert) alarmRef.current.start();
     if (settings.vibrationAlert) {
@@ -760,6 +775,9 @@ function App() {
 
   const deactivateTsunamiAlert = useCallback(() => {
     setTsunamiAlert(false);
+    if (typeof window !== "undefined") {
+      sessionStorage.removeItem("aegisSimulating");
+    }
     alarmRef.current.stop();
     aegisApi.setTsunami(false);
   }, []);

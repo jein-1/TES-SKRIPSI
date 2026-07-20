@@ -151,7 +151,7 @@ export default function NavigatePage({ routes, selectedRoute, tsunamiAlert, user
         ...v,
         center: effectivePos,
         zoom: 16,
-        pitch: emergency ? 60 : 0,
+        pitch: 0,
         bearing: (emergency && headingLocked) ? heading : v.bearing
       }))
     }
