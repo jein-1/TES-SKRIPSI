@@ -298,6 +298,7 @@ function App() {
   const [newShelter, setNewShelter] = useState({ name: '', lat: '', lng: '', capacity: '', radius: '50' });
   const [pickingLocationMode, setPickingLocationMode] = useState(false);
   const geoDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [isSavingShelter, setIsSavingShelter] = useState(false);
   const [showLeftSidebar, setShowLeftSidebar] = useState(true);
   const [adminMapBearing, setAdminMapBearing] = useState(0);
   const adminMapRef = useRef<MapRef | null>(null);
@@ -3236,20 +3237,36 @@ function App() {
               </div>
               <div className="flex items-center gap-3 mt-6">
                 <button onClick={() => setShowAddShelter(false)} className="flex-1 py-3 text-slate-400 font-bold text-sm bg-slate-800 rounded-xl hover:bg-slate-700">Batal</button>
-                <button onClick={() => {
-                  if(!newShelter.name || !newShelter.lat || !newShelter.lng) return alert('Data tidak lengkap');
-                  addCustomShelter({
-                    id: 'C'+Date.now(),
-                    name: newShelter.name,
-                    lat: parseFloat(newShelter.lat),
-                    lng: parseFloat(newShelter.lng),
-                    capacity: parseInt(newShelter.capacity) || 0,
-                    radiusMeters: parseInt(newShelter.radius) || 50
-                  });
-                  alert('Shelter ditambahkan!');
-                  setShowAddShelter(false);
-                  setNewShelter({ name: '', lat: '', lng: '', capacity: '', radius: '50' });
-                }} className="flex-1 py-3 text-white font-bold text-sm bg-indigo-600 rounded-xl hover:bg-indigo-500">Simpan</button>
+                <button 
+                  disabled={isSavingShelter}
+                  onClick={async () => {
+                    if(!newShelter.name || !newShelter.lat || !newShelter.lng) return alert('Data tidak lengkap');
+                    
+                    setIsSavingShelter(true);
+                    const shelterPayload = {
+                      id: 'C'+Date.now(),
+                      name: newShelter.name,
+                      lat: parseFloat(newShelter.lat),
+                      lng: parseFloat(newShelter.lng),
+                      capacity: parseInt(newShelter.capacity) || 0,
+                      radiusMeters: parseInt(newShelter.radius) || 50
+                    };
+                    
+                    const { ok } = await aegisApi.addCustomShelter(shelterPayload);
+                    setIsSavingShelter(false);
+
+                    if (ok) {
+                      addCustomShelter(shelterPayload as any);
+                      setShowAddShelter(false);
+                      setNewShelter({ name: '', lat: '', lng: '', capacity: '', radius: '50' });
+                    } else {
+                      alert('Gagal menyimpan shelter ke server. Silakan coba lagi.');
+                    }
+                  }} 
+                  className="flex-1 py-3 text-white font-bold text-sm bg-indigo-600 rounded-xl hover:bg-indigo-500 disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {isSavingShelter ? 'Menyimpan...' : 'Simpan'}
+                </button>
               </div>
             </motion.div>
           </motion.div>
