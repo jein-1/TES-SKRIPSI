@@ -2,10 +2,10 @@ import { createClient } from '@supabase/supabase-js';
 import jwt from 'jsonwebtoken';
 
 // Use Service Role Key to bypass RLS and insert securely
-const supabase = createClient(
-  process.env.SUPABASE_URL || 'https://placeholder.supabase.co',
-  process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_ANON_KEY || 'placeholder'
-);
+const supabaseUrl = process.env.SUPABASE_URL || 'https://placeholder.supabase.co';
+const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+// Initialize without key first, we will check it in the handler
+const supabase = serviceRoleKey ? createClient(supabaseUrl, serviceRoleKey) : null;
 
 export default async function handler(req, res) {
   // CORS Headers
@@ -16,6 +16,10 @@ export default async function handler(req, res) {
 
   if (req.method === 'OPTIONS') {
     return res.status(200).end();
+  }
+
+  if (!supabase) {
+    return res.status(500).json({ error: 'Server misconfigured: SUPABASE_SERVICE_ROLE_KEY is missing' });
   }
 
   if (req.method !== 'POST') {
@@ -54,7 +58,7 @@ export default async function handler(req, res) {
     lat,
     lng,
     capacity: capacity || 1000,
-    radiusMeters: radiusMeters || 50
+    radius_meters: radiusMeters || 50
   }).select().single();
 
   if (error) {
