@@ -8,7 +8,20 @@
  */
 
 import type { RoadNode, RoadEdge } from './types'
-import data from './roadNetwork.data.json'
+export let roadNodes: RoadNode[] = [];
+export let roadEdges: RoadEdge[] = [];
 
-export const roadNodes: RoadNode[] = (data as any).roadNodes
-export const roadEdges: RoadEdge[] = (data as any).roadEdges
+let isLoaded = false;
+export async function loadRoadNetwork(): Promise<void> {
+  if (isLoaded) return;
+  try {
+    const res = await fetch('/roadNetwork.data.json');
+    if (!res.ok) throw new Error('Failed to load road network');
+    const data = await res.json();
+    roadNodes = data.roadNodes;
+    roadEdges = data.roadEdges;
+    isLoaded = true;
+  } catch (err) {
+    console.error('Error loading road network:', err);
+  }
+}

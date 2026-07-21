@@ -18,7 +18,7 @@ const OVERPASS_ENDPOINTS = [
 const HIGHWAY_TAGS = [
   'motorway','trunk','primary','secondary','tertiary',
   'unclassified','residential','living_street',
-  'pedestrian','footway','path','steps','service',
+  'pedestrian','footway','path','steps',
 ]
 
 const query = `
@@ -110,7 +110,7 @@ function buildGraph(osm) {
     if (!roadNodesMap.has(osmId)) {
       const c = nodeCoord.get(osmId)
       if (!c) return null
-      roadNodesMap.set(osmId, { id: 'N' + (++genId), osmId, lat: c.lat, lng: c.lng })
+      roadNodesMap.set(osmId, { id: 'N' + (++genId), osmId, lat: Number(c.lat.toFixed(6)), lng: Number(c.lng.toFixed(6)) })
     }
     return roadNodesMap.get(osmId).id
   }
@@ -129,9 +129,9 @@ function buildGraph(osm) {
           const fromId = idFor(segNodeIds[0])
           const toId = idFor(segNodeIds[segNodeIds.length - 1])
           if (fromId && toId && fromId !== toId && dist > 0) {
-            const geometry = coords.map(c => [c.lat, c.lng])
-            edges.push({ from: fromId, to: toId, distance: dist, geometry: [...geometry] })
-            edges.push({ from: toId, to: fromId, distance: dist, geometry: [...geometry].reverse() })
+            const geometry = coords.map(c => [Number(c.lat.toFixed(6)), Number(c.lng.toFixed(6))])
+            edges.push({ from: fromId, to: toId, distance: Number(dist.toFixed(4)), geometry: [...geometry] })
+            edges.push({ from: toId, to: fromId, distance: Number(dist.toFixed(4)), geometry: [...geometry].reverse() })
           }
         }
         segStart = i
@@ -151,8 +151,8 @@ async function main() {
   console.log(`Graf dibangun: ${roadNodes.length} node persimpangan, ${roadEdges.length} edge (dua arah).`)
 
   const out = { generatedAt: new Date().toISOString(), bbox: BBOX, roadNodes, roadEdges }
-  writeFileSync('frontend/src/lib/evacuation/roadNetwork.data.json', JSON.stringify(out))
-  console.log('Tersimpan ke frontend/src/lib/evacuation/roadNetwork.data.json')
+  writeFileSync('frontend/public/roadNetwork.data.json', JSON.stringify(out))
+  console.log('Tersimpan ke frontend/public/roadNetwork.data.json')
 }
 
 main().catch(e => { console.error(e); process.exit(1) })

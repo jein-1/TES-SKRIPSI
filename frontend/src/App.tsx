@@ -7,6 +7,7 @@ import {
   findOptimalEvacuationRoutes,
   addCustomShelter,
   type RouteResult,
+  loadRoadNetwork,
 } from "./lib/evacuation";
 import {
   TILE_NORMAL,
@@ -1053,7 +1054,8 @@ function App() {
     if (!isAdminURL) {
       setTimeout(() => startGpsTracking(), 600);
     }
-    // 4b. Load custom shelters dari Supabase
+    // 4b. Load custom shelters dari Supabase & Road Network
+    loadRoadNetwork();
     aegisApi.fetchCustomShelters().then(data => {
       data.forEach(s => addCustomShelter(s as any));
     });

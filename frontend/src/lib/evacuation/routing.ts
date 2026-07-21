@@ -19,10 +19,19 @@ import { calculateHaversine } from './haversine'
 import { buildAdjacency, dijkstraFrom, type AdjacencyEntry } from './pathfinding'
 import { snapToNearestRoad, type SnapResult } from './snapping'
 
-// Adjacency graf dibangun sekali saat module di-load (roadEdges statis)
-const baseAdjacency = buildAdjacency(roadEdges)
-const edgeLookup = new Map<string, (typeof roadEdges)[number]>()
-for (const e of roadEdges) edgeLookup.set(`${e.from}->${e.to}`, e)
+let baseAdjacency: Map<string, AdjacencyEntry[]> | null = null;
+let edgeLookup: Map<string, (typeof roadEdges)[number]> | null = null;
+let cachedRoadNodesForDijkstra: { id: string }[] | null = null;
+
+function ensureGraphInitialized() {
+  if (baseAdjacency) return;
+  if (roadEdges.length === 0) return;
+  
+  baseAdjacency = buildAdjacency(roadEdges);
+  edgeLookup = new Map();
+  for (const e of roadEdges) edgeLookup!.set(`${e.from}->${e.to}`, e);
+  cachedRoadNodesForDijkstra = [...new Set(roadEdges.flatMap(e => [e.from, e.to]))].map(id => ({ id }));
+}
 
 const USER_NODE_ID = '__USER_START__'
 const MIN_STUB_DISTANCE = 0.001 // km, hindari edge berbobot 0 di Dijkstra
@@ -61,6 +70,21 @@ export function findOptimalEvacuationRoutes(
   userLng: number,
   maxRoutes: number = 99,
 ): RouteResult[] {
+  ensureGraphInitialized();
+  if (!baseAdjacency || !edgeLookup || !cachedRoadNodesForDijkstra) {
+    return getNearestSheltersByHaversine(userLat, userLng, maxRoutes).map(s => ({
+      shelterName: s.name,
+      shelterId: s.id,
+      shelterCapacity: s.capacity,
+      haversineDistance: s.haversineDistance,
+      dijkstraDistance: Infinity,
+      totalDistance: s.haversineDistance,
+      coordinates: [[userLat, userLng], [s.lat, s.lng]],
+      walkingTime: Math.ceil((s.haversineDistance / 5) * 60),
+      runningTime: Math.ceil((s.haversineDistance / 10) * 60),
+    }));
+  }
+
   const userSnap = snapToNearestRoad(userLat, userLng, roadEdges)
 
   let dist = new Map<string, number>()
@@ -74,8 +98,7 @@ export function findOptimalEvacuationRoutes(
     ]
     extraAdjacency.set(USER_NODE_ID, userEdges)
 
-    const roadNodesForDijkstra = [...new Set(roadEdges.flatMap(e => [e.from, e.to]))].map(id => ({ id }))
-    const result = dijkstraFrom(USER_NODE_ID, roadNodesForDijkstra as any, extraAdjacency, [USER_NODE_ID])
+    const result = dijkstraFrom(USER_NODE_ID, cachedRoadNodesForDijkstra as any, extraAdjacency, [USER_NODE_ID])
     dist = result.dist
     prev = result.prev
   }
@@ -109,7 +132,7 @@ export function findOptimalEvacuationRoutes(
         // Gabungkan geometry tiap edge sepanjang jalur (mengikuti jalan asli)
         const roadCoords: [number, number][] = []
         for (let i = 0; i < pathNodeIds.length - 1; i++) {
-          const edge = edgeLookup.get(`${pathNodeIds[i]}->${pathNodeIds[i + 1]}`)
+          const edge = edgeLookup!.get(`${pathNodeIds[i]}->${pathNodeIds[i + 1]}`)
           if (edge?.geometry) {
             const segment = roadCoords.length > 0 ? edge.geometry.slice(1) : edge.geometry
             roadCoords.push(...segment)
