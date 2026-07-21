@@ -21,7 +21,8 @@ export interface RoadNode extends Point {
 export interface RoadEdge {
   from: string;
   to: string;
-  distance: number; // Jarak dalam km (Haversine)
+  distance: number; // Jarak dalam km (dihitung dari akumulasi geometry, bukan garis lurus)
+  geometry?: [number, number][]; // Titik-titik [lat,lng] sepanjang jalan asli (dari OpenStreetMap)
 }
 
 export interface RouteResult {

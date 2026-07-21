@@ -11,6 +11,5 @@ export { shelters, addCustomShelter, loadCustomSheltersFromSupabase } from './sh
 export { hazardZones }           from './hazardZones.ts'
 export { roadNodes, roadEdges }  from './roadNetwork.ts'
 export { calculateHaversine, findNearestNode } from './haversine.ts'
-export { dijkstra }              from './dijkstra.ts'
 export { findOptimalEvacuationRoutes, getNearestSheltersByHaversine } from './routing.ts'
-
+export { snapToNearestRoad }     from './snapping.ts'
