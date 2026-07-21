@@ -40,7 +40,8 @@ export default function LoginPage({ onLogin }: Props) {
     setLoading(true);
     setError('');
     try {
-      const baseUrl = import.meta.env.VITE_API_URL || 'https://tsunami-dimss.vercel.app';
+      const isLocalhost = window.location.origin.includes('localhost');
+      const baseUrl = isLocalhost ? (import.meta.env.VITE_API_URL || 'https://tsunami-dimss.vercel.app') : '';
       const res = await fetch(`${baseUrl}/api/auth/login`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },

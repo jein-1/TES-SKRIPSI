@@ -48,7 +48,8 @@ async function apiPost(path: string, body: object, isAdmin = false) {
       }
     }
     // Handle Capacitor environments by prepending Vercel URL if missing
-    const baseUrl = import.meta.env.VITE_API_URL || "https://tsunami-dimss.vercel.app";
+    const isLocalhost = typeof window !== 'undefined' && window.location.origin.includes('localhost');
+    const baseUrl = isLocalhost ? (import.meta.env.VITE_API_URL || "https://tsunami-dimss.vercel.app") : "";
     const fullUrl = path.startsWith("/") ? `${baseUrl}${path}` : path;
 
     await fetch(fullUrl, {
@@ -166,7 +167,8 @@ export const aegisApi = {
       const token = sessionStorage.getItem("aegisJWT");
       if (!token) return { ok: false };
 
-      const API_URL = import.meta.env.VITE_API_URL || "";
+      const isLocalhost = typeof window !== 'undefined' && window.location.origin.includes('localhost');
+      const API_URL = isLocalhost ? (import.meta.env.VITE_API_URL || "https://tsunami-dimss.vercel.app") : "";
       const res = await fetch(`${API_URL}/api/shelters/add`, {
         method: "POST",
         headers: {
