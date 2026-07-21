@@ -9,7 +9,7 @@
 export type { Point, Shelter, RoadNode, RoadEdge, RouteResult, DijkstraResult } from './types.ts'
 export { shelters, addCustomShelter, loadCustomSheltersFromSupabase } from './shelters.ts'
 export { hazardZones }           from './hazardZones.ts'
-export { roadNodes, roadEdges, loadRoadNetwork }  from './roadNetwork.ts'
+export { roadNodes, roadEdges, loadRoadNetwork, roadNetworkLoadFailed }  from './roadNetwork.ts'
 export { calculateHaversine, findNearestNode } from './haversine.ts'
 export { findOptimalEvacuationRoutes, getNearestSheltersByHaversine } from './routing.ts'
 export { snapToNearestRoad }     from './snapping.ts'

@@ -299,6 +299,7 @@ function App() {
   const [newShelter, setNewShelter] = useState({ name: '', lat: '', lng: '', capacity: '', radius: '50' });
   const [pickingLocationMode, setPickingLocationMode] = useState(false);
   const geoDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [networkFailed, setNetworkFailed] = useState(false);
   const [isSavingShelter, setIsSavingShelter] = useState(false);
   const [showLeftSidebar, setShowLeftSidebar] = useState(true);
   const [adminMapBearing, setAdminMapBearing] = useState(0);
@@ -1055,7 +1056,7 @@ function App() {
       setTimeout(() => startGpsTracking(), 600);
     }
     // 4b. Load custom shelters dari Supabase & Road Network
-    loadRoadNetwork();
+    loadRoadNetwork().then(success => setNetworkFailed(!success));
     aegisApi.fetchCustomShelters().then(data => {
       data.forEach(s => addCustomShelter(s as any));
     });
@@ -3182,6 +3183,20 @@ function App() {
       <AnimatePresence>
         {isAdminURL && !userRole && (
           <LoginPage key="login" onLogin={handleLogin} />
+        )}
+      </AnimatePresence>
+
+      {/* ─── ERROR BANNER (NETWORK FAILED) ─── */}
+      <AnimatePresence>
+        {networkFailed && (
+          <motion.div
+            initial={{ opacity: 0, y: -20 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -20 }}
+            className="fixed top-24 left-1/2 -translate-x-1/2 z-[3000] bg-red-600 text-white px-6 py-3 rounded-xl shadow-lg font-bold flex items-center gap-2 text-sm border border-red-400"
+          >
+            <span>⚠️ ERROR: Gagal memuat data graf evakuasi jalan (roadNetwork.data.json). Rute jatuh ke fallback garis lurus. Cek console.</span>
+          </motion.div>
         )}
       </AnimatePresence>
 
