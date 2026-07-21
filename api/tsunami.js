@@ -1,5 +1,6 @@
 import { createClient } from '@supabase/supabase-js';
 import webpush from 'web-push';
+import jwt from 'jsonwebtoken';
 
 const supabase = createClient(
   process.env.SUPABASE_URL || 'https://placeholder.supabase.co',
@@ -19,7 +20,7 @@ export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Credentials', true);
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET,OPTIONS,PATCH,DELETE,POST,PUT');
-  res.setHeader('Access-Control-Allow-Headers', 'X-CSRF-Token, X-Requested-With, Accept, Accept-Version, Content-Length, Content-MD5, Content-Type, Date, X-Api-Version, X-Admin-Key');
+  res.setHeader('Access-Control-Allow-Headers', 'X-CSRF-Token, X-Requested-With, Accept, Accept-Version, Content-Length, Content-MD5, Content-Type, Date, X-Api-Version, Authorization');
 
   if (req.method === 'OPTIONS') {
     return res.status(200).end();
@@ -43,11 +44,23 @@ export default async function handler(req, res) {
   }
 
   if (req.method === 'POST') {
-    const adminKey = req.headers['x-admin-key'];
-    const expectedKey = process.env.ADMIN_KEY || 'aegis2024';
+    const authHeader = req.headers.authorization;
+    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+      return res.status(401).json({ error: 'Unauthorized: Missing or invalid token' });
+    }
 
-    if (!adminKey || adminKey !== expectedKey) {
-      return res.status(403).json({ error: 'Unauthorized: Invalid admin key' });
+    const token = authHeader.split(' ')[1];
+    try {
+      const secret = process.env.JWT_SECRET;
+      if (!secret) {
+        console.error('ERROR: JWT_SECRET is missing from environment variables.');
+        return res.status(500).json({ error: 'Server configuration error' });
+      }
+      // Verify token, throws if invalid or expired
+      jwt.verify(token, secret);
+    } catch (err) {
+      console.error('JWT Verification failed:', err.message);
+      return res.status(401).json({ error: 'Unauthorized: Invalid or expired token' });
     }
 
     const { active } = req.body;

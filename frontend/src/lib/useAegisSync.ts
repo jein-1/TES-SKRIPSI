@@ -4,6 +4,7 @@
 // ═══════════════════════════════════════════════════════════════
 import { useEffect, useRef } from "react";
 import { supabase } from "./supabaseClient";
+import type { Shelter } from "./evacuation/types";
 
 export type SyncEventHandler = (event: AegisSyncEvent) => void;
 
@@ -14,7 +15,8 @@ export interface AegisSyncEvent {
     | "FAMILY_JOIN"
     | "PING"
     | "PING_REPLY"
-    | "LOCATION_UPDATE";
+    | "LOCATION_UPDATE"
+    | "SHELTER_ADDED";
   fromId?: string;
   fromName?: string;
   toId?: string;
@@ -27,6 +29,7 @@ export interface AegisSyncEvent {
   battery?: number;
   active?: boolean;
   ts?: number;
+  shelter?: Shelter;
   [key: string]: unknown;
 }
 
@@ -37,9 +40,12 @@ async function apiPost(path: string, body: object, isAdmin = false) {
       "Content-Type": "application/json",
     };
     if (isAdmin) {
-      // Admin key disimpan di sessionStorage setelah login
-      const key = sessionStorage.getItem("aegisAdminKey") ?? "aegis2024";
-      headers["X-Admin-Key"] = key;
+      const token = sessionStorage.getItem("aegisJWT");
+      if (token) {
+        headers["Authorization"] = `Bearer ${token}`;
+      } else {
+        console.warn("[AegisSync] Warning: isAdmin is true but aegisJWT is missing.");
+      }
     }
     // Handle Capacitor environments by prepending Vercel URL if missing
     const baseUrl = import.meta.env.VITE_API_URL || "https://tsunami-dimss.vercel.app";
@@ -132,7 +138,7 @@ export const aegisApi = {
   },
 
   /** Get current tsunami state on mount */
-  getTsunami: async (): Promise<{ active: boolean; ts: number }> => {
+  getTsunami: async (): Promise<{ active: boolean; ts: number; ok: boolean }> => {
     try {
       const { data, error } = await supabase
         .from("tsunami_state")
@@ -140,14 +146,89 @@ export const aegisApi = {
         .eq("id", 1)
         .single();
       
-      if (error || !data) return { active: false, ts: 0 };
+      if (error || !data) return { active: false, ts: 0, ok: false };
       
       return { 
         active: data.active, 
-        ts: new Date(data.updated_at).getTime() 
+        ts: new Date(data.updated_at).getTime(),
+        ok: true
       };
     } catch {
-      return { active: false, ts: 0 };
+      return { active: false, ts: 0, ok: false };
+    }
+  },
+
+  // ── Custom Shelter API ─────────────────────────────────────
+
+  /** Admin: simpan shelter custom ke Supabase + broadcast ke semua device */
+  addCustomShelter: async (shelter: Shelter): Promise<{ ok: boolean }> => {
+    try {
+      const { error } = await supabase.from("custom_shelters").insert({
+        id: shelter.id,
+        name: shelter.name,
+        lat: shelter.lat,
+        lng: shelter.lng,
+        capacity: shelter.capacity,
+        radius_meters: shelter.radiusMeters ?? 50,
+      });
+      if (error) {
+        console.error("[AegisSync] addCustomShelter error:", error);
+        return { ok: false };
+      }
+      // Broadcast ke semua device agar langsung muncul tanpa refresh
+      await broadcastChannel.send({
+        type: "broadcast",
+        event: "SHELTER_ADDED",
+        payload: { shelter },
+      });
+      return { ok: true };
+    } catch (e) {
+      console.error("[AegisSync] addCustomShelter exception:", e);
+      return { ok: false };
+    }
+  },
+
+  /** Semua device: ambil semua custom shelter dari Supabase saat load */
+  fetchCustomShelters: async (): Promise<Shelter[]> => {
+    try {
+      const { data, error } = await supabase
+        .from("custom_shelters")
+        .select("id, name, lat, lng, capacity, radius_meters")
+        .order("created_at", { ascending: true });
+      if (error || !data) return [];
+      return data.map((row: any) => ({
+        id: row.id,
+        name: row.name,
+        lat: row.lat,
+        lng: row.lng,
+        capacity: row.capacity,
+        radiusMeters: row.radius_meters,
+      }));
+    } catch {
+      return [];
+    }
+  },
+
+  /** Admin: Ambil lokasi aktif 2 jam terakhir dari Supabase saat load awal */
+  fetchActiveUsers: async () => {
+    try {
+      const twoHoursAgo = new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString();
+      const { data, error } = await supabase
+        .from("location_updates")
+        .select("id, name, device_model, lat, lng, battery, updated_at")
+        .gte("updated_at", twoHoursAgo);
+      if (error || !data) return [];
+      return data.map((row: any) => ({
+        id: row.id,
+        name: row.name,
+        deviceModel: row.device_model,
+        lat: row.lat,
+        lng: row.lng,
+        battery: row.battery,
+        ts: new Date(row.updated_at).getTime(),
+      }));
+    } catch {
+      return [];
     }
   },
 };
@@ -174,6 +255,27 @@ const tsunamiChannel = supabase
   )
   .subscribe();
 
+// Realtime listener untuk INSERT ke custom_shelters
+const customSheltersChannel = supabase
+  .channel("public:custom_shelters")
+  .on(
+    "postgres_changes",
+    { event: "INSERT", schema: "public", table: "custom_shelters" },
+    (payload) => {
+      const row = payload.new;
+      const shelter: Shelter = {
+        id: row.id,
+        name: row.name,
+        lat: row.lat,
+        lng: row.lng,
+        capacity: row.capacity,
+        radiusMeters: row.radius_meters,
+      };
+      listeners.forEach((fn) => fn({ type: "SHELTER_ADDED", shelter }));
+    }
+  )
+  .subscribe();
+
 broadcastChannel
   .on("broadcast", { event: "FAMILY_JOIN" }, (payload) => {
     listeners.forEach((fn) => fn({ type: "FAMILY_JOIN", ...payload.payload }));
@@ -189,6 +291,9 @@ broadcastChannel
   })
   .on("broadcast", { event: "TSUNAMI" }, (payload) => {
     listeners.forEach((fn) => fn({ type: "TSUNAMI", ...payload.payload }));
+  })
+  .on("broadcast", { event: "SHELTER_ADDED" }, (payload) => {
+    listeners.forEach((fn) => fn({ type: "SHELTER_ADDED", ...payload.payload }));
   })
   .subscribe();
 

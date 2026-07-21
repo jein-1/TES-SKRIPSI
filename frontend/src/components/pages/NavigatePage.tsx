@@ -10,7 +10,7 @@ import {
 } from 'lucide-react'
 import { motion, AnimatePresence } from 'motion/react'
 import { findOptimalEvacuationRoutes, type RouteResult } from "../../lib/evacuation";
-import { useBMKG, createCirclePolygon } from "../../lib/useBMKG";
+import type { GempaData } from "../../lib/useBMKG";
 import { shelters, hazardZones } from '../../lib/evacuation'
 import { Geolocation } from '@capacitor/geolocation'
 import type * as GeoJSON from 'geojson'
@@ -24,6 +24,10 @@ interface Props {
   adminPing?: { fromName: string; role: string; fromId: string } | null
   onAdminPingDismiss?: () => void
   onStartGps?: () => void
+  // BMKG — passed from App.tsx (single source of truth with localStorage persistence)
+  gempa?: GempaData | null
+  isGempaDismissed?: boolean
+  onDismissGempa?: () => void
 }
 
 // ── Helpers ────────────────────────────────────────────────────
@@ -53,14 +57,12 @@ function bearingLabel(b: number): { label: string; icon: string } {
 }
 
 // ── MAIN ──────────────────────────────────────────────────────
-export default function NavigatePage({ routes, selectedRoute, tsunamiAlert, userPosition, onBack, adminPing, onAdminPingDismiss, onStartGps }: Props) {
-  const { gempa } = useBMKG();
+export default function NavigatePage({ routes, selectedRoute, tsunamiAlert, userPosition, onBack, adminPing, onAdminPingDismiss, onStartGps, gempa, isGempaDismissed, onDismissGempa }: Props) {
   const [showMedical, setShowMedical]     = useState(false)
   const [deviceHeading, setDeviceHeading] = useState<number | null>(null)
   const [headingLocked, setHeadingLocked] = useState(true)
   const [activeRouteIdx, setActiveRouteIdx] = useState(selectedRoute)
   const [showRoutePanel, setShowRoutePanel] = useState(true)
-  const [dismissedGempaTime, setDismissedGempaTime] = useState<string | null>(null)
   const [localPos, setLocalPos] = useState<[number,number] | null>(null)
   const mapRef = useRef<MapRef | null>(null)
   const [showCalibration, setShowCalibration] = useState(() => !sessionStorage.getItem('compassCalibrated'))
@@ -437,11 +439,11 @@ export default function NavigatePage({ routes, selectedRoute, tsunamiAlert, user
           </div>
         )}
 
-        {/* BMKG OVERLAY */}
-        {gempa && dismissedGempaTime !== gempa.DateTime && (
+        {/* BMKG OVERLAY — uses App.tsx dismiss state (persisted to localStorage) */}
+        {gempa && !isGempaDismissed && (
           <div className="absolute top-4 left-1/2 -translate-x-1/2 z-[500] bg-slate-900/90 backdrop-blur-md border border-slate-700 rounded-2xl p-4 shadow-2xl flex items-center gap-4 max-w-[90%] w-80">
             <button 
-              onClick={() => setDismissedGempaTime(gempa.DateTime)}
+              onClick={() => onDismissGempa?.()}
               className="absolute top-2 right-2 p-1 text-slate-400 hover:text-white hover:bg-slate-800 rounded-full transition-colors"
             >
               <X className="w-3 h-3" />

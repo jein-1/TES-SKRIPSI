@@ -12,8 +12,6 @@ interface Props {
   onLogin: (role: UserRole, name: string, specificRole?: string) => void
 }
 
-import { ADMIN_ACCOUNTS } from '../../constants/adminAccounts'
-
 function TacticalGrid() {
   return (
     <svg className="absolute inset-0 w-full h-full opacity-[0.04]" xmlns="http://www.w3.org/2000/svg">
@@ -28,19 +26,37 @@ function TacticalGrid() {
 }
 
 export default function LoginPage({ onLogin }: Props) {
-  const [username, setUsername] = useState('admin')
-  const [password, setPassword] = useState('aegis2024')
+  const [username, setUsername] = useState('')
+  const [password, setPassword] = useState('')
   const [showPw, setShowPw] = useState(false)
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
 
-  const handleLogin = () => {
-    const acc = ADMIN_ACCOUNTS.find(a => a.username === username && a.password === password);
-    if (acc) {
-      setLoading(true)
-      setTimeout(() => onLogin('admin', acc.name, acc.role), 900)
-    } else {
-      setError('Username atau password tidak valid.')
+  const handleLogin = async () => {
+    if (!username || !password) {
+      setError('Username dan password harus diisi.');
+      return;
+    }
+    setLoading(true);
+    setError('');
+    try {
+      const baseUrl = import.meta.env.VITE_API_URL || 'https://tsunami-dimss.vercel.app';
+      const res = await fetch(`${baseUrl}/api/auth/login`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ username, password })
+      });
+      const data = await res.json();
+      if (res.ok && data.success && data.token) {
+        sessionStorage.setItem('aegisJWT', data.token);
+        onLogin('admin', data.name, data.role);
+      } else {
+        setError(data.error || 'Username atau password tidak valid.');
+      }
+    } catch (err) {
+      setError('Koneksi ke server gagal.');
+    } finally {
+      setLoading(false);
     }
   }
 
@@ -162,12 +178,7 @@ export default function LoginPage({ onLogin }: Props) {
             )}
           </button>
 
-          {/* Demo hint */}
-          <div className="mt-4 p-3 rounded-xl bg-slate-800/40 border border-slate-700/40">
-            <p className="text-[10px] text-slate-500 font-bold uppercase tracking-wider mb-1">Demo Credentials</p>
-            <p className="text-[11px] text-slate-400 font-mono">admin1 / password123</p>
-            <p className="text-[11px] text-slate-400 font-mono">sar1 / sarpassword</p>
-          </div>
+
         </div>
 
         <p className="text-center text-[10px] text-slate-700 mt-5 font-medium">

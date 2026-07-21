@@ -317,12 +317,14 @@ function App() {
         lng: number;
         ts: number;
         battery?: number;
+        isOffline?: boolean;
       }
     >
   >({});
 
   // — URL-based Admin Detection ———————————————————————————————————————————
   // Admin mode: URL contains ?admin OR ?key=aegis2024 OR hash #admin
+  // Admin mode: URL contains ?admin OR hash #admin
   // User mode:  any other URL (default — no login required)
   const isAdminURL = (() => {
     // APK Admin build: env var set at build time via .env.admin
@@ -330,7 +332,6 @@ function App() {
     const p = new URLSearchParams(window.location.search);
     return (
       p.has("admin") ||
-      p.get("key") === "aegis2024" ||
       window.location.hash === "#admin"
     );
   })();
@@ -947,6 +948,7 @@ function App() {
             lng: ev.lng,
             battery: ev.battery,
             ts: Date.now(),
+            isOffline: false,
           },
         }));
       }
@@ -972,6 +974,26 @@ function App() {
     }
   }, [adminPing]);
 
+  // ── Cleanup offline users (set isOffline = true) ──
+  useEffect(() => {
+    if (!isAdminURL) return;
+    const interval = setInterval(() => {
+      const now = Date.now();
+      setActiveUsers(prev => {
+        let changed = false;
+        const next = { ...prev };
+        for (const id in next) {
+          if (!next[id].isOffline && now - next[id].ts > 60000) {
+            next[id] = { ...next[id], isOffline: true };
+            changed = true;
+          }
+        }
+        return changed ? next : prev;
+      });
+    }, 10000);
+    return () => clearInterval(interval);
+  }, [isAdminURL]);
+
   useEffect(() => {
     // Ambil info device (brand + model) untuk admin
     import("@capacitor/device").then(({ Device }) => {
@@ -992,6 +1014,18 @@ function App() {
     // 4. AUTO-START GPS saat app dibuka (user mode selalu, tanpa syarat registrasi)
     if (!isAdminURL) {
       setTimeout(() => startGpsTracking(), 600);
+    }
+    // 4b. Load custom shelters dari Supabase
+    aegisApi.fetchCustomShelters().then(data => {
+      data.forEach(s => addCustomShelter(s as any));
+    });
+    // 4c. Load active users dari Supabase jika admin
+    if (isAdminURL) {
+      aegisApi.fetchActiveUsers().then(users => {
+        const initialUsers: Record<string, any> = {};
+        users.forEach(u => { initialUsers[u.id] = u; });
+        setActiveUsers(initialUsers);
+      });
     }
     // 5. Cek status tsunami saat app dibuka
     aegisApi.getTsunami().then(({ active }) => {
@@ -2047,9 +2081,10 @@ function App() {
                 >
                   <MarkerContent>
                     <div style={{
-                      background: '#f59e0b', border: '2.5px solid #fff', borderRadius: '50%',
+                      background: u.isOffline ? '#64748b' : '#f59e0b', border: '2.5px solid #fff', borderRadius: '50%',
                       width: 26, height: 26, display: 'flex', alignItems: 'center', justifyContent: 'center',
-                      boxShadow: '0 0 12px rgba(245,158,11,0.8)', fontSize: 11, cursor: 'pointer'
+                      boxShadow: `0 0 12px ${u.isOffline ? 'rgba(100,116,139,0.8)' : 'rgba(245,158,11,0.8)'}`, fontSize: 11, cursor: 'pointer',
+                      opacity: u.isOffline ? 0.7 : 1
                     }}
                     onClick={(e) => {
                       e.stopPropagation();

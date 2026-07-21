@@ -3,6 +3,7 @@
 // Titik-titik evakuasi tsunami di Kota Palu berdasarkan lokasi resmi
 // ─────────────────────────────────────────────────────────────────────────────
 import type { Shelter } from "./types";
+import { supabase } from "../supabaseClient";
 
 const defaultShelters: Shelter[] = [
   {
@@ -75,22 +76,45 @@ export const shelters: Shelter[] = [];
 export function loadShelters() {
   shelters.length = 0;
   shelters.push(...defaultShelters);
-  try {
-    const custom = JSON.parse(localStorage.getItem("aegisCustomShelters") || "[]");
-    shelters.push(...custom);
-  } catch (e) {
-    console.error("Failed to load custom shelters", e);
+}
+
+/**
+ * Tambah shelter ke array in-memory (immediate, tanpa perlu refetch).
+ * Penyimpanan ke Supabase dilakukan via aegisApi.addCustomShelter() di App.tsx.
+ */
+export function addCustomShelter(shelter: Shelter) {
+  // Cegah duplikat jika sudah ada (misal dari Postgres realtime + broadcast)
+  if (!shelters.find(s => s.id === shelter.id)) {
+    shelters.push(shelter);
   }
 }
 
-export function addCustomShelter(shelter: Shelter) {
-  shelters.push(shelter);
+/**
+ * Load custom shelters dari Supabase saat aplikasi pertama kali dibuka.
+ * Dipanggil sekali di App.tsx useEffect, hasilnya di-push ke array shelters.
+ */
+export async function loadCustomSheltersFromSupabase(): Promise<void> {
   try {
-    const custom = JSON.parse(localStorage.getItem("aegisCustomShelters") || "[]");
-    custom.push(shelter);
-    localStorage.setItem("aegisCustomShelters", JSON.stringify(custom));
+    const { data, error } = await supabase
+      .from("custom_shelters")
+      .select("id, name, lat, lng, capacity, radius_meters")
+      .order("created_at", { ascending: true });
+    if (error || !data) return;
+    data.forEach((row: any) => {
+      const s: Shelter = {
+        id: row.id,
+        name: row.name,
+        lat: row.lat,
+        lng: row.lng,
+        capacity: row.capacity,
+        radiusMeters: row.radius_meters,
+      };
+      if (!shelters.find(existing => existing.id === s.id)) {
+        shelters.push(s);
+      }
+    });
   } catch (e) {
-    console.error("Failed to save custom shelter", e);
+    console.error("[Shelters] loadCustomSheltersFromSupabase failed:", e);
   }
 }
 
@@ -147,6 +171,6 @@ export async function fetchOsmShelters() {
   }
 }
 
-// Load on initialization
+// Load on initialization (default shelters only; custom shelters loaded async via Supabase in App.tsx)
 loadShelters();
 fetchOsmShelters();
