@@ -67,7 +67,11 @@ export const aegisApi = {
       event: "TSUNAMI",
       payload: { active, ts: Date.now() },
     });
-    // 2. Persist to API
+    
+    // 2. Persist to Postgres directly to ensure state is saved reliably
+    await supabase.from("tsunami_state").update({ active, updated_at: new Date().toISOString() }).eq("id", 1);
+    
+    // 3. Persist to API (for Web Push triggers)
     return apiPost("/api/tsunami", { active }, true);
   },
 

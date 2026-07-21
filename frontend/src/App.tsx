@@ -385,8 +385,13 @@ function App() {
     if (!gempa) return true;
     if (dismissedGempaTime === gempa.DateTime) return true;
     try {
-      const history = JSON.parse(localStorage.getItem('dismissedGempas') || '[]');
-      return history.includes(gempa.DateTime);
+      const stored = localStorage.getItem('dismissedGempas');
+      if (!stored) return false;
+      const history = JSON.parse(stored);
+      if (Array.isArray(history)) {
+        return history.includes(gempa.DateTime);
+      }
+      return false;
     } catch {
       return false;
     }
@@ -395,11 +400,18 @@ function App() {
   const handleDismissGempa = useCallback(() => {
     if (!gempa) return;
     try {
-      let history = JSON.parse(localStorage.getItem('dismissedGempas') || '[]');
+      const stored = localStorage.getItem('dismissedGempas');
+      let history: string[] = [];
+      if (stored) {
+        try {
+          const parsed = JSON.parse(stored);
+          if (Array.isArray(parsed)) history = parsed;
+        } catch (e) {} // Ignore parse error and use empty array
+      }
       if (!history.includes(gempa.DateTime)) {
         history.push(gempa.DateTime);
         if (history.length > 7) {
-          history = history.slice(-7); // Maksimal 7 riwayat
+          history = history.slice(-7);
         }
         localStorage.setItem('dismissedGempas', JSON.stringify(history));
       }
