@@ -1028,19 +1028,29 @@ function App() {
       });
     }
     // 5. Cek status tsunami saat app dibuka
-    aegisApi.getTsunami().then(({ active }) => {
-      if (active) {
-        if (typeof window !== "undefined") localStorage.setItem("aegisRealTsunami", "true");
-        setTsunamiAlert(true);
-        setActivePage("navigate");
+    const fetchTsunamiState = async (retries = 3, delay = 1000) => {
+      const { active, ok } = await aegisApi.getTsunami();
+      if (ok) {
+        if (active) {
+          if (typeof window !== "undefined") localStorage.setItem("aegisRealTsunami", "true");
+          setTsunamiAlert(true);
+          setActivePage("navigate");
+        } else {
+          if (typeof window !== "undefined" && localStorage.getItem("aegisRealTsunami") === "true") {
+            localStorage.removeItem("aegisRealTsunami");
+            setTsunamiAlert(false);
+            if (!isAdminURL) setActivePage("status");
+          }
+        }
       } else {
-        if (typeof window !== "undefined" && localStorage.getItem("aegisRealTsunami") === "true") {
-          localStorage.removeItem("aegisRealTsunami");
-          setTsunamiAlert(false);
-          if (!isAdminURL) setActivePage("status");
+        if (retries > 0) {
+          setTimeout(() => fetchTsunamiState(retries - 1, delay * 2), delay);
+        } else {
+          console.warn("Gagal mengecek status tsunami dari server, mempertahankan status lokal.");
         }
       }
-    });
+    };
+    fetchTsunamiState();
     // 6. Minta agar tidak dimatikan oleh battery optimizer (Android)
     try {
       const { App: CapApp } = require('@capacitor/app');
