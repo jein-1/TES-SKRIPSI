@@ -163,16 +163,28 @@ export const aegisApi = {
   /** Admin: simpan shelter custom ke Supabase + broadcast ke semua device */
   addCustomShelter: async (shelter: Shelter): Promise<{ ok: boolean }> => {
     try {
-      const { error } = await supabase.from("custom_shelters").insert({
-        id: shelter.id,
-        name: shelter.name,
-        lat: shelter.lat,
-        lng: shelter.lng,
-        capacity: shelter.capacity,
-        radius_meters: shelter.radiusMeters ?? 50,
+      const token = sessionStorage.getItem("aegisJWT");
+      if (!token) return { ok: false };
+
+      const API_URL = import.meta.env.VITE_API_URL || "";
+      const res = await fetch(`${API_URL}/api/shelters/add`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${token}`
+        },
+        body: JSON.stringify({
+          id: shelter.id,
+          name: shelter.name,
+          lat: shelter.lat,
+          lng: shelter.lng,
+          capacity: shelter.capacity,
+          radiusMeters: shelter.radiusMeters ?? 50
+        }),
       });
-      if (error) {
-        console.error("[AegisSync] addCustomShelter error:", error);
+
+      if (!res.ok) {
+        console.error("[AegisSync] addCustomShelter error:", await res.text());
         return { ok: false };
       }
       // Broadcast ke semua device agar langsung muncul tanpa refresh
