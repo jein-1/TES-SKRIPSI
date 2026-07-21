@@ -296,6 +296,8 @@ function App() {
   const [showShelters, setShowShelters] = useState(false);
   const [showAddShelter, setShowAddShelter] = useState(false);
   const [newShelter, setNewShelter] = useState({ name: '', lat: '', lng: '', capacity: '', radius: '50' });
+  const [pickingLocationMode, setPickingLocationMode] = useState(false);
+  const geoDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [showLeftSidebar, setShowLeftSidebar] = useState(true);
   const [adminMapBearing, setAdminMapBearing] = useState(0);
   const adminMapRef = useRef<MapRef | null>(null);
@@ -325,6 +327,41 @@ function App() {
   // — URL-based Admin Detection ———————————————————————————————————————————
   // Admin mode: URL contains ?admin OR ?key=aegis2024 OR hash #admin
   // Admin mode: URL contains ?admin OR hash #admin
+  // ── Mode Pilih di Peta ──
+  const handleReverseGeocode = useCallback((lat: number, lng: number) => {
+    if (geoDebounceRef.current) clearTimeout(geoDebounceRef.current);
+    geoDebounceRef.current = setTimeout(async () => {
+      try {
+        const res = await fetch(`/api/geocode/reverse?lat=${lat}&lng=${lng}`);
+        if (res.ok) {
+          const data = await res.json();
+          const locationName = data.road || data.displayName || 'Alamat tidak diketahui';
+          setNewShelter(prev => ({ ...prev, name: locationName }));
+        }
+      } catch (err) {
+        console.error("Geocode error", err);
+      }
+    }, 600);
+  }, []);
+
+  useEffect(() => {
+    if (pickingLocationMode && adminMapRef.current) {
+      const map = adminMapRef.current;
+      const handleClick = (e: any) => {
+        const lat = e.lngLat.lat;
+        const lng = e.lngLat.lng;
+        setNewShelter(prev => ({ ...prev, lat: String(lat), lng: String(lng) }));
+        setPickingLocationMode(false);
+        setShowAddShelter(true);
+        handleReverseGeocode(lat, lng);
+      };
+      map.once('click', handleClick);
+      return () => {
+        map.off('click', handleClick);
+      };
+    }
+  }, [pickingLocationMode, handleReverseGeocode]);
+
   // User mode:  any other URL (default — no login required)
   const isAdminURL = (() => {
     // APK Admin build: env var set at build time via .env.admin
@@ -2064,6 +2101,25 @@ function App() {
                 />
               ))}
 
+            {/* Temporary Marker for Add Shelter Mode */}
+            {((showAddShelter || pickingLocationMode) && newShelter.lat && newShelter.lng) && !isNaN(parseFloat(newShelter.lat)) && (
+              <MapMarker
+                longitude={parseFloat(newShelter.lng)}
+                latitude={parseFloat(newShelter.lat)}
+                draggable={true}
+                onDragEnd={(e) => {
+                  setNewShelter(prev => ({ ...prev, lat: String(e.lat), lng: String(e.lng) }));
+                  handleReverseGeocode(e.lat, e.lng);
+                }}
+              >
+                <MarkerContent>
+                  <div className="w-8 h-8 flex items-center justify-center bg-indigo-500 rounded-full border-2 border-white shadow-[0_0_15px_rgba(99,102,241,0.8)] animate-bounce">
+                    <MapPin className="w-4 h-4 text-white" />
+                  </div>
+                </MarkerContent>
+              </MapMarker>
+            )}
+
             {/* Shelters */}
             {shelters.map((shelter) => (
               <MapMarker
@@ -3126,6 +3182,21 @@ function App() {
         )}
       </AnimatePresence>
 
+      {/* ─── INSTRUCTION BANNER (PICKING MODE) ─── */}
+      <AnimatePresence>
+        {pickingLocationMode && (
+          <motion.div
+            initial={{ opacity: 0, y: -20 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -20 }}
+            className="fixed top-20 left-1/2 -translate-x-1/2 z-[3000] bg-indigo-600 text-white px-6 py-3 rounded-full shadow-lg font-bold flex items-center gap-2 text-sm border border-indigo-400"
+          >
+            <MapPin className="w-5 h-5 animate-pulse" />
+            Klik titik di peta untuk menaruh pin shelter
+          </motion.div>
+        )}
+      </AnimatePresence>
+
       {/* ─── ADD SHELTER MODAL ─── */}
       <AnimatePresence>
         {showAddShelter && (
@@ -3143,7 +3214,17 @@ function App() {
             >
               <h2 className="text-lg font-black text-white mb-4">Tambah Shelter Manual</h2>
               <div className="space-y-3">
-                <input type="text" placeholder="Nama Shelter" className="w-full bg-slate-800 text-white rounded-xl px-4 py-2 text-sm" value={newShelter.name} onChange={e => setNewShelter({...newShelter, name: e.target.value})} />
+                <input type="text" placeholder="Nama Shelter (Otomatis/Manual)" className="w-full bg-slate-800 text-white rounded-xl px-4 py-2 text-sm" value={newShelter.name} onChange={e => setNewShelter({...newShelter, name: e.target.value})} />
+                <button
+                  onClick={() => {
+                    setPickingLocationMode(true);
+                    setShowAddShelter(false);
+                    setShowLeftSidebar(false);
+                  }}
+                  className="w-full flex items-center justify-center gap-2 py-2 bg-indigo-500/20 text-indigo-400 border border-indigo-500/30 rounded-xl hover:bg-indigo-500/30 transition-colors text-sm font-semibold"
+                >
+                  <MapPin className="w-4 h-4" /> Pilih di Peta
+                </button>
                 <div className="flex gap-3">
                   <input type="number" placeholder="Latitude" className="w-full bg-slate-800 text-white rounded-xl px-4 py-2 text-sm" value={newShelter.lat} onChange={e => setNewShelter({...newShelter, lat: e.target.value})} />
                   <input type="number" placeholder="Longitude" className="w-full bg-slate-800 text-white rounded-xl px-4 py-2 text-sm" value={newShelter.lng} onChange={e => setNewShelter({...newShelter, lng: e.target.value})} />
