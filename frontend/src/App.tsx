@@ -271,6 +271,8 @@ function App() {
   const [flyToPos, setFlyToPos] = useState<[number, number] | null>(null);
   const [gpsAccuracy, setGpsAccuracy] = useState<number | null>(null); // metres
   const [arrivedShelterId, setArrivedShelterId] = useState<string | null>(null);
+  // Arrival modal: only shown ONCE per session to prevent re-appearing on page nav
+  const arrivalShownRef = useRef(sessionStorage.getItem('aegisArrivalShown') === 'true');
   // Arrival modal state â€” stores snapshot at time of arrival
 
   const [arrivalSummary, setArrivalSummary] = useState<{
@@ -766,21 +768,29 @@ function App() {
               alarmRef.current.stop();
               setGpsTracking(false);
               setTsunamiAlert(false);
+              if (typeof window !== 'undefined') {
+                sessionStorage.removeItem('aegisSimulating');
+                localStorage.removeItem('aegisRealTsunami');
+              }
               setShowPanel(false);
               // 3. Haptic feedback (arrived!)
               if ("vibrate" in navigator)
                 navigator.vibrate([200, 100, 200, 100, 400]);
-              // 4. Show arrival state
-              setArrivedShelterId(arrived.id);
-              const bestRoute = routeResults[0];
-              setArrivalSummary({
-                shelter: arrived,
-                distanceKm:
-                  bestRoute?.totalDistance === Infinity
-                    ? 0
-                    : (bestRoute?.totalDistance ?? 0),
-                walkingMin: bestRoute?.walkingTime ?? 0,
-              });
+              // 4. Show arrival state ONLY if not shown this session
+              if (!arrivalShownRef.current) {
+                arrivalShownRef.current = true;
+                sessionStorage.setItem('aegisArrivalShown', 'true');
+                setArrivedShelterId(arrived.id);
+                const bestRoute = routeResults[0];
+                setArrivalSummary({
+                  shelter: arrived,
+                  distanceKm:
+                    bestRoute?.totalDistance === Infinity
+                      ? 0
+                      : (bestRoute?.totalDistance ?? 0),
+                  walkingMin: bestRoute?.walkingTime ?? 0,
+                });
+              }
             }
           }
         },
@@ -949,10 +959,14 @@ function App() {
         doVibrate();
         vibrateIntervalRef.current = setInterval(doVibrate, 1200);
         if (settings.soundAlert) alarmRef.current.start();
-        if (!gpsAutoStartedRef.current) {
-          gpsAutoStartedRef.current = true;
-          setTimeout(() => startGpsTracking(), 500);
-        }
+        // ALWAYS restart GPS when tsunami activates so location is broadcast immediately
+        // (gpsAutoStartedRef may already be true from app startup, but we still need to
+        //  restart so the GPS callback sees tsunamiAlertRef=true and broadcasts location)
+        gpsAutoStartedRef.current = true;
+        arrivedFiredRef.current = false; // reset arrival so detection runs fresh
+        arrivalShownRef.current = false; // reset so arrival modal can show this session
+        sessionStorage.removeItem('aegisArrivalShown');
+        setTimeout(() => startGpsTracking(), 300);
         sendTsunamiNotification(true);
       } else {
         if (typeof window !== "undefined") localStorage.removeItem("aegisRealTsunami");
@@ -972,8 +986,8 @@ function App() {
       const ev = event as any;
       if (ev.toId === terminalId || (!ev.toId && ev.fromId !== terminalId)) {
         if (ev.role) {
-          // Admin ping — only show popup during tsunami/emergency
-          if (tsunamiAlertRef.current && !isAdminURL) {
+          // Admin ping — show popup (even if tsunami just activated, state may lag slightly)
+          if (!isAdminURL) {
             setAdminPing({
               fromName: ev.fromName,
               role: ev.role,
@@ -2152,7 +2166,7 @@ function App() {
               </MapMarker>
             ))}
 
-            {/* ── LOKASI USER AKTIF — hanya tampil saat simulasi ── */}
+            {/* -- LOKASI USER AKTIF -- */}
             {Object.values(activeUsers).map((u) => (
               <MapMarker
                 key={`user-${u.id}`}
@@ -2161,55 +2175,29 @@ function App() {
               >
                 <MarkerContent>
                   <div
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      setSelectedUserInfo({ ...u });
-                    }}
-                    style={{
-                      position: 'relative',
-                      cursor: 'pointer',
-                      display: 'flex',
-                      flexDirection: 'column',
-                      alignItems: 'center',
-                      gap: 2,
-                    }}
+                    onClick={(e) => { e.stopPropagation(); setSelectedUserInfo({ ...u }); }}
+                    style={{ position: 'relative', cursor: 'pointer', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2 }}
                   >
+                    {/* Avatar circle — compact, no animation */}
                     <div style={{
-                      background: u.isOffline ? '#64748b' : '#f59e0b',
-                      border: `2.5px solid ${u.isOffline ? '#94a3b8' : '#fff'}`,
+                      background: u.isOffline ? '#475569' : '#f59e0b',
+                      border: `2px solid ${u.isOffline ? '#64748b' : '#fffbeb'}`,
                       borderRadius: '50%',
-                      width: 32, height: 32,
+                      width: 22, height: 22,
                       display: 'flex', alignItems: 'center', justifyContent: 'center',
-                      boxShadow: `0 0 14px ${u.isOffline ? 'rgba(100,116,139,0.6)' : 'rgba(245,158,11,0.9)'}`,
-                      fontSize: 14,
-                      opacity: u.isOffline ? 0.7 : 1,
-                      animation: u.isOffline ? 'none' : 'haloPulse 2s infinite',
+                      boxShadow: `0 1px 6px ${u.isOffline ? 'rgba(0,0,0,0.4)' : 'rgba(245,158,11,0.5)'}`,
+                      fontSize: 11,
+                      opacity: u.isOffline ? 0.65 : 1,
                     }}>👤</div>
+                    {/* Name tag */}
                     <div style={{
-                      background: u.isOffline ? 'rgba(100,116,139,0.9)' : 'rgba(245,158,11,0.9)',
-                      color: '#000',
-                      fontSize: 9,
-                      fontWeight: 800,
-                      padding: '1px 5px',
-                      borderRadius: 6,
-                      maxWidth: 80,
-                      overflow: 'hidden',
-                      textOverflow: 'ellipsis',
-                      whiteSpace: 'nowrap',
-                      lineHeight: 1.4,
-                    }}>{u.name}</div>
-                    {/* Battery indicator */}
-                    {u.battery !== undefined && (
-                      <div style={{
-                        background: u.battery > 20 ? 'rgba(34,197,94,0.9)' : 'rgba(239,68,68,0.9)',
-                        color: '#fff',
-                        fontSize: 8,
-                        fontWeight: 700,
-                        padding: '1px 4px',
-                        borderRadius: 4,
-                        lineHeight: 1.4,
-                      }}>🔋{u.battery}%</div>
-                    )}
+                      background: u.isOffline ? 'rgba(71,85,105,0.92)' : 'rgba(245,158,11,0.92)',
+                      color: u.isOffline ? '#cbd5e1' : '#000',
+                      fontSize: 8, fontWeight: 800,
+                      padding: '1px 4px', borderRadius: 4,
+                      maxWidth: 72, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                      lineHeight: 1.5,
+                    }}>{u.name}{u.battery !== undefined ? ` · ${u.battery}%` : ''}</div>
                   </div>
                 </MarkerContent>
               </MapMarker>
