@@ -326,6 +326,17 @@ function App() {
       }
     >
   >({});
+  const [selectedUserInfo, setSelectedUserInfo] = useState<{
+    id: string;
+    name: string;
+    deviceModel: string;
+    lat: number;
+    lng: number;
+    battery?: number;
+    isOffline?: boolean;
+    ts: number;
+  } | null>(null);
+  const [isPinging, setIsPinging] = useState(false);
 
   // — URL-based Admin Detection ———————————————————————————————————————————
   // Admin mode: URL contains ?admin OR ?key=aegis2024 OR hash #admin
@@ -978,19 +989,19 @@ function App() {
     if (event.type === "LOCATION_UPDATE") {
       const ev = event as any;
       if (ev.id && ev.lat && ev.lng) {
-        setActiveUsers((prev) => ({
-          ...prev,
-          [ev.id]: {
-            id: ev.id,
-            name: ev.name || ev.id,
-            deviceModel: ev.deviceModel || "Unknown Device",
-            lat: ev.lat,
-            lng: ev.lng,
-            battery: ev.battery,
-            ts: Date.now(),
-            isOffline: false,
-          },
-        }));
+        const updatedUser = {
+          id: ev.id,
+          name: ev.name || ev.id,
+          deviceModel: ev.deviceModel || "Unknown Device",
+          lat: ev.lat,
+          lng: ev.lng,
+          battery: ev.battery,
+          ts: Date.now(),
+          isOffline: false,
+        };
+        setActiveUsers((prev) => ({ ...prev, [ev.id]: updatedUser }));
+        // Update modal real-time jika sedang menampilkan user yang sama
+        setSelectedUserInfo((prev) => prev?.id === ev.id ? { ...updatedUser } : prev);
       }
     }
   });
@@ -2142,32 +2153,67 @@ function App() {
             ))}
 
             {/* ── LOKASI USER AKTIF — hanya tampil saat simulasi ── */}
-            {tsunamiAlert &&
-              Object.values(activeUsers).map((u) => (
-                <MapMarker
-                  key={`user-${u.id}`}
-                  longitude={u.lng}
-                  latitude={u.lat}
-                >
-                  <MarkerContent>
-                    <div style={{
-                      background: u.isOffline ? '#64748b' : '#f59e0b', border: '2.5px solid #fff', borderRadius: '50%',
-                      width: 26, height: 26, display: 'flex', alignItems: 'center', justifyContent: 'center',
-                      boxShadow: `0 0 12px ${u.isOffline ? 'rgba(100,116,139,0.8)' : 'rgba(245,158,11,0.8)'}`, fontSize: 11, cursor: 'pointer',
-                      opacity: u.isOffline ? 0.7 : 1
-                    }}
+            {Object.values(activeUsers).map((u) => (
+              <MapMarker
+                key={`user-${u.id}`}
+                longitude={u.lng}
+                latitude={u.lat}
+              >
+                <MarkerContent>
+                  <div
                     onClick={(e) => {
                       e.stopPropagation();
-                      if (!tsunamiAlert) { alert("Ping hanya bisa dilakukan saat mode darurat/simulasi aktif!"); return; }
-                      if (confirm(`Kirim ping ke ${u.name}?`)) {
-                        aegisApi.adminPing(terminalId, userName || "Admin", u.id, adminRole)
-                          .then(() => alert(`Ping terkirim ke ${u.name}!`))
-                          .catch(() => alert(`Gagal mengirim ping ke ${u.name}`));
-                      }
+                      setSelectedUserInfo({ ...u });
+                    }}
+                    style={{
+                      position: 'relative',
+                      cursor: 'pointer',
+                      display: 'flex',
+                      flexDirection: 'column',
+                      alignItems: 'center',
+                      gap: 2,
+                    }}
+                  >
+                    <div style={{
+                      background: u.isOffline ? '#64748b' : '#f59e0b',
+                      border: `2.5px solid ${u.isOffline ? '#94a3b8' : '#fff'}`,
+                      borderRadius: '50%',
+                      width: 32, height: 32,
+                      display: 'flex', alignItems: 'center', justifyContent: 'center',
+                      boxShadow: `0 0 14px ${u.isOffline ? 'rgba(100,116,139,0.6)' : 'rgba(245,158,11,0.9)'}`,
+                      fontSize: 14,
+                      opacity: u.isOffline ? 0.7 : 1,
+                      animation: u.isOffline ? 'none' : 'haloPulse 2s infinite',
                     }}>👤</div>
-                  </MarkerContent>
-                </MapMarker>
-              ))}
+                    <div style={{
+                      background: u.isOffline ? 'rgba(100,116,139,0.9)' : 'rgba(245,158,11,0.9)',
+                      color: '#000',
+                      fontSize: 9,
+                      fontWeight: 800,
+                      padding: '1px 5px',
+                      borderRadius: 6,
+                      maxWidth: 80,
+                      overflow: 'hidden',
+                      textOverflow: 'ellipsis',
+                      whiteSpace: 'nowrap',
+                      lineHeight: 1.4,
+                    }}>{u.name}</div>
+                    {/* Battery indicator */}
+                    {u.battery !== undefined && (
+                      <div style={{
+                        background: u.battery > 20 ? 'rgba(34,197,94,0.9)' : 'rgba(239,68,68,0.9)',
+                        color: '#fff',
+                        fontSize: 8,
+                        fontWeight: 700,
+                        padding: '1px 4px',
+                        borderRadius: 4,
+                        lineHeight: 1.4,
+                      }}>🔋{u.battery}%</div>
+                    )}
+                  </div>
+                </MarkerContent>
+              </MapMarker>
+            ))}
 
             {!isAdminURL &&
               routes.map((route, i) => {
@@ -2301,7 +2347,101 @@ function App() {
           </AnimatePresence>
         </main>
 
-        {/* â•â•â• DESKTOP RIGHT SIDEBAR (Routes) â•â•â• */}
+
+        {/* == ADMIN USER DEVICE INFO MODAL == */}
+        <AnimatePresence>
+          {selectedUserInfo && (() => {
+            const liveUser = activeUsers[selectedUserInfo.id] ?? selectedUserInfo;
+            const ageMs = Date.now() - liveUser.ts;
+            const ageSec = Math.round(ageMs / 1000);
+            const ageLabel = ageSec < 60 ? `${ageSec}d lalu` : `${Math.round(ageSec/60)} mnt lalu`;
+            const bat = liveUser.battery;
+            const batColor = bat === undefined ? '#64748b' : bat > 50 ? '#22c55e' : bat > 20 ? '#f59e0b' : '#ef4444';
+            const batPct = bat ?? 0;
+            return (
+              <motion.div
+                key="user-info-modal"
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                className="fixed inset-0 z-[2000] flex items-end justify-center bg-black/60 backdrop-blur-sm"
+                onClick={() => { setSelectedUserInfo(null); setIsPinging(false); }}
+              >
+                <motion.div
+                  initial={{ y: 120, opacity: 0, scale: 0.96 }}
+                  animate={{ y: 0, opacity: 1, scale: 1 }}
+                  exit={{ y: 120, opacity: 0, scale: 0.96 }}
+                  transition={{ type: 'spring', damping: 28, stiffness: 300 }}
+                  onClick={(e) => e.stopPropagation()}
+                  className="w-full max-w-sm mx-auto bg-[#0d1929] border border-amber-500/30 rounded-t-3xl md:rounded-3xl md:mb-8 shadow-[0_-20px_60px_rgba(245,158,11,0.25)] overflow-hidden"
+                >
+                  <div className="flex items-center justify-between px-5 pt-5 pb-3 border-b border-slate-800">
+                    <div className="flex items-center gap-3">
+                      <div className={`w-10 h-10 rounded-2xl flex items-center justify-center text-xl ${liveUser.isOffline ? 'bg-slate-700' : 'bg-amber-500/20 border border-amber-500/40'}`}>👤</div>
+                      <div>
+                        <h3 className="text-white font-black text-base leading-tight">{liveUser.name}</h3>
+                        <div className="flex items-center gap-1.5 mt-0.5">
+                          <div className={`w-2 h-2 rounded-full ${liveUser.isOffline ? 'bg-slate-500' : 'bg-amber-400 animate-pulse'}`} />
+                          <span className={`text-[10px] font-bold ${liveUser.isOffline ? 'text-slate-500' : 'text-amber-400'}`}>{liveUser.isOffline ? 'OFFLINE' : 'ONLINE'} · {ageLabel}</span>
+                        </div>
+                      </div>
+                    </div>
+                    <button onClick={() => { setSelectedUserInfo(null); setIsPinging(false); }}
+                      className="w-8 h-8 rounded-xl bg-slate-800 hover:bg-slate-700 flex items-center justify-center text-slate-400 hover:text-white transition-colors">
+                      <X className="w-4 h-4" />
+                    </button>
+                  </div>
+                  <div className="p-5 space-y-3">
+                    <div className="p-3.5 rounded-2xl bg-slate-900/60 border border-slate-800">
+                      <p className="text-[9px] text-slate-500 uppercase tracking-widest font-bold mb-2 flex items-center gap-1.5"><Cpu className="w-3 h-3" /> PERANGKAT</p>
+                      <p className="text-sm font-bold text-white">{liveUser.deviceModel || 'Unknown Device'}</p>
+                      <p className="text-[10px] text-slate-500 mt-0.5 font-mono">ID: {liveUser.id}</p>
+                    </div>
+                    <div className="p-3.5 rounded-2xl bg-slate-900/60 border border-slate-800">
+                      <p className="text-[9px] text-slate-500 uppercase tracking-widest font-bold mb-2">🔋 STATUS BATERAI</p>
+                      <div className="flex items-center gap-3">
+                        <div className="flex-1 h-3 bg-slate-800 rounded-full overflow-hidden">
+                          <div style={{ width: `${batPct}%`, background: batColor, transition: 'width 0.5s ease' }} className="h-full rounded-full" />
+                        </div>
+                        <span className="text-sm font-black shrink-0" style={{ color: batColor }}>{bat !== undefined ? `${bat}%` : 'N/A'}</span>
+                      </div>
+                      {bat !== undefined && bat <= 20 && <p className="text-[10px] text-red-400 font-bold mt-1.5 animate-pulse">⚠️ Baterai kritis!</p>}
+                    </div>
+                    <div className="p-3.5 rounded-2xl bg-slate-900/60 border border-slate-800">
+                      <p className="text-[9px] text-slate-500 uppercase tracking-widest font-bold mb-2 flex items-center gap-1.5"><MapPin className="w-3 h-3" /> LOKASI GPS (REAL-TIME)</p>
+                      <div className="grid grid-cols-2 gap-2 mb-2.5">
+                        <div><p className="text-[9px] text-slate-600 font-bold">LAT</p><p className="text-xs font-mono text-slate-300">{liveUser.lat.toFixed(6)}</p></div>
+                        <div><p className="text-[9px] text-slate-600 font-bold">LNG</p><p className="text-xs font-mono text-slate-300">{liveUser.lng.toFixed(6)}</p></div>
+                      </div>
+                      <button onClick={() => { setViewport(v => ({ ...v, center: [liveUser.lng, liveUser.lat], zoom: 17 })); setSelectedUserInfo(null); }}
+                        className="w-full py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-xl text-[10px] font-bold transition-colors">📍 Fokus ke lokasi ini</button>
+                    </div>
+                    {isPinging ? (
+                      <div className="p-3 rounded-2xl bg-amber-900/20 border border-amber-500/30 text-center">
+                        <p className="text-[11px] text-amber-300 font-bold animate-pulse">📡 Ping terkirim ke {liveUser.name}!</p>
+                      </div>
+                    ) : (
+                      <button
+                        onClick={() => {
+                          if (!tsunamiAlert) return;
+                          setIsPinging(true);
+                          aegisApi.adminPing(terminalId, userName || 'Admin', liveUser.id, adminRole)
+                            .catch(() => {})
+                            .finally(() => setTimeout(() => setIsPinging(false), 3000));
+                        }}
+                        disabled={!tsunamiAlert}
+                        className={`w-full py-3.5 rounded-2xl font-black text-sm tracking-wide transition-all flex items-center justify-center gap-2 ${tsunamiAlert ? 'bg-amber-500 hover:bg-amber-400 text-black shadow-[0_4px_20px_rgba(245,158,11,0.4)] active:scale-95' : 'bg-slate-800 text-slate-600 cursor-not-allowed'}`}
+                      >
+                        <Radio className="w-4 h-4" />
+                        {tsunamiAlert ? `KIRIM PING KE ${liveUser.name.toUpperCase()}` : 'PING (Hanya saat Simulasi)'}
+                      </button>
+                    )}
+                  </div>
+                </motion.div>
+              </motion.div>
+            );
+          })()}
+        </AnimatePresence>        {/* â•â•â• DESKTOP RIGHT SIDEBAR (Routes) â•â•â• */}
         <AnimatePresence>
           {showPanel && routes.length > 0 && !isMobile && (
             <motion.aside
