@@ -999,6 +999,12 @@ function App() {
         }
       }
     }
+    if (event.type === "PING_REPLY") {
+      const ev = event as any;
+      if (isAdminURL && ev.toId === terminalId) {
+        alert(`✅ PING BALASAN: ${ev.fromName} telah merespons dan mengkonfirmasi bahwa mereka AMAN.`);
+      }
+    }
     // Track lokasi user aktif untuk peta admin
     if (event.type === "LOCATION_UPDATE") {
       const ev = event as any;
@@ -1155,7 +1161,12 @@ function App() {
               userPosition={userPosition}
               onBack={() => setActivePage("status")}
               adminPing={adminPing}
-              onAdminPingDismiss={() => setAdminPing(null)}
+              onAdminPingDismiss={() => {
+                if (adminPing?.fromId) {
+                  aegisApi.pingReply(terminalId, userName || "Pengguna", adminPing.fromId).catch(() => {});
+                }
+                setAdminPing(null);
+              }}
               onStartGps={!gpsTracking ? startGpsTracking : undefined}
             />
           )}
@@ -2132,21 +2143,28 @@ function App() {
 
             {/* Temporary Marker for Add Shelter Mode */}
             {((showAddShelter || pickingLocationMode) && newShelter.lat && newShelter.lng) && !isNaN(parseFloat(newShelter.lat)) && (
-              <MapMarker
-                longitude={parseFloat(newShelter.lng)}
-                latitude={parseFloat(newShelter.lat)}
-                draggable={true}
-                onDragEnd={(e) => {
-                  setNewShelter(prev => ({ ...prev, lat: String(e.lat), lng: String(e.lng) }));
-                  handleReverseGeocode(e.lat, e.lng);
-                }}
-              >
-                <MarkerContent>
-                  <div className="w-8 h-8 flex items-center justify-center bg-indigo-500 rounded-full border-2 border-white shadow-[0_0_15px_rgba(99,102,241,0.8)] animate-bounce">
-                    <MapPin className="w-4 h-4 text-white" />
-                  </div>
-                </MarkerContent>
-              </MapMarker>
+              <>
+                <MapGeoJSON
+                  data={createCirclePolygon(parseFloat(newShelter.lat), parseFloat(newShelter.lng), (parseFloat(newShelter.radius) || 50) / 1000) as any}
+                  fillPaint={{ 'fill-color': '#6366f1', 'fill-opacity': 0.2 }}
+                  linePaint={{ 'line-color': '#6366f1', 'line-width': 2 }}
+                />
+                <MapMarker
+                  longitude={parseFloat(newShelter.lng)}
+                  latitude={parseFloat(newShelter.lat)}
+                  draggable={true}
+                  onDragEnd={(e) => {
+                    setNewShelter(prev => ({ ...prev, lat: String(e.lat), lng: String(e.lng) }));
+                    handleReverseGeocode(e.lat, e.lng);
+                  }}
+                >
+                  <MarkerContent>
+                    <div className="w-8 h-8 flex items-center justify-center bg-indigo-500 rounded-full border-2 border-white shadow-[0_0_15px_rgba(99,102,241,0.8)] animate-bounce">
+                      <MapPin className="w-4 h-4 text-white" />
+                    </div>
+                  </MarkerContent>
+                </MapMarker>
+              </>
             )}
 
             {/* Shelters */}
