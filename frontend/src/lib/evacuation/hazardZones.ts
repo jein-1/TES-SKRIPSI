@@ -2,40 +2,12 @@
 // ZONA BAHAYA TSUNAMI — Polygon area rawan di Kota Palu
 // ─────────────────────────────────────────────────────────────────────────────
 
-export const hazardZones = [
-  {
-    name: 'Zona Pesisir Barat (Kecamatan Ulujadi & Lere)',
-    coords: [
-      [-0.870, 119.830],
-      [-0.875, 119.833],
-      [-0.880, 119.836],
-      [-0.884, 119.839],
-      [-0.888, 119.843],
-      [-0.891, 119.845],
-      [-0.892, 119.846],
-      [-0.893, 119.844],
-      [-0.890, 119.841],
-      [-0.886, 119.837],
-      [-0.881, 119.834],
-      [-0.876, 119.831],
-      [-0.870, 119.828],
-    ] as [number, number][],
-  },
-  {
-    name: 'Zona Pesisir Timur (Besusu & Talise)',
-    coords: [
-      [-0.885, 119.845],
-      [-0.887, 119.848],
-      [-0.889, 119.851],
-      [-0.891, 119.855],
-      [-0.893, 119.858],
-      [-0.895, 119.861],
-      [-0.897, 119.863],
-      [-0.896, 119.865],
-      [-0.893, 119.860],
-      [-0.890, 119.855],
-      [-0.888, 119.850],
-      [-0.885, 119.847],
-    ] as [number, number][],
-  },
-]
+export interface HazardZone {
+  id: string;
+  name: string;
+  coords: [number, number][]; // [lat, lng][]
+  severity: 'tinggi' | 'sedang' | 'rendah';
+  description?: string;
+}
+
+export const hazardZones: HazardZone[] = [];

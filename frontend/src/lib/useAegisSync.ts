@@ -5,6 +5,7 @@
 import { useEffect, useRef } from "react";
 import { supabase } from "./supabaseClient";
 import type { Shelter } from "./evacuation/types";
+import type { HazardZone } from "./evacuation/hazardZones";
 
 export type SyncEventHandler = (event: AegisSyncEvent) => void;
 
@@ -18,7 +19,10 @@ export interface AegisSyncEvent {
     | "LOCATION_UPDATE"
     | "SHELTER_ADDED"
     | "SHELTER_UPDATED"
-    | "SHELTER_DELETED";
+    | "SHELTER_DELETED"
+    | "HAZARD_ZONE_ADDED"
+    | "HAZARD_ZONE_UPDATED"
+    | "HAZARD_ZONE_DELETED";
   fromId?: string;
   fromName?: string;
   toId?: string;
@@ -32,6 +36,7 @@ export interface AegisSyncEvent {
   active?: boolean;
   ts?: number;
   shelter?: Shelter;
+  hazardZone?: HazardZone;
   [key: string]: unknown;
 }
 
@@ -329,6 +334,140 @@ export const aegisApi = {
       return [];
     }
   },
+
+  // ── Hazard Zone API ────────────────────────────────────────
+
+  addHazardZone: async (zone: HazardZone): Promise<{ ok: boolean }> => {
+    try {
+      const token = sessionStorage.getItem("aegisJWT");
+      if (!token) return { ok: false };
+
+      const isLocalhost = typeof window !== 'undefined' && window.location.origin.includes('localhost');
+      const API_URL = isLocalhost ? (import.meta.env.VITE_API_URL || "https://tsunami-dimss.vercel.app") : "";
+      const res = await fetch(`${API_URL}/api/hazard-zones/add`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${token}`
+        },
+        body: JSON.stringify(zone),
+      });
+
+      if (!res.ok) {
+        console.error("[AegisSync] addHazardZone error:", await res.text());
+        return { ok: false };
+      }
+      await broadcastChannel.send({
+        type: "broadcast",
+        event: "HAZARD_ZONE_ADDED",
+        payload: { hazardZone: zone },
+      });
+      return { ok: true };
+    } catch (e) {
+      console.error("[AegisSync] addHazardZone exception:", e);
+      return { ok: false };
+    }
+  },
+
+  updateHazardZone: async (
+    id: string,
+    fields: { name?: string; coords?: [number, number][]; severity?: string; description?: string }
+  ): Promise<{ ok: boolean }> => {
+    try {
+      const token = sessionStorage.getItem("aegisJWT");
+      if (!token) return { ok: false };
+
+      const isLocalhost = typeof window !== 'undefined' && window.location.origin.includes('localhost');
+      const API_URL = isLocalhost ? (import.meta.env.VITE_API_URL || "https://tsunami-dimss.vercel.app") : "";
+      const res = await fetch(`${API_URL}/api/hazard-zones/update`, {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${token}`
+        },
+        body: JSON.stringify({ id, ...fields }),
+      });
+
+      if (!res.ok) {
+        console.error("[AegisSync] updateHazardZone error:", await res.text());
+        return { ok: false };
+      }
+
+      const resData = await res.json().catch(() => ({}));
+      if (resData?.hazardZone) {
+        const hazardZone: HazardZone = {
+          id: resData.hazardZone.id,
+          name: resData.hazardZone.name,
+          coords: resData.hazardZone.coordinates,
+          severity: resData.hazardZone.severity,
+          description: resData.hazardZone.description || undefined
+        };
+        await broadcastChannel.send({
+          type: "broadcast",
+          event: "HAZARD_ZONE_UPDATED",
+          payload: { hazardZone },
+        });
+      }
+
+      return { ok: true };
+    } catch (e) {
+      console.error("[AegisSync] updateHazardZone exception:", e);
+      return { ok: false };
+    }
+  },
+
+  deleteHazardZone: async (id: string): Promise<{ ok: boolean }> => {
+    try {
+      const token = sessionStorage.getItem("aegisJWT");
+      if (!token) return { ok: false };
+
+      const isLocalhost = typeof window !== 'undefined' && window.location.origin.includes('localhost');
+      const API_URL = isLocalhost ? (import.meta.env.VITE_API_URL || "https://tsunami-dimss.vercel.app") : "";
+      const res = await fetch(`${API_URL}/api/hazard-zones/delete`, {
+        method: "DELETE",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${token}`
+        },
+        body: JSON.stringify({ id }),
+      });
+
+      if (!res.ok) {
+        console.error("[AegisSync] deleteHazardZone error:", await res.text());
+        return { ok: false };
+      }
+
+      await broadcastChannel.send({
+        type: "broadcast",
+        event: "HAZARD_ZONE_DELETED",
+        payload: { id },
+      });
+
+      return { ok: true };
+    } catch (e) {
+      console.error("[AegisSync] deleteHazardZone exception:", e);
+      return { ok: false };
+    }
+  },
+
+  fetchHazardZones: async (): Promise<HazardZone[]> => {
+    try {
+      const { data, error } = await supabase
+        .from("hazard_zones")
+        .select("id, name, coordinates, severity, description")
+        .order("created_at", { ascending: true });
+      if (error || !data) return [];
+      return data.map((row: any) => ({
+        id: row.id,
+        name: row.name,
+        coords: row.coordinates,
+        severity: row.severity,
+        description: row.description ?? undefined,
+      }));
+    } catch {
+      return [];
+    }
+  },
 };
 
 // ── Global Listener Registry ────────────────────────────────────
@@ -394,6 +533,41 @@ const customSheltersChannel = supabase
   )
   .subscribe();
 
+// Realtime listener untuk INSERT & UPDATE ke hazard_zones
+const hazardZonesChannel = supabase
+  .channel("public:hazard_zones")
+  .on(
+    "postgres_changes",
+    { event: "INSERT", schema: "public", table: "hazard_zones" },
+    (payload) => {
+      const row = payload.new;
+      const hazardZone: HazardZone = {
+        id: row.id,
+        name: row.name,
+        coords: row.coordinates,
+        severity: row.severity,
+        description: row.description ?? undefined,
+      };
+      listeners.forEach((fn) => fn({ type: "HAZARD_ZONE_ADDED", hazardZone }));
+    }
+  )
+  .on(
+    "postgres_changes",
+    { event: "UPDATE", schema: "public", table: "hazard_zones" },
+    (payload) => {
+      const row = payload.new;
+      const hazardZone: HazardZone = {
+        id: row.id,
+        name: row.name,
+        coords: row.coordinates,
+        severity: row.severity,
+        description: row.description ?? undefined,
+      };
+      listeners.forEach((fn) => fn({ type: "HAZARD_ZONE_UPDATED", hazardZone }));
+    }
+  )
+  .subscribe();
+
 broadcastChannel
   .on("broadcast", { event: "FAMILY_JOIN" }, (payload) => {
     listeners.forEach((fn) => fn({ type: "FAMILY_JOIN", ...payload.payload }));
@@ -418,6 +592,15 @@ broadcastChannel
   })
   .on("broadcast", { event: "SHELTER_DELETED" }, (payload) => {
     listeners.forEach((fn) => fn({ type: "SHELTER_DELETED", ...payload.payload }));
+  })
+  .on("broadcast", { event: "HAZARD_ZONE_ADDED" }, (payload) => {
+    listeners.forEach((fn) => fn({ type: "HAZARD_ZONE_ADDED", ...payload.payload }));
+  })
+  .on("broadcast", { event: "HAZARD_ZONE_UPDATED" }, (payload) => {
+    listeners.forEach((fn) => fn({ type: "HAZARD_ZONE_UPDATED", ...payload.payload }));
+  })
+  .on("broadcast", { event: "HAZARD_ZONE_DELETED" }, (payload) => {
+    listeners.forEach((fn) => fn({ type: "HAZARD_ZONE_DELETED", ...payload.payload }));
   })
   .subscribe();
 

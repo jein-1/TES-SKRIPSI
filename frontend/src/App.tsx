@@ -26,6 +26,7 @@ import type {
   AppUserRole,
 } from "./types";
 import { DEFAULT_SETTINGS } from "./types";
+import type { HazardZone } from "./lib/evacuation/hazardZones";
 // â”€â”€ Auth â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 import LoginPage from "./components/pages/LoginPage";
 import FirstVisitModal from "./components/modals/FirstVisitModal";
@@ -311,6 +312,24 @@ function App() {
   const [networkFailed, setNetworkFailed] = useState(false);
   const [isSavingShelter, setIsSavingShelter] = useState(false);
   
+  // ── Hazard Zone interaction state ──────────────────────────────────────
+  const [hazardZoneVersion, setHazardZoneVersion] = useState(0);
+  const [drawingZoneMode, setDrawingZoneMode] = useState(false);
+  const [drawingZoneCoords, setDrawingZoneCoords] = useState<[number, number][]>([]); // [lat, lng]
+  const [showAddHazardZone, setShowAddHazardZone] = useState(false);
+  const [newHazardZone, setNewHazardZone] = useState({ name: '', severity: 'tinggi', description: '' });
+  const [isSavingHazardZone, setIsSavingHazardZone] = useState(false);
+  
+  const [selectedHazardZoneId, setSelectedHazardZoneId] = useState<string | null>(null);
+  const [showEditHazardZone, setShowEditHazardZone] = useState(false);
+  const [editHazardZoneData, setEditHazardZoneData] = useState<{
+    id: string; name: string; coords: [number, number][]; severity: string; description: string;
+  } | null>(null);
+  const [isSavingEditHazardZone, setIsSavingEditHazardZone] = useState(false);
+  
+  const [showDeleteHazardZoneConfirm, setShowDeleteHazardZoneConfirm] = useState(false);
+  const [isDeletingHazardZone, setIsDeletingHazardZone] = useState(false);
+  
   // ── Admin Ping State ─────────────────────────────────────────────────
   const [showAdminPingModal, setShowAdminPingModal] = useState<{ id: string; name: string } | null>(null);
   const [adminPingMessage, setAdminPingMessage] = useState("");
@@ -406,6 +425,23 @@ function App() {
       };
     }
   }, [pickingLocationMode, handleReverseGeocode]);
+
+  useEffect(() => {
+    if (drawingZoneMode && adminMapRef.current) {
+      const map = adminMapRef.current;
+      const handleClick = (e: any) => {
+        // Only trigger if we aren't clicking on an existing zone or shelter marker.
+        // Actually map.on('click') fires. Let's just push coords.
+        const lat = e.lngLat.lat;
+        const lng = e.lngLat.lng;
+        setDrawingZoneCoords(prev => [...prev, [lat, lng]]);
+      };
+      map.on('click', handleClick);
+      return () => {
+        map.off('click', handleClick);
+      };
+    }
+  }, [drawingZoneMode]);
 
   // User mode:  any other URL (default — no login required)
   const isAdminURL = (() => {
@@ -1133,6 +1169,30 @@ function App() {
         }
       }
     }
+    // ── Hazard Zone Sync ──
+    if (event.type === "HAZARD_ZONE_ADDED" && event.hazardZone) {
+      if (!hazardZones.find(z => z.id === event.hazardZone!.id)) {
+        hazardZones.push(event.hazardZone);
+        setHazardZoneVersion(v => v + 1);
+      }
+    }
+    if (event.type === "HAZARD_ZONE_UPDATED" && event.hazardZone) {
+      const idx = hazardZones.findIndex(z => z.id === event.hazardZone!.id);
+      if (idx !== -1) {
+        hazardZones[idx] = event.hazardZone;
+        setHazardZoneVersion(v => v + 1);
+      }
+    }
+    if (event.type === "HAZARD_ZONE_DELETED" && event.id) {
+      const idx = hazardZones.findIndex(z => z.id === event.id);
+      if (idx !== -1) {
+        hazardZones.splice(idx, 1);
+        setHazardZoneVersion(v => v + 1);
+        if (selectedHazardZoneId === event.id) {
+          setSelectedHazardZoneId(null);
+        }
+      }
+    }
   });
   // eslint-disable-next-line react-hooks/exhaustive-deps
   const adminPingIntervalRef = useRef<ReturnType<typeof setInterval> | null>(
@@ -1205,6 +1265,11 @@ function App() {
     loadRoadNetwork().then(success => setNetworkFailed(!success));
     aegisApi.fetchCustomShelters().then(data => {
       data.forEach(s => addCustomShelter(s as any));
+    });
+    aegisApi.fetchHazardZones().then(data => {
+      hazardZones.length = 0;
+      hazardZones.push(...data);
+      setHazardZoneVersion(v => v + 1);
     });
     // 4c. Load active users dari Supabase jika admin
     if (isAdminURL) {
@@ -2116,6 +2181,18 @@ function App() {
                     </span>
                   </button>
                   <button
+                    onClick={() => {
+                      setDrawingZoneMode(true);
+                      setDrawingZoneCoords([]);
+                    }}
+                    className="flex items-center gap-3 text-red-400 hover:text-red-300 transition-colors mb-4"
+                  >
+                    <Plus className="w-5 h-5" />
+                    <span className="font-semibold text-sm tracking-wide">
+                      ZONA BAHAYA
+                    </span>
+                  </button>
+                  <button
                     onClick={() => setShowShelters(true)}
                     className="flex items-center gap-3 text-slate-500 hover:text-indigo-400 transition-colors"
                   >
@@ -2160,6 +2237,47 @@ function App() {
               </div>
             </div>
           )}
+
+          {/* Drawing Zone Overlay */}
+          <AnimatePresence>
+            {drawingZoneMode && (
+              <motion.div
+                initial={{ y: -20, opacity: 0 }}
+                animate={{ y: 0, opacity: 1 }}
+                exit={{ y: -20, opacity: 0 }}
+                className="absolute top-20 left-1/2 -translate-x-1/2 z-[1000] bg-slate-900/90 backdrop-blur-md border border-red-500/50 rounded-2xl p-4 shadow-2xl flex flex-col items-center gap-3 w-[300px]"
+              >
+                <div className="flex items-center gap-2">
+                  <MapPin className="w-4 h-4 text-red-400 animate-bounce" />
+                  <span className="text-sm font-bold text-white">Mode Gambar Zona</span>
+                </div>
+                <p className="text-[10px] text-slate-400 text-center">Klik di peta untuk membuat titik poligon. Minimal 3 titik.</p>
+                <div className="flex gap-2 w-full mt-2">
+                  <button
+                    onClick={() => {
+                      setDrawingZoneMode(false);
+                      setDrawingZoneCoords([]);
+                    }}
+                    className="flex-1 py-2 bg-slate-800 hover:bg-slate-700 text-white rounded-lg text-xs font-bold transition-colors"
+                  >
+                    Batal
+                  </button>
+                  <button
+                    onClick={() => {
+                      if (drawingZoneCoords.length < 3) return;
+                      setDrawingZoneMode(false);
+                      setShowAddHazardZone(true);
+                    }}
+                    className={`flex-1 py-2 rounded-lg text-xs font-bold transition-colors ${
+                      drawingZoneCoords.length >= 3 ? "bg-red-600 hover:bg-red-500 text-white" : "bg-red-900/50 text-red-300/50 cursor-not-allowed"
+                    }`}
+                  >
+                    Selesai ({drawingZoneCoords.length})
+                  </button>
+                </div>
+              </motion.div>
+            )}
+          </AnimatePresence>
 
           {/* Mobile floating LIHAT RUTE button */}
           <AnimatePresence>
@@ -2253,23 +2371,60 @@ function App() {
               </>
             )}
 
+            {/* Drawing Zone Live Rendering */}
+            {drawingZoneCoords.length > 0 && (
+              <MapGeoJSON
+                data={{
+                  type: 'Feature',
+                  properties: {},
+                  geometry: {
+                    type: drawingZoneCoords.length > 2 ? 'Polygon' : 'LineString',
+                    coordinates: drawingZoneCoords.length > 2 
+                      ? [[...drawingZoneCoords.map(c => [c[1], c[0]]), [drawingZoneCoords[0][1], drawingZoneCoords[0][0]]]] 
+                      : drawingZoneCoords.map(c => [c[1], c[0]])
+                  }
+                } as any}
+                fillPaint={{ 'fill-color': '#f87171', 'fill-opacity': 0.3 }}
+                linePaint={{ 'line-color': '#f87171', 'line-width': 2, 'line-dasharray': [2, 2] }}
+              />
+            )}
+            
+            {/* Render markers for drawing zone coords */}
+            {drawingZoneCoords.map((coord, i) => (
+              <MapMarker key={`draw-${i}`} latitude={coord[0]} longitude={coord[1]}>
+                <MarkerContent>
+                  <div className="w-3 h-3 bg-red-500 rounded-full border border-white" />
+                </MarkerContent>
+              </MapMarker>
+            ))}
+
             {/* Hazard zones */}
             {settings.showHazardZones &&
-              hazardZones.map((zone, i) => (
-                <MapGeoJSON 
-                  key={`hazard-${i}`}
-                  data={{
-                    type: 'Feature',
-                    properties: {},
-                    geometry: {
-                      type: 'Polygon',
-                      coordinates: [zone.coords.map(c => [c[1], c[0]])] // [lat, lng] to [lng, lat]
-                    }
-                  }}
-                  fillPaint={{ 'fill-color': tsunamiAlert ? '#ff0000' : '#ef4444', 'fill-opacity': tsunamiAlert ? 0.35 : 0.15 }}
-                  linePaint={{ 'line-color': tsunamiAlert ? '#ff0000' : '#ef4444', 'line-width': tsunamiAlert ? 3 : 1 }}
-                />
-              ))}
+              hazardZones.map((zone, i) => {
+                const isSelected = selectedHazardZoneId === zone.id;
+                const color = zone.severity === 'tinggi' ? '#ef4444' : zone.severity === 'sedang' ? '#f59e0b' : '#3b82f6';
+                return (
+                  <MapGeoJSON 
+                    key={`hazard-${i}-${hazardZoneVersion}`}
+                    data={{
+                      type: 'Feature',
+                      properties: { id: zone.id },
+                      geometry: {
+                        type: 'Polygon',
+                        coordinates: [zone.coords.map(c => [c[1], c[0]])] // [lat, lng] to [lng, lat]
+                      }
+                    }}
+                    fillPaint={{ 'fill-color': tsunamiAlert ? '#ff0000' : color, 'fill-opacity': tsunamiAlert ? 0.35 : (isSelected ? 0.4 : 0.15) }}
+                    linePaint={{ 'line-color': tsunamiAlert ? '#ff0000' : color, 'line-width': tsunamiAlert ? 3 : (isSelected ? 3 : 1) }}
+                    interactive={!drawingZoneMode}
+                    onClick={() => {
+                      if (!drawingZoneMode) {
+                        setSelectedHazardZoneId(isSelected ? null : zone.id);
+                      }
+                    }}
+                  />
+                );
+              })}
 
             {/* Temporary Marker for Add Shelter Mode */}
             {((showAddShelter || pickingLocationMode) && newShelter.lat && newShelter.lng) && !isNaN(parseFloat(newShelter.lat)) && (
@@ -3601,6 +3756,263 @@ function App() {
             </motion.div>
           </motion.div>
         )}
+      </AnimatePresence>
+
+      {/* ─── ADD HAZARD ZONE MODAL ─── */}
+      <AnimatePresence>
+        {showAddHazardZone && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-[2000] bg-black/80 backdrop-blur-sm flex items-center justify-center p-4"
+          >
+            <motion.div
+              initial={{ scale: 0.9, opacity: 0, y: 20 }}
+              animate={{ scale: 1, opacity: 1, y: 0 }}
+              exit={{ scale: 0.9, opacity: 0, y: 20 }}
+              className="bg-slate-900 border border-slate-800 p-6 rounded-3xl shadow-2xl max-w-sm w-full"
+            >
+              <div className="flex items-center gap-3 mb-6">
+                <div className="w-10 h-10 rounded-xl bg-red-500/20 flex items-center justify-center border border-red-500/30">
+                  <AlertTriangle className="w-5 h-5 text-red-500" />
+                </div>
+                <h2 className="text-lg font-black text-white">Simpan Zona Bahaya</h2>
+              </div>
+              <div className="space-y-3">
+                <input type="text" placeholder="Nama Zona" className="w-full bg-slate-800 text-white rounded-xl px-4 py-2 text-sm border border-slate-700 focus:border-red-500 outline-none transition-colors" value={newHazardZone.name} onChange={e => setNewHazardZone({...newHazardZone, name: e.target.value})} />
+                <select className="w-full bg-slate-800 text-white rounded-xl px-4 py-2 text-sm border border-slate-700 focus:border-red-500 outline-none transition-colors" value={newHazardZone.severity} onChange={e => setNewHazardZone({...newHazardZone, severity: e.target.value})}>
+                  <option value="tinggi">Tinggi (Merah)</option>
+                  <option value="sedang">Sedang (Oranye)</option>
+                  <option value="rendah">Rendah (Biru)</option>
+                </select>
+                <textarea placeholder="Deskripsi Opsional" className="w-full bg-slate-800 text-white rounded-xl px-4 py-2 text-sm border border-slate-700 focus:border-red-500 outline-none transition-colors resize-none" rows={3} value={newHazardZone.description} onChange={e => setNewHazardZone({...newHazardZone, description: e.target.value})} />
+              </div>
+              <div className="flex items-center gap-3 mt-6">
+                <button onClick={() => {
+                  setShowAddHazardZone(false);
+                  setDrawingZoneCoords([]);
+                }} className="flex-1 py-3 text-slate-400 font-bold text-sm bg-slate-800 rounded-xl hover:bg-slate-700 transition-colors">Batal</button>
+                <button
+                  disabled={isSavingHazardZone}
+                  onClick={async () => {
+                    if(!newHazardZone.name) return alert('Nama zona harus diisi');
+                    setIsSavingHazardZone(true);
+                    
+                    const payload: HazardZone = {
+                      id: 'HZ' + Date.now(),
+                      name: newHazardZone.name,
+                      coords: drawingZoneCoords,
+                      severity: newHazardZone.severity as 'tinggi'|'sedang'|'rendah',
+                      description: newHazardZone.description || undefined
+                    };
+
+                    const { ok } = await aegisApi.addHazardZone(payload);
+                    setIsSavingHazardZone(false);
+
+                    if (ok) {
+                      hazardZones.push(payload);
+                      setHazardZoneVersion(v => v + 1);
+                      setShowAddHazardZone(false);
+                      setDrawingZoneCoords([]);
+                      setNewHazardZone({ name: '', severity: 'tinggi', description: '' });
+                    } else {
+                      alert('Gagal menyimpan zona bahaya ke server.');
+                    }
+                  }}
+                  className="flex-1 py-3 text-white font-bold text-sm bg-red-600 rounded-xl hover:bg-red-500 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                >
+                  {isSavingHazardZone ? 'Menyimpan...' : 'Simpan'}
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* ─── HAZARD ZONE DETAIL PANEL ─── */}
+      <AnimatePresence>
+        {selectedHazardZoneId && !showEditHazardZone && !drawingZoneMode && (() => {
+          const z = hazardZones.find(x => x.id === selectedHazardZoneId);
+          if (!z) return null;
+          return (
+            <motion.div
+              key={`hazard-detail-${z.id}`}
+              initial={{ opacity: 0, y: 24, scale: 0.96 }}
+              animate={{ opacity: 1, y: 0, scale: 1 }}
+              exit={{ opacity: 0, y: 24, scale: 0.96 }}
+              transition={{ type: 'spring', damping: 28, stiffness: 320 }}
+              className="fixed bottom-[72px] md:bottom-6 left-1/2 md:left-auto -translate-x-1/2 md:translate-x-0 md:right-6 z-[600] w-[92vw] max-w-sm"
+            >
+              <div className="bg-[#0d1929]/95 backdrop-blur-md border border-red-500/30 rounded-2xl shadow-[0_8px_40px_rgba(239,68,68,0.25)] overflow-hidden">
+                <div className={`h-0.5 w-full bg-gradient-to-r ${z.severity === 'tinggi' ? 'from-red-700 via-red-400' : z.severity === 'sedang' ? 'from-orange-700 via-orange-400' : 'from-blue-700 via-blue-400'} to-slate-900`} />
+                <div className="p-4">
+                  <div className="flex justify-between items-start mb-3">
+                    <div className="flex-1 pr-3">
+                      <h3 className="text-sm font-black text-white leading-tight">{z.name}</h3>
+                      <p className="text-[11px] text-slate-400 mt-0.5">Tingkat Bahaya: <span className={z.severity === 'tinggi' ? 'text-red-400 uppercase font-bold' : z.severity === 'sedang' ? 'text-orange-400 uppercase font-bold' : 'text-blue-400 uppercase font-bold'}>{z.severity}</span></p>
+                    </div>
+                    <button
+                      onClick={() => setSelectedHazardZoneId(null)}
+                      className="w-7 h-7 bg-slate-800/80 hover:bg-slate-700 rounded-full flex items-center justify-center transition-colors shrink-0 border border-slate-700/50 text-slate-400"
+                    >
+                      <X className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                  {z.description && <p className="text-xs text-slate-300 mb-4">{z.description}</p>}
+                  
+                  {isAdminURL && userRole === "admin" && (
+                    <div className="flex items-center gap-2 mt-4 pt-4 border-t border-slate-800/60">
+                      <button
+                        onClick={() => {
+                          setEditHazardZoneData({
+                            id: z.id,
+                            name: z.name,
+                            coords: z.coords,
+                            severity: z.severity,
+                            description: z.description || ''
+                          });
+                          setShowEditHazardZone(true);
+                        }}
+                        className="flex-1 flex items-center justify-center gap-1.5 py-2.5 bg-slate-800/60 hover:bg-slate-700 text-slate-300 text-[11px] font-bold tracking-wide rounded-xl border border-slate-700/50 transition-colors"
+                      >
+                        <Edit2 className="w-3 h-3" /> EDIT
+                      </button>
+                      <button
+                        onClick={() => setShowDeleteHazardZoneConfirm(true)}
+                        className="flex-1 flex items-center justify-center gap-1.5 py-2.5 bg-red-500/10 hover:bg-red-500/20 text-red-400 text-[11px] font-bold tracking-wide rounded-xl border border-red-500/20 transition-colors"
+                      >
+                        <Trash2 className="w-3 h-3" /> HAPUS
+                      </button>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </motion.div>
+          );
+        })()}
+      </AnimatePresence>
+
+      {/* ─── EDIT HAZARD ZONE MODAL ─── */}
+      <AnimatePresence>
+        {showEditHazardZone && editHazardZoneData && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-[2000] bg-black/80 backdrop-blur-sm flex items-center justify-center p-4"
+          >
+            <motion.div
+              initial={{ scale: 0.9, opacity: 0, y: 20 }}
+              animate={{ scale: 1, opacity: 1, y: 0 }}
+              exit={{ scale: 0.9, opacity: 0, y: 20 }}
+              className="bg-slate-900 border border-slate-800 p-6 rounded-3xl shadow-2xl max-w-sm w-full"
+            >
+              <div className="flex items-center gap-3 mb-6">
+                <div className="w-10 h-10 rounded-xl bg-slate-800 flex items-center justify-center border border-slate-700">
+                  <Edit2 className="w-5 h-5 text-slate-300" />
+                </div>
+                <h2 className="text-lg font-black text-white">Edit Zona Bahaya</h2>
+              </div>
+              <div className="space-y-3">
+                <input type="text" placeholder="Nama Zona" className="w-full bg-slate-800 text-white rounded-xl px-4 py-2 text-sm border border-slate-700 focus:border-red-500 outline-none transition-colors" value={editHazardZoneData.name} onChange={e => setEditHazardZoneData({...editHazardZoneData, name: e.target.value})} />
+                <select className="w-full bg-slate-800 text-white rounded-xl px-4 py-2 text-sm border border-slate-700 focus:border-red-500 outline-none transition-colors" value={editHazardZoneData.severity} onChange={e => setEditHazardZoneData({...editHazardZoneData, severity: e.target.value})}>
+                  <option value="tinggi">Tinggi (Merah)</option>
+                  <option value="sedang">Sedang (Oranye)</option>
+                  <option value="rendah">Rendah (Biru)</option>
+                </select>
+                <textarea placeholder="Deskripsi Opsional" className="w-full bg-slate-800 text-white rounded-xl px-4 py-2 text-sm border border-slate-700 focus:border-red-500 outline-none transition-colors resize-none" rows={3} value={editHazardZoneData.description} onChange={e => setEditHazardZoneData({...editHazardZoneData, description: e.target.value})} />
+              </div>
+              <div className="flex items-center gap-3 mt-6">
+                <button onClick={() => setShowEditHazardZone(false)} className="flex-1 py-3 text-slate-400 font-bold text-sm bg-slate-800 rounded-xl hover:bg-slate-700 transition-colors">Batal</button>
+                <button
+                  disabled={isSavingEditHazardZone}
+                  onClick={async () => {
+                    if(!editHazardZoneData.name) return alert('Nama zona harus diisi');
+                    setIsSavingEditHazardZone(true);
+                    
+                    const payload = {
+                      name: editHazardZoneData.name,
+                      severity: editHazardZoneData.severity,
+                      description: editHazardZoneData.description
+                    };
+
+                    const { ok } = await aegisApi.updateHazardZone(editHazardZoneData.id, payload);
+                    setIsSavingEditHazardZone(false);
+
+                    if (ok) {
+                      const idx = hazardZones.findIndex(z => z.id === editHazardZoneData.id);
+                      if(idx !== -1) {
+                        hazardZones[idx] = { ...hazardZones[idx], ...payload } as any;
+                      }
+                      setHazardZoneVersion(v => v + 1);
+                      setShowEditHazardZone(false);
+                    } else {
+                      alert('Gagal mengupdate zona bahaya.');
+                    }
+                  }}
+                  className="flex-1 py-3 text-white font-bold text-sm bg-indigo-600 rounded-xl hover:bg-indigo-500 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                >
+                  {isSavingEditHazardZone ? 'Menyimpan...' : 'Simpan'}
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* ─── DELETE HAZARD ZONE CONFIRM MODAL ─── */}
+      <AnimatePresence>
+        {showDeleteHazardZoneConfirm && selectedHazardZoneId && (() => {
+          const z = hazardZones.find(x => x.id === selectedHazardZoneId);
+          if (!z) return null;
+          return (
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              className="fixed inset-0 z-[2000] bg-black/80 backdrop-blur-sm flex items-center justify-center p-4"
+            >
+              <motion.div
+                initial={{ scale: 0.9, opacity: 0, y: 20 }}
+                animate={{ scale: 1, opacity: 1, y: 0 }}
+                exit={{ scale: 0.9, opacity: 0, y: 20 }}
+                className="bg-slate-900 border border-slate-800 p-6 rounded-3xl shadow-2xl max-w-sm w-full text-center"
+              >
+                <div className="w-14 h-14 bg-red-500/20 rounded-full flex items-center justify-center mx-auto mb-4 border border-red-500/30">
+                  <AlertTriangle className="w-6 h-6 text-red-500" />
+                </div>
+                <h2 className="text-xl font-black text-white mb-2">Hapus Zona Bahaya?</h2>
+                <p className="text-sm text-slate-400 mb-6">
+                  Zona <strong>{z.name}</strong> akan dihapus permanen. Tindakan ini tidak dapat dibatalkan.
+                </p>
+                <div className="flex gap-3">
+                  <button onClick={() => setShowDeleteHazardZoneConfirm(false)} className="flex-1 py-3 text-slate-400 font-bold text-sm bg-slate-800 rounded-xl hover:bg-slate-700 transition-colors">Batal</button>
+                  <button
+                    disabled={isDeletingHazardZone}
+                    onClick={async () => {
+                      setIsDeletingHazardZone(true);
+                      const { ok } = await aegisApi.deleteHazardZone(z.id);
+                      setIsDeletingHazardZone(false);
+                      if (ok) {
+                        const idx = hazardZones.findIndex(x => x.id === z.id);
+                        if(idx !== -1) hazardZones.splice(idx, 1);
+                        setHazardZoneVersion(v => v + 1);
+                        setShowDeleteHazardZoneConfirm(false);
+                        setSelectedHazardZoneId(null);
+                      } else {
+                        alert('Gagal menghapus zona bahaya dari server.');
+                      }
+                    }}
+                    className="flex-1 py-3 text-white font-bold text-sm bg-red-600 rounded-xl hover:bg-red-500 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                  >
+                    {isDeletingHazardZone ? 'Menghapus...' : 'Hapus'}
+                  </button>
+                </div>
+              </motion.div>
+            </motion.div>
+          );
+        })()}
       </AnimatePresence>
 
       {/* ─── SHELTER DETAIL PANEL ─── */}
