@@ -4427,7 +4427,7 @@ function App() {
                       customMessage: editShelterData.customMessage.trim() || undefined,
                     };
 
-                    const { ok } = await aegisApi.updateCustomShelter(editShelterData.id, fields);
+                    const { ok, status } = await aegisApi.updateCustomShelter(editShelterData.id, fields);
                     setIsSavingEditShelter(false);
 
                     if (ok) {
@@ -4449,6 +4449,10 @@ function App() {
                       setEditShelterError(null);
                       // Re-select so detail panel shows updated data
                       setSelectedShelterId(editShelterData.id);
+                    } else if (status === 401) {
+                      setEditShelterError('Sesi login telah berakhir. Silakan Logout lalu Login kembali untuk melanjutkan.');
+                    } else if (status === 500) {
+                      setEditShelterError('Server error. Hubungi admin atau coba beberapa saat lagi.');
                     } else {
                       setEditShelterError('Gagal menyimpan perubahan. Periksa koneksi dan coba lagi.');
                     }

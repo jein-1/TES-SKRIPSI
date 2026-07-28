@@ -215,10 +215,10 @@ export const aegisApi = {
   updateCustomShelter: async (
     id: string,
     fields: { name?: string; capacity?: number; radiusMeters?: number; address?: string; customMessage?: string }
-  ): Promise<{ ok: boolean }> => {
+  ): Promise<{ ok: boolean; status?: number }> => {
     try {
       const token = sessionStorage.getItem("aegisJWT");
-      if (!token) return { ok: false };
+      if (!token) return { ok: false, status: 401 };
 
       const isLocalhost = typeof window !== 'undefined' && window.location.origin.includes('localhost');
       const API_URL = isLocalhost ? (import.meta.env.VITE_API_URL || "https://tsunami-dimss.vercel.app") : "";
@@ -232,13 +232,12 @@ export const aegisApi = {
       });
 
       if (!res.ok) {
-        console.error("[AegisSync] updateCustomShelter error:", await res.text());
-        return { ok: false };
+        const body = await res.text();
+        console.error(`[AegisSync] updateCustomShelter error ${res.status}:`, body);
+        return { ok: false, status: res.status };
       }
 
       // Server-side already broadcasts SHELTER_UPDATED on aegis-events.
-      // Broadcast here as client-side fallback in case the server broadcast
-      // doesn't reach other tabs in the same browser (different subscription scope).
       const resData = await res.json().catch(() => ({}));
       if (resData?.shelter) {
         await broadcastChannel.send({
