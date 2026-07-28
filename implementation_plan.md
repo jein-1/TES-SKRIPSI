@@ -1,61 +1,50 @@
-# Implementasi CRUD Zona Bahaya (Hazard Zones)
+# Rencana Implementasi Proteksi Brute-Force (Login)
 
-Fitur ini akan menambahkan kapabilitas penuh bagi admin untuk menggambar, menyimpan, mengedit, dan menghapus Zona Bahaya (Polygon) secara langsung dari peta.
+Fitur ini akan mengamankan endpoint `api/auth/login.js` dari serangan tebak *password* (brute-force) dan *credential stuffing* dengan melacak percobaan gagal berbasis *Username* dan *IP Address*.
 
 ## User Review Required
 
 > [!IMPORTANT]
-> Mohon tinjau rencana berikut. Ada beberapa perubahan cukup besar pada UI peta dan logika sinkronisasi realtime. Pastikan fitur ini selaras dengan kebutuhan *dashboard* Anda.
+> Mohon tinjau rencana perlindungan *brute-force* di bawah ini. Pastikan batas *rate-limit* yang ditetapkan sudah sesuai dengan kebijakan keamanan aplikasi Anda.
 
 ## Open Questions
 
-1. **Polygon Format**: Tabel `hazard_zones` akan menyimpan `coordinates` sebagai JSON `[[lat, lng], [lat, lng], ...]`. Apakah Anda setuju format sederhana ini (bukan spesifikasi GeoJSON murni di kolom `coordinates`) untuk mempermudah manipulasi *array* pada React State sebelum dirender menjadi GeoJSON di komponen Peta?
-2. **Tombol "Tambah Zona Bahaya"**: Saya akan meletakkannya di *sidebar* bawah (di sebelah tombol "Tambah Shelter"). Apakah lokasi ini sudah pas?
+1. **Retensi Data Historis**: Rencana saat ini akan menyimpan log *success=true* sebagai *audit trail*, dan membersihkan log *success=false* untuk *username* tersebut setiap kali ia berhasil *login*. Apakah Anda setuju dengan pendekatan pembersihan otomatis (*auto-cleanup*) ini untuk menghemat ruang tabel?
+2. **Pembacaan IP**: Kita akan membaca IP dari `req.headers['x-forwarded-for']`. Di lingkungan *Vercel/serverless* ini lazim digunakan. Apabila absen, kita gunakan *fallback* ke `req.socket.remoteAddress` atau string statis jika keduanya tidak tersedia. Apakah ini disetujui?
 
 ## Proposed Changes
 
 ---
 
+### Basis Data Supabase
+
+#### [NEW] `supabase-migration-login-attempts.sql`
+Skrip SQL untuk dijalankan di Supabase guna membuat tabel pencatat upaya masuk (*login*):
+- Membuat tabel `login_attempts` dengan kolom: `id` (BIGSERIAL), `username` (TEXT), `ip` (TEXT), `success` (BOOLEAN), `created_at` (TIMESTAMPTZ).
+- Mengaktifkan *Row Level Security* (RLS) tanpa memberikan kebijakan publik (`SELECT`, `INSERT`, dll). Data ini mutlak hanya boleh dibaca dan ditulis oleh *backend* menggunakan *Service Role Key*.
+
+---
+
 ### Backend (Serverless API)
 
-Akan dibuat 3 file baru di direktori `api/hazard-zones/`:
-
-#### [NEW] `api/hazard-zones/add.js`
-Endpoint `POST` untuk validasi JWT dan menambahkan poligon zona bahaya baru menggunakan `SUPABASE_SERVICE_ROLE_KEY`. Jika sukses, *trigger broadcast* `HAZARD_ZONE_ADDED`.
-
-#### [NEW] `api/hazard-zones/update.js`
-Endpoint `PATCH` untuk mengubah detail zona (nama, deskripsi, *severity*) atau bentuk koordinat. *Trigger broadcast* `HAZARD_ZONE_UPDATED`.
-
-#### [NEW] `api/hazard-zones/delete.js`
-Endpoint `DELETE` untuk menghapus zona secara permanen dari Supabase. *Trigger broadcast* `HAZARD_ZONE_DELETED`.
-
----
-
-### Library Frontend & Sync
-
-#### [MODIFY] `frontend/src/lib/evacuation.ts` & `hazardZones.ts`
-Menghapus data statis pada `hazardZones.ts` dan mengubahnya menjadi penampung *array* kosong `export const hazardZones = [];`. Saya akan menyisipkan tipe data `HazardZone` dengan properti `{ id, name, coords, severity, description }`.
-
-#### [MODIFY] `frontend/src/lib/useAegisSync.ts`
-- Menambahkan fungsi API `aegisApi.addHazardZone`, `updateHazardZone`, `deleteHazardZone`, dan `fetchHazardZones`.
-- Memasukkan *event listener* `HAZARD_ZONE_ADDED`, `HAZARD_ZONE_UPDATED`, dan `HAZARD_ZONE_DELETED` ke dalam siklus *broadcast* Realtime Supabase.
-
----
-
-### Aplikasi Utama (UI Peta & Kontrol Admin)
-
-#### [MODIFY] `frontend/src/App.tsx`
-- **State Drawing**: Menambahkan *state* `drawingZoneMode` dan `drawingZoneCoords` (untuk menyimpan setiap klik admin pada peta).
-- **UI Peta (Klik Koordinat)**: Jika `drawingZoneMode` aktif, aksi klik pada komponen `Map` tidak memindahkan titik *Fokus*, melainkan menambahkan koordinat baru ke *array* sementara. Poligon sementara dirender secara *live* via `MapGeoJSON` menggunakan *state* `drawingZoneCoords`.
-- **Form Selesai/Batal**: Menyediakan menu khusus mengambang (saat `drawingZoneMode` aktif) yang berisi tombol "Batal" dan "Selesai". Tombol "Selesai" mengunci gambar dan memunculkan modal kustom pengisian data (Nama, *Severity*, dan Deskripsi Opsional).
-- **Interaksi Poligon Terdaftar**: Menambahkan argumen `onClick` pada `MapGeoJSON` milik `hazardZones`. Jika zona diklik, akan muncul Panel Info Zona Bahaya kustom (serupa dengan info *Shelter*) dengan opsi **Edit** dan **Hapus**.
+#### [MODIFY] `api/auth/login.js`
+Akan diubah secara substansial untuk menyuntikkan 2 lapisan *rate limiting* dengan Supabase:
+1. **Inisialisasi Supabase**: Mengimpor dan membuat *instance* klien Supabase dengan `SUPABASE_SERVICE_ROLE_KEY` (bersama dengan *error handling* jika *key* absen).
+2. **Pendeteksi IP**: Mengambil IP klien dari *header* `x-forwarded-for`.
+3. **Pengecekan Rate Limit (Sebelum Cek Password)**:
+   - **Berdasarkan IP**: Melakukan *query* ke `login_attempts` untuk mengecek total kegagalan dari IP tersebut dalam 15 menit terakhir. Jika `>= 20`, akan langsung dikembalikan status `429 Too Many Requests`.
+   - **Berdasarkan Username**: Melakukan *query* untuk mengecek total kegagalan dengan nama pengguna tersebut dalam 15 menit terakhir. Jika `>= 5`, kembalikan `429 Too Many Requests`.
+4. **Pencatatan Kegagalan (Log Failure)**: Jika pengguna tidak ditemukan di `ADMIN_ACCOUNTS_JSON` atau *password* salah, sebuah rekaman gagal (`success: false`) akan di-*insert* ke dalam Supabase sebelum memberikan respon `401 Unauthorized`.
+5. **Pencatatan Keberhasilan (Log Success) & Reset**: Jika *login* berhasil:
+   - Akan ditambahkan *record* ke Supabase (`success: true`) sebagai jejak audit.
+   - Akan dilakukan perintah `DELETE` terhadap semua *record* yang gagal milik nama pengguna tersebut untuk mereset *counter*.
 
 ## Verification Plan
 
 ### Automated Tests
-* Tidak ada pengujian otomatis yang didefinisikan saat ini. Validasi kompilasi akan dilakukan melalui `npm run build`.
+* Menggunakan `npm run build` untuk memverifikasi sintaksis tidak mengalami kerusakan.
 
 ### Manual Verification
-* **Menggambar Zona**: Masuk sebagai admin, klik "Tambah Zona Bahaya", pastikan klik pada peta berhasil menggambar poligon secara riil.
-* **Simpan ke Supabase**: Memastikan penyimpanan memanggil endpoint `/api/hazard-zones/add` dan seketika tersebar (*sync*) ke perangkat lain.
-* **Interaksi Edit/Hapus**: Mengeklik zona akan memunculkan *panel detail*, di mana tindakan **Hapus** akan memanggil endpoint `/delete` dan seketika menyingkirkan zona dari layar peta, begitupun ketika diedit.
+* Mencoba *login* dengan nama pengguna yang ada, memasukkan sandi acak lebih dari 5 kali, dan memverifikasi akan terkunci (*rate-limited*) dengan *error 429*.
+* Menguji dengan nama pengguna yang tidak ada berulang kali (20 kali percobaan gagal untuk berbagai macam akun) guna memvalidasi pemblokiran berbasis IP.
+* Memastikan berhasil masuk (jika masih dalam *limit* wajar) membersihkan rekaman kegagalan di tabel `login_attempts` (dapat dipantau di Dasbor Supabase).
