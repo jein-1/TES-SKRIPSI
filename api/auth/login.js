@@ -35,34 +35,34 @@ export default async function handler(req, res) {
 
   const ip = (req.headers['x-forwarded-for'] || '').split(',')[0].trim() || req.socket?.remoteAddress || 'unknown';
 
-  if (supabase) {
-    const fifteenMinsAgo = new Date(Date.now() - 15 * 60 * 1000).toISOString();
+  if (!supabase) {
+    return res.status(500).json({ error: 'Server misconfigured: brute-force protection unavailable' });
+  }
 
-    // 1. Username Rate Limit: >= 5 fails per Username in last 15 mins
-    const { count: userFailCount, error: userError } = await supabase
-      .from('login_attempts')
-      .select('*', { count: 'exact', head: true })
-      .eq('username', username)
-      .eq('success', false)
-      .gte('created_at', fifteenMinsAgo);
-      
-    if (!userError && userFailCount >= 5) {
-      return res.status(429).json({ error: 'Terlalu banyak percobaan gagal. Coba lagi dalam beberapa menit.' });
-    }
+  const fifteenMinsAgo = new Date(Date.now() - 15 * 60 * 1000).toISOString();
 
-    // 2. IP Rate Limit: >= 20 fails per IP in last 15 mins
-    const { count: ipFailCount, error: ipError } = await supabase
-      .from('login_attempts')
-      .select('*', { count: 'exact', head: true })
-      .eq('ip', ip)
-      .eq('success', false)
-      .gte('created_at', fifteenMinsAgo);
+  // 1. Username Rate Limit: >= 5 fails per Username in last 15 mins
+  const { count: userFailCount, error: userError } = await supabase
+    .from('login_attempts')
+    .select('*', { count: 'exact', head: true })
+    .eq('username', username)
+    .eq('success', false)
+    .gte('created_at', fifteenMinsAgo);
     
-    if (!ipError && ipFailCount >= 20) {
-      return res.status(429).json({ error: 'Terlalu banyak percobaan gagal. Coba lagi dalam beberapa menit.' });
-    }
-  } else {
-    console.warn('WARNING: Supabase not configured, skipping brute-force protection.');
+  if (!userError && userFailCount >= 5) {
+    return res.status(429).json({ error: 'Terlalu banyak percobaan gagal. Coba lagi dalam beberapa menit.' });
+  }
+
+  // 2. IP Rate Limit: >= 20 fails per IP in last 15 mins
+  const { count: ipFailCount, error: ipError } = await supabase
+    .from('login_attempts')
+    .select('*', { count: 'exact', head: true })
+    .eq('ip', ip)
+    .eq('success', false)
+    .gte('created_at', fifteenMinsAgo);
+  
+  if (!ipError && ipFailCount >= 20) {
+    return res.status(429).json({ error: 'Terlalu banyak percobaan gagal. Coba lagi dalam beberapa menit.' });
   }
 
   // Parse admin accounts from environment variable (JSON string)
@@ -88,18 +88,14 @@ export default async function handler(req, res) {
   const isMatch = account ? await bcrypt.compare(password, account.passwordHash) : false;
   
   if (!account || !isMatch) {
-    if (supabase) {
-      await supabase.from('login_attempts').insert([{ username, ip, success: false }]);
-    }
+    await supabase.from('login_attempts').insert([{ username, ip, success: false }]);
     return res.status(401).json({ error: 'Invalid username or password' });
   }
 
-  if (supabase) {
-    // Log success
-    await supabase.from('login_attempts').insert([{ username, ip, success: true }]);
-    // Reset counter for this username
-    await supabase.from('login_attempts').delete().eq('username', username).eq('success', false);
-  }
+  // Log success
+  await supabase.from('login_attempts').insert([{ username, ip, success: true }]);
+  // Reset counter for this username
+  await supabase.from('login_attempts').delete().eq('username', username).eq('success', false);
 
   // Generate JWT token (expires in 2 hours)
   const secret = process.env.JWT_SECRET;
