@@ -2,11 +2,13 @@
 // ZONA BAHAYA TSUNAMI — Polygon area rawan di Kota Palu
 // ─────────────────────────────────────────────────────────────────────────────
 
+import { ZRBLevel } from "./zrbReference";
+
 export interface HazardZone {
   id: string;
   name: string;
   coords: [number, number][]; // [lat, lng][]
-  severity: 'tinggi' | 'sedang' | 'rendah';
+  zrbLevel: ZRBLevel;
   description?: string;
 }
 

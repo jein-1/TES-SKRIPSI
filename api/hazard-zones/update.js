@@ -44,7 +44,7 @@ export default async function handler(req, res) {
   }
 
   // 2. Validate payload
-  const { id, name, coords, severity, description } = req.body;
+  const { id, name, coords, zrbLevel, description } = req.body;
   if (!id) {
     return res.status(400).json({ error: 'Bad Request: Missing hazard zone ID' });
   }
@@ -52,7 +52,7 @@ export default async function handler(req, res) {
   const updates = {};
   if (name !== undefined) updates.name = name;
   if (coords !== undefined) updates.coordinates = coords;
-  if (severity !== undefined) updates.severity = severity;
+  if (zrbLevel !== undefined) updates.zrb_level = zrbLevel;
   if (description !== undefined) updates.description = description;
 
   // 3. Update Supabase using Service Role Key

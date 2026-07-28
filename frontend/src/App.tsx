@@ -27,6 +27,7 @@ import type {
 } from "./types";
 import { DEFAULT_SETTINGS } from "./types";
 import type { HazardZone } from "./lib/evacuation/hazardZones";
+import { ZRB_REFERENCE, type ZRBLevel } from "./lib/evacuation/zrbReference";
 // â”€â”€ Auth â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 import LoginPage from "./components/pages/LoginPage";
 import FirstVisitModal from "./components/modals/FirstVisitModal";
@@ -317,13 +318,13 @@ function App() {
   const [drawingZoneMode, setDrawingZoneMode] = useState(false);
   const [drawingZoneCoords, setDrawingZoneCoords] = useState<[number, number][]>([]); // [lat, lng]
   const [showAddHazardZone, setShowAddHazardZone] = useState(false);
-  const [newHazardZone, setNewHazardZone] = useState({ name: '', severity: 'tinggi', description: '' });
+  const [newHazardZone, setNewHazardZone] = useState<{name: string; zrbLevel: ZRBLevel; description: string}>({ name: '', zrbLevel: 4, description: '' });
   const [isSavingHazardZone, setIsSavingHazardZone] = useState(false);
   
   const [selectedHazardZoneId, setSelectedHazardZoneId] = useState<string | null>(null);
   const [showEditHazardZone, setShowEditHazardZone] = useState(false);
   const [editHazardZoneData, setEditHazardZoneData] = useState<{
-    id: string; name: string; coords: [number, number][]; severity: string; description: string;
+    id: string; name: string; coords: [number, number][]; zrbLevel: ZRBLevel; description: string;
   } | null>(null);
   const [isSavingEditHazardZone, setIsSavingEditHazardZone] = useState(false);
   
@@ -2384,8 +2385,8 @@ function App() {
                       : drawingZoneCoords.map(c => [c[1], c[0]])
                   }
                 } as any}
-                fillPaint={{ 'fill-color': '#f87171', 'fill-opacity': 0.3 }}
-                linePaint={{ 'line-color': '#f87171', 'line-width': 2, 'line-dasharray': [2, 2] }}
+                fillPaint={{ 'fill-color': ZRB_REFERENCE[newHazardZone.zrbLevel].color, 'fill-opacity': 0.35 }}
+                linePaint={{ 'line-color': ZRB_REFERENCE[newHazardZone.zrbLevel].color, 'line-width': 2, 'line-dasharray': [2, 2], 'line-opacity': 0.9 }}
               />
             )}
             
@@ -2393,7 +2394,10 @@ function App() {
             {drawingZoneCoords.map((coord, i) => (
               <MapMarker key={`draw-${i}`} latitude={coord[0]} longitude={coord[1]}>
                 <MarkerContent>
-                  <div className="w-3 h-3 bg-red-500 rounded-full border border-white" />
+                  <div 
+                    className="w-3 h-3 rounded-full border border-white" 
+                    style={{ backgroundColor: ZRB_REFERENCE[newHazardZone.zrbLevel].color }} 
+                  />
                 </MarkerContent>
               </MapMarker>
             ))}
@@ -2402,7 +2406,7 @@ function App() {
             {settings.showHazardZones &&
               hazardZones.map((zone, i) => {
                 const isSelected = selectedHazardZoneId === zone.id;
-                const color = zone.severity === 'tinggi' ? '#ef4444' : zone.severity === 'sedang' ? '#f59e0b' : '#3b82f6';
+                const color = ZRB_REFERENCE[zone.zrbLevel]?.color || '#ef4444';
                 return (
                   <MapGeoJSON 
                     key={`hazard-${i}-${hazardZoneVersion}`}
@@ -2414,8 +2418,8 @@ function App() {
                         coordinates: [zone.coords.map(c => [c[1], c[0]])] // [lat, lng] to [lng, lat]
                       }
                     }}
-                    fillPaint={{ 'fill-color': tsunamiAlert ? '#ff0000' : color, 'fill-opacity': tsunamiAlert ? 0.35 : (isSelected ? 0.4 : 0.15) }}
-                    linePaint={{ 'line-color': tsunamiAlert ? '#ff0000' : color, 'line-width': tsunamiAlert ? 3 : (isSelected ? 3 : 1) }}
+                    fillPaint={{ 'fill-color': tsunamiAlert ? '#ff0000' : color, 'fill-opacity': tsunamiAlert ? 0.35 : (isSelected ? 0.5 : 0.35) }}
+                    linePaint={{ 'line-color': tsunamiAlert ? '#ff0000' : color, 'line-width': tsunamiAlert ? 3 : (isSelected ? 3 : 1), 'line-opacity': 0.9 }}
                     interactive={!drawingZoneMode}
                     onClick={() => {
                       if (!drawingZoneMode) {
@@ -3781,11 +3785,27 @@ function App() {
               </div>
               <div className="space-y-3">
                 <input type="text" placeholder="Nama Zona" className="w-full bg-slate-800 text-white rounded-xl px-4 py-2 text-sm border border-slate-700 focus:border-red-500 outline-none transition-colors" value={newHazardZone.name} onChange={e => setNewHazardZone({...newHazardZone, name: e.target.value})} />
-                <select className="w-full bg-slate-800 text-white rounded-xl px-4 py-2 text-sm border border-slate-700 focus:border-red-500 outline-none transition-colors" value={newHazardZone.severity} onChange={e => setNewHazardZone({...newHazardZone, severity: e.target.value})}>
-                  <option value="tinggi">Tinggi (Merah)</option>
-                  <option value="sedang">Sedang (Oranye)</option>
-                  <option value="rendah">Rendah (Biru)</option>
-                </select>
+                <div className="space-y-2">
+                  <label className="text-xs text-slate-400 font-bold px-1">Tingkat ZRB</label>
+                  <div className="grid grid-cols-1 gap-2">
+                    {([4, 3, 2, 1] as ZRBLevel[]).map((level) => {
+                      const ref = ZRB_REFERENCE[level];
+                      const isSelected = newHazardZone.zrbLevel === level;
+                      return (
+                        <div
+                          key={level}
+                          onClick={() => setNewHazardZone({ ...newHazardZone, zrbLevel: level })}
+                          className={`flex items-center gap-3 p-2 rounded-xl border cursor-pointer transition-colors ${isSelected ? 'bg-slate-800 border-slate-500' : 'bg-slate-800/40 border-slate-700 hover:bg-slate-800/60'}`}
+                        >
+                          <div className="w-4 h-4 rounded-full shrink-0 border border-slate-900" style={{ backgroundColor: ref.color }} />
+                          <div className="text-xs font-bold text-white leading-tight">
+                            {ref.label} — {ref.tipologi}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
                 <textarea placeholder="Deskripsi Opsional" className="w-full bg-slate-800 text-white rounded-xl px-4 py-2 text-sm border border-slate-700 focus:border-red-500 outline-none transition-colors resize-none" rows={3} value={newHazardZone.description} onChange={e => setNewHazardZone({...newHazardZone, description: e.target.value})} />
               </div>
               <div className="flex items-center gap-3 mt-6">
@@ -3803,7 +3823,7 @@ function App() {
                       id: 'HZ' + Date.now(),
                       name: newHazardZone.name,
                       coords: drawingZoneCoords,
-                      severity: newHazardZone.severity as 'tinggi'|'sedang'|'rendah',
+                      zrbLevel: newHazardZone.zrbLevel,
                       description: newHazardZone.description || undefined
                     };
 
@@ -3815,7 +3835,7 @@ function App() {
                       setHazardZoneVersion(v => v + 1);
                       setShowAddHazardZone(false);
                       setDrawingZoneCoords([]);
-                      setNewHazardZone({ name: '', severity: 'tinggi', description: '' });
+                      setNewHazardZone({ name: '', zrbLevel: 4, description: '' });
                     } else {
                       alert('Gagal menyimpan zona bahaya ke server.');
                     }
@@ -3835,6 +3855,7 @@ function App() {
         {selectedHazardZoneId && !showEditHazardZone && !drawingZoneMode && (() => {
           const z = hazardZones.find(x => x.id === selectedHazardZoneId);
           if (!z) return null;
+          const ref = ZRB_REFERENCE[z.zrbLevel];
           return (
             <motion.div
               key={`hazard-detail-${z.id}`}
@@ -3844,13 +3865,16 @@ function App() {
               transition={{ type: 'spring', damping: 28, stiffness: 320 }}
               className="fixed bottom-[72px] md:bottom-6 left-1/2 md:left-auto -translate-x-1/2 md:translate-x-0 md:right-6 z-[600] w-[92vw] max-w-sm"
             >
-              <div className="bg-[#0d1929]/95 backdrop-blur-md border border-red-500/30 rounded-2xl shadow-[0_8px_40px_rgba(239,68,68,0.25)] overflow-hidden">
-                <div className={`h-0.5 w-full bg-gradient-to-r ${z.severity === 'tinggi' ? 'from-red-700 via-red-400' : z.severity === 'sedang' ? 'from-orange-700 via-orange-400' : 'from-blue-700 via-blue-400'} to-slate-900`} />
-                <div className="p-4">
+              <div className="bg-[#0d1929]/95 backdrop-blur-md border border-slate-700/30 rounded-2xl shadow-[0_8px_40px_rgba(0,0,0,0.5)] overflow-hidden">
+                <div className="h-1 w-full" style={{ backgroundColor: ref.color }} />
+                <div className="p-4 max-h-[60vh] overflow-y-auto">
                   <div className="flex justify-between items-start mb-3">
                     <div className="flex-1 pr-3">
                       <h3 className="text-sm font-black text-white leading-tight">{z.name}</h3>
-                      <p className="text-[11px] text-slate-400 mt-0.5">Tingkat Bahaya: <span className={z.severity === 'tinggi' ? 'text-red-400 uppercase font-bold' : z.severity === 'sedang' ? 'text-orange-400 uppercase font-bold' : 'text-blue-400 uppercase font-bold'}>{z.severity}</span></p>
+                      <div className="inline-flex items-center gap-1.5 mt-1.5 px-2 py-0.5 rounded text-[10px] font-bold" style={{ backgroundColor: ref.color + '20', color: ref.color, border: `1px solid ${ref.color}40` }}>
+                        <div className="w-2 h-2 rounded-full" style={{ backgroundColor: ref.color }} />
+                        {ref.label} — {ref.tipologi}
+                      </div>
                     </div>
                     <button
                       onClick={() => setSelectedHazardZoneId(null)}
@@ -3859,7 +3883,34 @@ function App() {
                       <X className="w-3.5 h-3.5" />
                     </button>
                   </div>
-                  {z.description && <p className="text-xs text-slate-300 mb-4">{z.description}</p>}
+                  
+                  <div className="mt-4 space-y-3 text-slate-300 text-xs">
+                    <div>
+                      <h4 className="font-bold text-slate-400 mb-1">Kriteria:</h4>
+                      <ul className="list-disc pl-4 space-y-0.5 text-[11px]">
+                        {ref.kriteria.map((k, i) => <li key={i}>{k}</li>)}
+                      </ul>
+                    </div>
+                    {ref.catatanUmum && (
+                      <div className="text-[11px] italic text-slate-400">
+                        Catatan: {ref.catatanUmum}
+                      </div>
+                    )}
+                    
+                    <div className="pt-2 border-t border-slate-800/60">
+                      <h4 className="font-bold text-slate-400 mb-1">ARAHAN SPASIAL (KETENTUAN PEMANFAATAN RUANG):</h4>
+                      <ol className="list-decimal pl-4 space-y-1 text-[11px]">
+                        {ref.arahanSpasial.map((a, i) => <li key={i}>{a}</li>)}
+                      </ol>
+                    </div>
+
+                    {z.description && (
+                      <div className="pt-2 border-t border-slate-800/60">
+                        <h4 className="font-bold text-slate-400 mb-1">Catatan Tambahan (Admin):</h4>
+                        <p className="text-[11px]">{z.description}</p>
+                      </div>
+                    )}
+                  </div>
                   
                   {isAdminURL && userRole === "admin" && (
                     <div className="flex items-center gap-2 mt-4 pt-4 border-t border-slate-800/60">
@@ -3869,7 +3920,7 @@ function App() {
                             id: z.id,
                             name: z.name,
                             coords: z.coords,
-                            severity: z.severity,
+                            zrbLevel: z.zrbLevel,
                             description: z.description || ''
                           });
                           setShowEditHazardZone(true);
@@ -3916,11 +3967,27 @@ function App() {
               </div>
               <div className="space-y-3">
                 <input type="text" placeholder="Nama Zona" className="w-full bg-slate-800 text-white rounded-xl px-4 py-2 text-sm border border-slate-700 focus:border-red-500 outline-none transition-colors" value={editHazardZoneData.name} onChange={e => setEditHazardZoneData({...editHazardZoneData, name: e.target.value})} />
-                <select className="w-full bg-slate-800 text-white rounded-xl px-4 py-2 text-sm border border-slate-700 focus:border-red-500 outline-none transition-colors" value={editHazardZoneData.severity} onChange={e => setEditHazardZoneData({...editHazardZoneData, severity: e.target.value})}>
-                  <option value="tinggi">Tinggi (Merah)</option>
-                  <option value="sedang">Sedang (Oranye)</option>
-                  <option value="rendah">Rendah (Biru)</option>
-                </select>
+                <div className="space-y-2">
+                  <label className="text-xs text-slate-400 font-bold px-1">Tingkat ZRB</label>
+                  <div className="grid grid-cols-1 gap-2">
+                    {([4, 3, 2, 1] as ZRBLevel[]).map((level) => {
+                      const ref = ZRB_REFERENCE[level];
+                      const isSelected = editHazardZoneData.zrbLevel === level;
+                      return (
+                        <div
+                          key={level}
+                          onClick={() => setEditHazardZoneData({ ...editHazardZoneData, zrbLevel: level })}
+                          className={`flex items-center gap-3 p-2 rounded-xl border cursor-pointer transition-colors ${isSelected ? 'bg-slate-800 border-slate-500' : 'bg-slate-800/40 border-slate-700 hover:bg-slate-800/60'}`}
+                        >
+                          <div className="w-4 h-4 rounded-full shrink-0 border border-slate-900" style={{ backgroundColor: ref.color }} />
+                          <div className="text-xs font-bold text-white leading-tight">
+                            {ref.label} — {ref.tipologi}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
                 <textarea placeholder="Deskripsi Opsional" className="w-full bg-slate-800 text-white rounded-xl px-4 py-2 text-sm border border-slate-700 focus:border-red-500 outline-none transition-colors resize-none" rows={3} value={editHazardZoneData.description} onChange={e => setEditHazardZoneData({...editHazardZoneData, description: e.target.value})} />
               </div>
               <div className="flex items-center gap-3 mt-6">
@@ -3933,7 +4000,7 @@ function App() {
                     
                     const payload = {
                       name: editHazardZoneData.name,
-                      severity: editHazardZoneData.severity,
+                      zrbLevel: editHazardZoneData.zrbLevel,
                       description: editHazardZoneData.description
                     };
 

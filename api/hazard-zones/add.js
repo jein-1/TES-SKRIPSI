@@ -44,7 +44,7 @@ export default async function handler(req, res) {
   }
 
   // 2. Validate payload
-  const { id, name, coords, severity, description } = req.body;
+  const { id, name, coords, zrbLevel, description } = req.body;
   if (!id || !name || !Array.isArray(coords)) {
     return res.status(400).json({ error: 'Bad Request: Missing required hazard zone fields' });
   }
@@ -54,7 +54,7 @@ export default async function handler(req, res) {
     id,
     name,
     coordinates: coords, // Array of [lat, lng]
-    severity: severity || 'tinggi',
+    zrb_level: zrbLevel || 4,
     description: description || null,
   }).select().single();
 

@@ -6,6 +6,7 @@ import { useEffect, useRef } from "react";
 import { supabase } from "./supabaseClient";
 import type { Shelter } from "./evacuation/types";
 import type { HazardZone } from "./evacuation/hazardZones";
+import type { ZRBLevel } from "./evacuation/zrbReference";
 
 export type SyncEventHandler = (event: AegisSyncEvent) => void;
 
@@ -371,7 +372,7 @@ export const aegisApi = {
 
   updateHazardZone: async (
     id: string,
-    fields: { name?: string; coords?: [number, number][]; severity?: string; description?: string }
+    fields: { name?: string; coords?: [number, number][]; zrbLevel?: ZRBLevel; description?: string }
   ): Promise<{ ok: boolean }> => {
     try {
       const token = sessionStorage.getItem("aegisJWT");
@@ -399,7 +400,7 @@ export const aegisApi = {
           id: resData.hazardZone.id,
           name: resData.hazardZone.name,
           coords: resData.hazardZone.coordinates,
-          severity: resData.hazardZone.severity,
+          zrbLevel: resData.hazardZone.zrb_level,
           description: resData.hazardZone.description || undefined
         };
         await broadcastChannel.send({
@@ -454,14 +455,14 @@ export const aegisApi = {
     try {
       const { data, error } = await supabase
         .from("hazard_zones")
-        .select("id, name, coordinates, severity, description")
+        .select("id, name, coordinates, zrb_level, description")
         .order("created_at", { ascending: true });
       if (error || !data) return [];
       return data.map((row: any) => ({
         id: row.id,
         name: row.name,
         coords: row.coordinates,
-        severity: row.severity,
+        zrbLevel: row.zrb_level as any,
         description: row.description ?? undefined,
       }));
     } catch {
@@ -545,7 +546,7 @@ const hazardZonesChannel = supabase
         id: row.id,
         name: row.name,
         coords: row.coordinates,
-        severity: row.severity,
+        zrbLevel: row.zrb_level as any,
         description: row.description ?? undefined,
       };
       listeners.forEach((fn) => fn({ type: "HAZARD_ZONE_ADDED", hazardZone }));
@@ -560,7 +561,7 @@ const hazardZonesChannel = supabase
         id: row.id,
         name: row.name,
         coords: row.coordinates,
-        severity: row.severity,
+        zrbLevel: row.zrb_level as any,
         description: row.description ?? undefined,
       };
       listeners.forEach((fn) => fn({ type: "HAZARD_ZONE_UPDATED", hazardZone }));
