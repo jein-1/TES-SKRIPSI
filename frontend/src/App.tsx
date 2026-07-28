@@ -2459,12 +2459,13 @@ function App() {
             )}
 
             {/* Selected Shelter Radius */}
-            {selectedShelterId && (() => {
-              const selected = shelters.find(s => s.id === selectedShelterId);
-              if (selected && !isNaN(selected.lat) && !isNaN(selected.lng)) {
+            {(selectedShelterId || (showEditShelter && editShelterData)) && (() => {
+              const selected = showEditShelter && editShelterData ? editShelterData : shelters.find(s => s.id === selectedShelterId);
+              if (selected && !isNaN(parseFloat(selected.lat as string)) && !isNaN(parseFloat(selected.lng as string))) {
+                const radius = showEditShelter && editShelterData ? parseFloat(editShelterData.radius) : (selected.radiusMeters ?? 50);
                 return (
                   <MapGeoJSON
-                    data={createCirclePolygon(selected.lat, selected.lng, (selected.radiusMeters ?? 50) / 1000) as any}
+                    data={createCirclePolygon(parseFloat(selected.lat as string), parseFloat(selected.lng as string), radius / 1000) as any}
                     fillPaint={{ 'fill-color': '#6366f1', 'fill-opacity': 0.15 }}
                     linePaint={{ 'line-color': '#6366f1', 'line-width': 2, 'line-dasharray': [2, 2] }}
                   />
@@ -3671,7 +3672,7 @@ function App() {
             initial={{ opacity: 0, y: -20 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -20 }}
-            className="fixed top-20 left-1/2 -translate-x-1/2 z-[3000] bg-indigo-600 text-white px-6 py-3 rounded-full shadow-lg font-bold flex items-center gap-2 text-sm border border-indigo-400"
+            className="fixed bottom-12 left-1/2 -translate-x-1/2 z-[3000] bg-indigo-600 text-white px-6 py-3 rounded-full shadow-lg font-bold flex items-center gap-2 text-sm border border-indigo-400"
           >
             <MapPin className="w-5 h-5 animate-pulse" />
             Klik titik di peta untuk menaruh pin shelter
@@ -3686,13 +3687,13 @@ function App() {
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            className="fixed inset-0 z-[3000] flex items-center justify-center bg-black/80 backdrop-blur-md p-4"
+            className="fixed inset-0 z-[3000] flex items-center justify-end p-6 pointer-events-none"
           >
             <motion.div
-              initial={{ scale: 0.9, y: 20 }}
-              animate={{ scale: 1, y: 0 }}
-              exit={{ scale: 0.9, y: 20 }}
-              className="w-full max-w-sm bg-slate-900 border border-slate-700 rounded-2xl p-6 shadow-xl relative"
+              initial={{ scale: 0.9, x: 20 }}
+              animate={{ scale: 1, x: 0 }}
+              exit={{ scale: 0.9, x: 20 }}
+              className="w-full max-w-sm bg-slate-900 border border-slate-700 rounded-2xl p-6 shadow-xl relative pointer-events-auto"
             >
               <div className="flex items-center gap-3 mb-4">
                 <div className="w-8 h-8 rounded-xl bg-indigo-500/20 flex items-center justify-center">
@@ -4225,13 +4226,13 @@ function App() {
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            className="fixed inset-0 z-[3100] flex items-center justify-center bg-black/80 backdrop-blur-md p-4"
+            className="fixed inset-0 z-[3100] flex items-center justify-end p-6 pointer-events-none"
           >
             <motion.div
-              initial={{ scale: 0.9, y: 20 }}
-              animate={{ scale: 1, y: 0 }}
-              exit={{ scale: 0.9, y: 20 }}
-              className="w-full max-w-sm bg-[#0d1929] border border-indigo-500/30 rounded-2xl shadow-[0_20px_60px_rgba(99,102,241,0.3)] overflow-hidden max-h-[92vh] flex flex-col"
+              initial={{ scale: 0.9, x: 20 }}
+              animate={{ scale: 1, x: 0 }}
+              exit={{ scale: 0.9, x: 20 }}
+              className="w-full max-w-sm bg-[#0d1929] border border-indigo-500/30 rounded-2xl shadow-[0_20px_60px_rgba(99,102,241,0.3)] overflow-hidden max-h-[92vh] flex flex-col pointer-events-auto"
             >
               {/* Top accent */}
               <div className="h-0.5 w-full bg-gradient-to-r from-indigo-700 via-indigo-400 to-indigo-700 shrink-0" />
