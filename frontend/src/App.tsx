@@ -3112,6 +3112,7 @@ function App() {
                     <button
                       onClick={() => {
                         setFlyToPos([s.lat, s.lng]);
+                        setSelectedShelterId(s.id);
                         setShowShelters(false);
                       }}
                       className="w-full py-2 bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold rounded-lg transition-colors"
