@@ -2326,16 +2326,21 @@ function App() {
 
           {/* Admin: Desktop GPS controls dihapus - admin hanya memantau */}
 
-            {/* Compass overlay */}
             <div className="absolute top-16 right-4 z-[1000] flex flex-col gap-2 pointer-events-auto">
               <button onClick={() => {
                 setViewport(v => ({ ...v, bearing: 0 }));
                 setAdminMapBearing(0);
               }}
-                className="w-11 h-11 rounded-full flex items-center justify-center bg-slate-900/80 border border-slate-700/60 shadow-lg"
-                style={{ transform: `rotate(${-adminMapBearing}deg)`, transition: 'transform 0.1s' }}
+                title="Reset Arah Peta ke Utara"
+                className="w-10 h-10 rounded-full flex items-center justify-center bg-slate-900/90 border border-slate-700/60 shadow-lg hover:bg-slate-800 transition-colors"
+                style={{ transform: `rotate(${-adminMapBearing}deg)`, transition: 'transform 0.2s' }}
               >
-                <div style={{width: 20, height: 20, borderRadius: '50%', border: '2px solid red', display: 'flex', alignItems: 'center', justifyContent: 'center'}}>N</div>
+                <svg viewBox="0 0 24 24" width="22" height="22" fill="none">
+                  <circle cx="12" cy="12" r="10" fill="#1e293b" stroke="#475569" strokeWidth="1.5"/>
+                  <polygon points="12,3 14,12 12,10 10,12" fill="#ef4444"/>
+                  <polygon points="12,21 14,12 12,14 10,12" fill="#94a3b8"/>
+                  <circle cx="12" cy="12" r="2" fill="#fff"/>
+                </svg>
               </button>
             </div>
 
@@ -3111,7 +3116,7 @@ function App() {
                     </div>
                     <button
                       onClick={() => {
-                        setFlyToPos([s.lat, s.lng]);
+                        setViewport(v => ({ ...v, center: [s.lng, s.lat], zoom: 17 }));
                         setSelectedShelterId(s.id);
                         setShowShelters(false);
                       }}
