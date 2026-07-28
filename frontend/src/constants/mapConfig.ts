@@ -3,7 +3,7 @@
 // ═══════════════════════════════════════════════════════════════
 
 // ── Tile Provider URLs ──────────────────────────────────────────
-export const TILE_NORMAL    = 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png'
+export const TILE_NORMAL    = 'https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png'
 export const TILE_DARK      = 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png'
 export const TILE_SATELLITE = 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}'
 
