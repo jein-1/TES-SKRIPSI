@@ -2460,12 +2460,22 @@ function App() {
 
             {/* Selected Shelter Radius */}
             {(selectedShelterId || (showEditShelter && editShelterData)) && (() => {
-              const selected = showEditShelter && editShelterData ? editShelterData : shelters.find(s => s.id === selectedShelterId);
-              if (selected && !isNaN(parseFloat(selected.lat as string)) && !isNaN(parseFloat(selected.lng as string))) {
-                const radius = showEditShelter && editShelterData ? parseFloat(editShelterData.radius) : (selected.radiusMeters ?? 50);
+              let lat: number, lng: number, radius: number;
+              if (showEditShelter && editShelterData) {
+                lat = parseFloat(editShelterData.lat);
+                lng = parseFloat(editShelterData.lng);
+                radius = parseFloat(editShelterData.radius) || 50;
+              } else {
+                const s = shelters.find(s => s.id === selectedShelterId);
+                if (!s) return null;
+                lat = s.lat;
+                lng = s.lng;
+                radius = s.radiusMeters ?? 50;
+              }
+              if (!isNaN(lat) && !isNaN(lng)) {
                 return (
                   <MapGeoJSON
-                    data={createCirclePolygon(parseFloat(selected.lat as string), parseFloat(selected.lng as string), radius / 1000) as any}
+                    data={createCirclePolygon(lat, lng, radius / 1000) as any}
                     fillPaint={{ 'fill-color': '#6366f1', 'fill-opacity': 0.15 }}
                     linePaint={{ 'line-color': '#6366f1', 'line-width': 2, 'line-dasharray': [2, 2] }}
                   />
