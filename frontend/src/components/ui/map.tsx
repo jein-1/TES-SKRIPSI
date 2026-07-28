@@ -21,9 +21,30 @@ import { X, Minus, Plus, Locate, Maximize, Loader2 } from "lucide-react";
 
 import { cn } from "@/lib/utils";
 
+const googleMapStyle: MapLibreGL.StyleSpecification = {
+  version: 8,
+  sources: {
+    "google-maps": {
+      type: "raster",
+      tiles: ["https://mt1.google.com/vt/lyrs=m&x={x}&y={y}&z={z}"],
+      tileSize: 256,
+      attribution: "© Google Maps"
+    }
+  },
+  layers: [
+    {
+      id: "google-maps-layer",
+      type: "raster",
+      source: "google-maps",
+      minzoom: 0,
+      maxzoom: 22
+    }
+  ]
+};
+
 const defaultStyles = {
-  dark: "https://basemaps.cartocdn.com/gl/voyager-gl-style/style.json",
-  light: "https://basemaps.cartocdn.com/gl/voyager-gl-style/style.json",
+  dark: googleMapStyle,
+  light: googleMapStyle,
 };
 
 // A tile-less, dependency-free style with a transparent background. Use it for
