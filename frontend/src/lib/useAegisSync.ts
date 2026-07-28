@@ -17,7 +17,8 @@ export interface AegisSyncEvent {
     | "PING_REPLY"
     | "LOCATION_UPDATE"
     | "SHELTER_ADDED"
-    | "SHELTER_UPDATED";
+    | "SHELTER_UPDATED"
+    | "SHELTER_DELETED";
   fromId?: string;
   fromName?: string;
   toId?: string;
@@ -248,6 +249,41 @@ export const aegisApi = {
     }
   },
 
+  /** Admin: delete shelter custom di Supabase */
+  deleteCustomShelter: async (id: string): Promise<{ ok: boolean }> => {
+    try {
+      const token = sessionStorage.getItem("aegisJWT");
+      if (!token) return { ok: false };
+
+      const isLocalhost = typeof window !== 'undefined' && window.location.origin.includes('localhost');
+      const API_URL = isLocalhost ? (import.meta.env.VITE_API_URL || "https://tsunami-dimss.vercel.app") : "";
+      const res = await fetch(`${API_URL}/api/shelters/delete`, {
+        method: "DELETE",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${token}`
+        },
+        body: JSON.stringify({ id }),
+      });
+
+      if (!res.ok) {
+        console.error("[AegisSync] deleteCustomShelter error:", await res.text());
+        return { ok: false };
+      }
+
+      await broadcastChannel.send({
+        type: "broadcast",
+        event: "SHELTER_DELETED",
+        payload: { id },
+      });
+
+      return { ok: true };
+    } catch (e) {
+      console.error("[AegisSync] deleteCustomShelter exception:", e);
+      return { ok: false };
+    }
+  },
+
   /** Semua device: ambil semua custom shelter dari Supabase saat load */
   fetchCustomShelters: async (): Promise<Shelter[]> => {
     try {
@@ -271,14 +307,14 @@ export const aegisApi = {
     }
   },
 
-  /** Admin: Ambil lokasi aktif 2 jam terakhir dari Supabase saat load awal */
+  /** Admin: Ambil lokasi aktif 10 menit terakhir dari Supabase saat load awal */
   fetchActiveUsers: async () => {
     try {
-      const twoHoursAgo = new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString();
+      const tenMinsAgo = new Date(Date.now() - 10 * 60 * 1000).toISOString();
       const { data, error } = await supabase
         .from("location_updates")
         .select("id, name, device_model, lat, lng, battery, updated_at")
-        .gte("updated_at", twoHoursAgo);
+        .gte("updated_at", tenMinsAgo);
       if (error || !data) return [];
       return data.map((row: any) => ({
         id: row.id,
@@ -379,6 +415,9 @@ broadcastChannel
   })
   .on("broadcast", { event: "SHELTER_UPDATED" }, (payload) => {
     listeners.forEach((fn) => fn({ type: "SHELTER_UPDATED", ...payload.payload }));
+  })
+  .on("broadcast", { event: "SHELTER_DELETED" }, (payload) => {
+    listeners.forEach((fn) => fn({ type: "SHELTER_DELETED", ...payload.payload }));
   })
   .subscribe();
 

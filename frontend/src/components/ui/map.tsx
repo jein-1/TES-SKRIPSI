@@ -684,7 +684,7 @@ function MarkerPopup({
   return createPortal(
     <div
       className={cn(
-        "bg-popover text-popover-foreground relative max-w-62 rounded-md border p-3 shadow-md",
+        "bg-slate-900 text-slate-200 border-slate-800 relative max-w-62 rounded-md border p-3 shadow-xl",
         "animate-in fade-in-0 zoom-in-95 duration-200 ease-out",
         className,
       )}
@@ -756,7 +756,7 @@ function MarkerTooltip({
   return createPortal(
     <div
       className={cn(
-        "bg-foreground text-background pointer-events-none rounded-md px-2 py-1 text-xs text-balance shadow-md",
+        "bg-slate-900 text-slate-200 border border-slate-700 pointer-events-none rounded-md px-3 py-2 text-xs text-balance shadow-[0_4px_20px_rgba(0,0,0,0.5)]",
         "animate-in fade-in-0 zoom-in-95 duration-200 ease-out",
         className,
       )}
@@ -1095,7 +1095,7 @@ function MapPopup({
   return createPortal(
     <div
       className={cn(
-        "bg-popover text-popover-foreground relative max-w-62 rounded-md border p-3 shadow-md",
+        "bg-slate-900 text-slate-200 border-slate-800 relative max-w-62 rounded-md border p-3 shadow-xl",
         "animate-in fade-in-0 zoom-in-95 duration-200 ease-out",
         className,
       )}
