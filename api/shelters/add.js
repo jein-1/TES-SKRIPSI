@@ -2,7 +2,7 @@ import { createClient } from '@supabase/supabase-js';
 import jwt from 'jsonwebtoken';
 
 // Use Service Role Key to bypass RLS and insert securely
-const supabaseUrl = process.env.SUPABASE_URL || 'https://placeholder.supabase.co';
+const supabaseUrl = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL;
 const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
 // Initialize without key first, we will check it in the handler
 const supabase = serviceRoleKey ? createClient(supabaseUrl, serviceRoleKey) : null;

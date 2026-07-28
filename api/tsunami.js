@@ -3,7 +3,7 @@ import webpush from 'web-push';
 import jwt from 'jsonwebtoken';
 
 const supabase = createClient(
-  process.env.SUPABASE_URL || 'https://placeholder.supabase.co',
+  process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL,
   process.env.SUPABASE_ANON_KEY || 'placeholder'
 );
 
