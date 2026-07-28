@@ -3735,16 +3735,16 @@ function App() {
                       address: address || undefined,
                     };
 
-                    const { ok } = await aegisApi.addCustomShelter(shelterPayload);
+                    const res = await aegisApi.addCustomShelter(shelterPayload);
                     setIsSavingShelter(false);
 
-                    if (ok) {
+                    if (res.ok) {
                       addCustomShelter(shelterPayload as any);
                       setShelterVersion(v => v + 1);
                       setShowAddShelter(false);
                       setNewShelter({ name: '', lat: '', lng: '', capacity: '', radius: '50' });
                     } else {
-                      alert('Gagal menyimpan shelter ke server. Silakan coba lagi.');
+                      alert(`Gagal menyimpan shelter. Sesi login Anda mungkin telah berakhir (Token Expired). Silakan Logout dan Login kembali.`);
                     }
                   }}
                   className="flex-1 py-3 text-white font-bold text-sm bg-indigo-600 rounded-xl hover:bg-indigo-500 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
