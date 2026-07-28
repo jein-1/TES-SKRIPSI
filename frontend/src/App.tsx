@@ -42,6 +42,7 @@ import {
   requestNotifPermission,
   sendTsunamiNotification,
 } from "./lib/useTsunamiAlert";
+import { useEmergencyNotification } from "./lib/useEmergencyNotification";
 import { registerWebPush } from "./lib/usePushNotification";
 import { Geolocation } from "@capacitor/geolocation";
 import { Haptics, ImpactStyle } from "@capacitor/haptics";
@@ -293,6 +294,9 @@ function App() {
     }
     return false;
   });
+  
+  useEmergencyNotification(tsunamiAlert);
+  
   const tsunamiAlertRef = useRef(tsunamiAlert);
   useEffect(() => {
     tsunamiAlertRef.current = tsunamiAlert;
@@ -500,13 +504,28 @@ function App() {
   }, [gempa]);
 
   // â”€â”€ Persistent Terminal ID â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-  const [terminalId] = useState(() => {
+  const [terminalId, setTerminalId] = useState<string>(() => {
     const s = localStorage.getItem("aegisTerminalId");
     if (s) return s;
-    const id = `AEGIS-${Math.floor(Math.random() * 900 + 100)}`;
-    localStorage.setItem("aegisTerminalId", id);
-    return id;
+    const fallbackId = `AEGIS-${Math.floor(Math.random() * 900 + 100)}`;
+    localStorage.setItem("aegisTerminalId", fallbackId);
+    return fallbackId;
   });
+
+  useEffect(() => {
+    import("@capacitor/core").then(({ Capacitor }) => {
+      if (Capacitor.isNativePlatform()) {
+        import("@capacitor/device").then(({ Device }) => {
+          Device.getId().then((info) => {
+            if (info.identifier) {
+              setTerminalId(info.identifier);
+              localStorage.setItem("aegisTerminalId", info.identifier);
+            }
+          });
+        });
+      }
+    });
+  }, []);
 
   // â”€â”€ History â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   const [evacuationHistory, setEvacuationHistory] = useState<

@@ -131,20 +131,34 @@ export default function FirstVisitModal({ onComplete, onCancel, isEditing = fals
           </label>
           <div className="relative">
             <User className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-600" />
-            <input
-              type="text"
-              value={name}
-              maxLength={30}
-              onChange={e => { setName(e.target.value); setError('') }}
-              onKeyDown={e => e.key === 'Enter' && handleSubmit()}
-              placeholder="Contoh: Ahmad"
-              autoFocus
-              className="w-full pl-9 pr-12 py-3 rounded-xl bg-slate-800/60 border border-slate-700/50 text-white placeholder-slate-600 font-medium focus:outline-none focus:border-indigo-500/70 transition-colors"
-            />
-            <span className={`absolute right-3 top-1/2 -translate-y-1/2 text-[10px] font-mono ${charLeft < 5 ? 'text-amber-400' : 'text-slate-600'}`}>
-              {name.trim().length}/30
-            </span>
+            {!!localStorage.getItem('aegisUserName') ? (
+              <div className="w-full pl-9 pr-4 py-3 rounded-xl bg-slate-800/40 border border-slate-700/30 text-slate-400 font-medium">
+                {name || localStorage.getItem('aegisUserName')}
+              </div>
+            ) : (
+              <input
+                type="text"
+                value={name}
+                maxLength={30}
+                onChange={e => { setName(e.target.value); setError('') }}
+                onKeyDown={e => e.key === 'Enter' && handleSubmit()}
+                placeholder="Contoh: Ahmad"
+                autoFocus
+                className="w-full pl-9 pr-12 py-3 rounded-xl bg-slate-800/60 border border-slate-700/50 text-white placeholder-slate-600 font-medium focus:outline-none focus:border-indigo-500/70 transition-colors"
+              />
+            )}
+            {!localStorage.getItem('aegisUserName') && (
+              <span className={`absolute right-3 top-1/2 -translate-y-1/2 text-[10px] font-mono ${charLeft < 5 ? 'text-amber-400' : 'text-slate-600'}`}>
+                {name.trim().length}/30
+              </span>
+            )}
           </div>
+
+          {!!localStorage.getItem('aegisUserName') && (
+            <p className="text-[10px] text-amber-500/80 mt-2 text-center font-medium">
+              Nama terkunci — hapus & install ulang aplikasi untuk mengubah nama
+            </p>
+          )}
 
           <AnimatePresence>
             {error && (
@@ -164,13 +178,13 @@ export default function FirstVisitModal({ onComplete, onCancel, isEditing = fals
             )}
             <button
               onClick={handleSubmit}
-              disabled={done}
-              className={`${isEditing ? 'flex-1' : 'w-full'} py-3.5 rounded-xl font-black text-sm tracking-wide transition-all flex items-center justify-center gap-2 disabled:opacity-70`}
-              style={{ background: done ? '#10b981' : 'linear-gradient(135deg, #6366f1, #4f46e5)', boxShadow: '0 4px 20px rgba(99,102,241,0.4)' }}
+              disabled={done || (isEditing && !!localStorage.getItem('aegisUserName'))}
+              className={`${isEditing ? 'flex-1' : 'w-full'} py-3.5 rounded-xl font-black text-sm tracking-wide transition-all flex items-center justify-center gap-2 disabled:opacity-50`}
+              style={{ background: done ? '#10b981' : (isEditing && !!localStorage.getItem('aegisUserName') ? '#334155' : 'linear-gradient(135deg, #6366f1, #4f46e5)'), boxShadow: done || (isEditing && !!localStorage.getItem('aegisUserName')) ? 'none' : '0 4px 20px rgba(99,102,241,0.4)' }}
             >
               {done
                 ? <><CheckCircle className="w-4 h-4" /> Tersimpan!</>
-                : isEditing ? 'SIMPAN PERUBAHAN' : 'MULAI AEGIS RESPONSE'
+                : isEditing ? (!!localStorage.getItem('aegisUserName') ? 'Terkunci' : 'SIMPAN PERUBAHAN') : 'MULAI AEGIS RESPONSE'
               }
             </button>
           </div>
