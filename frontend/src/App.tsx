@@ -2458,6 +2458,21 @@ function App() {
               </>
             )}
 
+            {/* Selected Shelter Radius */}
+            {selectedShelterId && (() => {
+              const selected = shelters.find(s => s.id === selectedShelterId);
+              if (selected && !isNaN(selected.lat) && !isNaN(selected.lng)) {
+                return (
+                  <MapGeoJSON
+                    data={createCirclePolygon(selected.lat, selected.lng, (selected.radiusMeters ?? 50) / 1000) as any}
+                    fillPaint={{ 'fill-color': '#6366f1', 'fill-opacity': 0.15 }}
+                    linePaint={{ 'line-color': '#6366f1', 'line-width': 2, 'line-dasharray': [2, 2] }}
+                  />
+                );
+              }
+              return null;
+            })()}
+
             {/* Shelters */}
             {shelters.map((shelter) => {
               const isSelected = selectedShelterId === shelter.id;
