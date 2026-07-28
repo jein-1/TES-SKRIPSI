@@ -97,7 +97,7 @@ export async function loadCustomSheltersFromSupabase(): Promise<void> {
   try {
     const { data, error } = await supabase
       .from("custom_shelters")
-      .select("id, name, lat, lng, capacity, radius_meters")
+      .select("id, name, lat, lng, capacity, radius_meters, address, custom_message")
       .order("created_at", { ascending: true });
     if (error || !data) return;
     data.forEach((row: any) => {
@@ -108,6 +108,8 @@ export async function loadCustomSheltersFromSupabase(): Promise<void> {
         lng: row.lng,
         capacity: row.capacity,
         radiusMeters: row.radius_meters,
+        address: row.address ?? undefined,
+        customMessage: row.custom_message ?? undefined,
       };
       if (!shelters.find(existing => existing.id === s.id)) {
         shelters.push(s);

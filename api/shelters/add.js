@@ -46,7 +46,7 @@ export default async function handler(req, res) {
   }
 
   // 2. Validate payload
-  const { id, name, lat, lng, capacity, radiusMeters } = req.body;
+  const { id, name, lat, lng, capacity, radiusMeters, address } = req.body;
   if (!id || !name || typeof lat !== 'number' || typeof lng !== 'number') {
     return res.status(400).json({ error: 'Bad Request: Missing required shelter fields' });
   }
@@ -58,7 +58,8 @@ export default async function handler(req, res) {
     lat,
     lng,
     capacity: capacity || 1000,
-    radius_meters: radiusMeters || 50
+    radius_meters: radiusMeters || 50,
+    address: address || null,
   }).select().single();
 
   if (error) {

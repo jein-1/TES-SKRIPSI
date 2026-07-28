@@ -1,5 +1,5 @@
 import { useState, useCallback, useEffect, useRef, useMemo } from "react";
-import { Map, MapMarker, MarkerContent, MapRoute, MapGeoJSON, type MapRef, type MapViewport } from '@/components/ui/map'
+import { Map, MapMarker, MarkerContent, MarkerTooltip, MapRoute, MapGeoJSON, type MapRef, type MapViewport } from '@/components/ui/map'
 // â”€â”€ Modules â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 import {
   shelters,
@@ -8,6 +8,7 @@ import {
   addCustomShelter,
   type RouteResult,
   loadRoadNetwork,
+  calculateHaversine,
 } from "./lib/evacuation";
 import {
   TILE_NORMAL,
@@ -79,6 +80,8 @@ import {
   Users,
   BookOpen,
   Home,
+  Edit2,
+  Target,
 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 
@@ -303,6 +306,23 @@ function App() {
   const geoDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [networkFailed, setNetworkFailed] = useState(false);
   const [isSavingShelter, setIsSavingShelter] = useState(false);
+  
+  // ── Admin Ping State ─────────────────────────────────────────────────
+  const [showAdminPingModal, setShowAdminPingModal] = useState<{ id: string; name: string } | null>(null);
+  const [adminPingMessage, setAdminPingMessage] = useState("");
+  const [pingReplies, setPingReplies] = useState<{ id: string; name: string; ts: number }[]>([]);
+  const [pingSentToast, setPingSentToast] = useState<{ name: string; ts: number } | null>(null);
+  
+  // ── Shelter interaction state ──────────────────────────────────────────
+  const [selectedShelterId, setSelectedShelterId] = useState<string | null>(null);
+  const [showEditShelter, setShowEditShelter] = useState(false);
+  const [editShelterData, setEditShelterData] = useState<{
+    id: string; name: string; lat: string; lng: string;
+    capacity: string; radius: string; address: string; customMessage: string;
+  } | null>(null);
+  const [isSavingEditShelter, setIsSavingEditShelter] = useState(false);
+  const [editShelterError, setEditShelterError] = useState<string | null>(null);
+  const [shelterVersion, setShelterVersion] = useState(0);
   const [showLeftSidebar, setShowLeftSidebar] = useState(true);
   const [adminMapBearing, setAdminMapBearing] = useState(0);
   const adminMapRef = useRef<MapRef | null>(null);
@@ -392,6 +412,7 @@ function App() {
     fromName: string;
     role: string;
     fromId: string;
+    message?: string;
   } | null>(null);
   const [hasFamilyPing, setHasFamilyPing] = useState(false);
 
@@ -521,6 +542,10 @@ function App() {
   const hasFirstGPSFixRef = useRef(false);
   // Prevent arrival from firing more than once per session
   const arrivedFiredRef = useRef(false);
+  // Throttle route calculations
+  const lastRouteCalcPosRef = useRef<[number, number] | null>(null);
+  const lastRouteCalcTimeRef = useRef<number>(0);
+  const lastRouteCalcResultsRef = useRef<RouteResult[]>([]);
 
   // Persist
   useEffect(() => {
@@ -667,22 +692,44 @@ function App() {
             hasFirstGPSFixRef.current = true;
             setFlyToPos(newPos);
           }
-          const routeResults = findOptimalEvacuationRoutes(
-            newPos[0],
-            newPos[1],
-          );
-          setRoutes(routeResults);
-          setSelectedRoute(0);
-          setIsCalculating(false);
-          // Only open panel if user hasn't manually closed it
-          if (!panelUserClosedRef.current) {
-            setShowPanel(true);
+          
+          // ── THROTTLE ROUTE CALCULATION ──
+          // Calculate if: (1) no previous calc, OR (2) moved > 15m, OR (3) > 4 seconds passed
+          const now = Date.now();
+          const timeDiff = now - lastRouteCalcTimeRef.current;
+          let movedDist = 0;
+          if (lastRouteCalcPosRef.current) {
+            movedDist = calculateHaversine(
+              lastRouteCalcPosRef.current[0], lastRouteCalcPosRef.current[1],
+              newPos[0], newPos[1]
+            ) * 1000; // convert km to meters
           }
-          saveHistoryRecord(
-            routeResults,
-            tsunamiAlertRef.current ? "simulation" : "real",
-            newPos,
-          );
+          
+          if (!lastRouteCalcPosRef.current || movedDist > 15 || timeDiff >= 4000) {
+            lastRouteCalcPosRef.current = newPos;
+            lastRouteCalcTimeRef.current = now;
+            
+            const routeResults = findOptimalEvacuationRoutes(
+              newPos[0],
+              newPos[1],
+            );
+            lastRouteCalcResultsRef.current = routeResults;
+            
+            setRoutes(routeResults);
+            setSelectedRoute(0);
+            setIsCalculating(false);
+            // Only open panel if user hasn't manually closed it
+            if (!panelUserClosedRef.current) {
+              setShowPanel(true);
+            }
+            saveHistoryRecord(
+              routeResults,
+              tsunamiAlertRef.current ? "simulation" : "real",
+              newPos,
+            );
+          } else {
+            setIsCalculating(false);
+          }
 
           // ── Broadcast Lokasi ke Admin (HANYA saat simulasi / emergency) ──
           if (tsunamiAlertRef.current) {
@@ -781,7 +828,8 @@ function App() {
                 arrivalShownRef.current = true;
                 sessionStorage.setItem('aegisArrivalShown', 'true');
                 setArrivedShelterId(arrived.id);
-                const bestRoute = routeResults[0];
+                
+                const bestRoute = lastRouteCalcResultsRef.current[0];
                 setArrivalSummary({
                   shelter: arrived,
                   distanceKm:
@@ -992,6 +1040,7 @@ function App() {
               fromName: ev.fromName,
               role: ev.role,
               fromId: ev.fromId,
+              message: ev.message,
             });
           }
         } else {
@@ -1002,7 +1051,15 @@ function App() {
     if (event.type === "PING_REPLY") {
       const ev = event as any;
       if (isAdminURL && ev.toId === terminalId) {
-        alert(`✅ PING BALASAN: ${ev.fromName} telah merespons dan mengkonfirmasi bahwa mereka AMAN.`);
+        // Instead of native alert, add to toast queue
+        setPingReplies(prev => {
+          const newReplies = [...prev, { id: ev.fromId, name: ev.fromName, ts: Date.now() }];
+          // Auto remove after 5s
+          setTimeout(() => {
+            setPingReplies(current => current.filter(r => r.ts !== newReplies[newReplies.length - 1].ts));
+          }, 5000);
+          return newReplies;
+        });
       }
     }
     // Track lokasi user aktif untuk peta admin
@@ -1023,6 +1080,22 @@ function App() {
         // Update modal real-time jika sedang menampilkan user yang sama
         setSelectedUserInfo((prev) => prev?.id === ev.id ? { ...updatedUser } : prev);
       }
+    }
+    // Shelter diperbarui oleh admin (dari device lain) — sync tanpa refresh
+    if (event.type === "SHELTER_UPDATED" && event.shelter) {
+      const updated = event.shelter as any;
+      const idx = shelters.findIndex((s) => s.id === updated.id);
+      if (idx !== -1) {
+        shelters[idx] = {
+          ...shelters[idx],
+          name: updated.name ?? shelters[idx].name,
+          capacity: updated.capacity ?? shelters[idx].capacity,
+          radiusMeters: updated.radiusMeters ?? shelters[idx].radiusMeters,
+          address: updated.address ?? shelters[idx].address,
+          customMessage: updated.customMessage !== undefined ? updated.customMessage : shelters[idx].customMessage,
+        };
+      }
+      setShelterVersion((v) => v + 1);
     }
   });
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -1618,7 +1691,7 @@ function App() {
                     </p>
 
                     {/* Shelter name */}
-                    <div className="mb-5 p-4 rounded-2xl bg-emerald-950/60 border border-emerald-800/40">
+                    <div className="mb-4 p-4 rounded-2xl bg-emerald-950/60 border border-emerald-800/40">
                       <div className="flex items-start gap-3">
                         <div className="w-9 h-9 rounded-xl bg-emerald-500/20 flex items-center justify-center shrink-0 mt-0.5">
                           <MapPin className="w-4.5 h-4.5 text-emerald-400" />
@@ -1640,6 +1713,21 @@ function App() {
                         </div>
                       </div>
                     </div>
+
+                    {/* Pesan Khusus Shelter — hanya tampil jika ada isinya */}
+                    {arrivalSummary.shelter.customMessage && (
+                      <div className="mb-4 p-3.5 rounded-2xl bg-amber-950/50 border border-amber-700/40">
+                        <div className="flex items-start gap-2.5">
+                          <div className="w-6 h-6 rounded-lg bg-amber-500/20 flex items-center justify-center shrink-0 mt-0.5">
+                            <Info className="w-3.5 h-3.5 text-amber-400" />
+                          </div>
+                          <div>
+                            <p className="text-[9px] text-amber-400/80 font-bold uppercase tracking-wider mb-1">Pesan dari Petugas Shelter</p>
+                            <p className="text-xs text-amber-100/80 leading-relaxed">{arrivalSummary.shelter.customMessage}</p>
+                          </div>
+                        </div>
+                      </div>
+                    )}
 
                     {/* Stats row */}
                     <div className="grid grid-cols-2 gap-3 mb-6">
@@ -2168,21 +2256,41 @@ function App() {
             )}
 
             {/* Shelters */}
-            {shelters.map((shelter) => (
-              <MapMarker
-                key={shelter.id}
-                longitude={shelter.lng}
-                latitude={shelter.lat}
-              >
-                <MarkerContent>
-                  <div style={{
-                    width:30,height:30,background:'#334155',border:'2.5px solid #fff',borderRadius:'50%',
-                    display:'flex',alignItems:'center',justifyContent:'center',boxShadow:'0 0 12px rgba(0,0,0,0.5)',
-                    fontSize:13,lineHeight:1
-                  }}>🏠</div>
-                </MarkerContent>
-              </MapMarker>
-            ))}
+            {shelters.map((shelter) => {
+              const isSelected = selectedShelterId === shelter.id;
+              return (
+                <MapMarker
+                  key={`${shelter.id}-${shelterVersion}`}
+                  longitude={shelter.lng}
+                  latitude={shelter.lat}
+                  onClick={() => setSelectedShelterId(isSelected ? null : shelter.id)}
+                >
+                  <MarkerContent>
+                    <div style={{
+                      width: 34, height: 34,
+                      background: isSelected ? '#6366f1' : '#334155',
+                      border: `2.5px solid ${isSelected ? '#a5b4fc' : '#fff'}`,
+                      borderRadius: '50%',
+                      display: 'flex', alignItems: 'center', justifyContent: 'center',
+                      boxShadow: isSelected
+                        ? '0 0 18px rgba(99,102,241,0.8), 0 0 6px rgba(0,0,0,0.5)'
+                        : '0 0 12px rgba(0,0,0,0.5)',
+                      fontSize: 14, lineHeight: 1,
+                      cursor: 'pointer',
+                      transition: 'all 0.2s ease',
+                    }}>🏠</div>
+                  </MarkerContent>
+
+                  {/* TOOLTIP on hover */}
+                  <MarkerTooltip>
+                    <p className="font-bold text-xs leading-snug">{shelter.name}</p>
+                    {shelter.address && (
+                      <p className="text-[10px] opacity-70 mt-0.5 leading-snug">{shelter.address}</p>
+                    )}
+                  </MarkerTooltip>
+                </MapMarker>
+              );
+            })}
 
             {/* -- LOKASI USER AKTIF -- */}
             {Object.values(activeUsers).map((u) => (
@@ -2422,26 +2530,18 @@ function App() {
                       <button onClick={() => { setViewport(v => ({ ...v, center: [liveUser.lng, liveUser.lat], zoom: 17 })); setSelectedUserInfo(null); }}
                         className="w-full py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-xl text-[10px] font-bold transition-colors">📍 Fokus ke lokasi ini</button>
                     </div>
-                    {isPinging ? (
-                      <div className="p-3 rounded-2xl bg-amber-900/20 border border-amber-500/30 text-center">
-                        <p className="text-[11px] text-amber-300 font-bold animate-pulse">📡 Ping terkirim ke {liveUser.name}!</p>
-                      </div>
-                    ) : (
-                      <button
-                        onClick={() => {
-                          if (!tsunamiAlert) return;
-                          setIsPinging(true);
-                          aegisApi.adminPing(terminalId, userName || 'Admin', liveUser.id, adminRole)
-                            .catch(() => {})
-                            .finally(() => setTimeout(() => setIsPinging(false), 3000));
-                        }}
-                        disabled={!tsunamiAlert}
-                        className={`w-full py-3.5 rounded-2xl font-black text-sm tracking-wide transition-all flex items-center justify-center gap-2 ${tsunamiAlert ? 'bg-amber-500 hover:bg-amber-400 text-black shadow-[0_4px_20px_rgba(245,158,11,0.4)] active:scale-95' : 'bg-slate-800 text-slate-600 cursor-not-allowed'}`}
-                      >
-                        <Radio className="w-4 h-4" />
-                        {tsunamiAlert ? `KIRIM PING KE ${liveUser.name.toUpperCase()}` : 'PING (Hanya saat Simulasi)'}
-                      </button>
-                    )}
+                    <button
+                      onClick={() => {
+                        if (!tsunamiAlert) return;
+                        setShowAdminPingModal({ id: liveUser.id, name: liveUser.name });
+                        setAdminPingMessage("");
+                      }}
+                      disabled={!tsunamiAlert}
+                      className={`w-full py-3.5 rounded-2xl font-black text-sm tracking-wide transition-all flex items-center justify-center gap-2 ${tsunamiAlert ? 'bg-amber-500 hover:bg-amber-400 text-black shadow-[0_4px_20px_rgba(245,158,11,0.4)] active:scale-95' : 'bg-slate-800 text-slate-600 cursor-not-allowed'}`}
+                    >
+                      <Radio className="w-4 h-4" />
+                      {tsunamiAlert ? `KIRIM PING KE ${liveUser.name.toUpperCase()}` : 'PING (Hanya saat Simulasi)'}
+                    </button>
                   </div>
                 </motion.div>
               </motion.div>
@@ -3376,9 +3476,14 @@ function App() {
               exit={{ scale: 0.9, y: 20 }}
               className="w-full max-w-sm bg-slate-900 border border-slate-700 rounded-2xl p-6 shadow-xl relative"
             >
-              <h2 className="text-lg font-black text-white mb-4">Tambah Shelter Manual</h2>
+              <div className="flex items-center gap-3 mb-4">
+                <div className="w-8 h-8 rounded-xl bg-indigo-500/20 flex items-center justify-center">
+                  <MapPin className="w-4 h-4 text-indigo-400" />
+                </div>
+                <h2 className="text-lg font-black text-white">Tambah Shelter Manual</h2>
+              </div>
               <div className="space-y-3">
-                <input type="text" placeholder="Nama Shelter (Otomatis/Manual)" className="w-full bg-slate-800 text-white rounded-xl px-4 py-2 text-sm" value={newShelter.name} onChange={e => setNewShelter({...newShelter, name: e.target.value})} />
+                <input type="text" placeholder="Nama Shelter (Otomatis/Manual)" className="w-full bg-slate-800 text-white rounded-xl px-4 py-2 text-sm border border-slate-700 focus:border-indigo-500 outline-none transition-colors" value={newShelter.name} onChange={e => setNewShelter({...newShelter, name: e.target.value})} />
                 <button
                   onClick={() => {
                     setPickingLocationMode(true);
@@ -3390,51 +3495,515 @@ function App() {
                   <MapPin className="w-4 h-4" /> Pilih di Peta
                 </button>
                 <div className="flex gap-3">
-                  <input type="number" placeholder="Latitude" className="w-full bg-slate-800 text-white rounded-xl px-4 py-2 text-sm" value={newShelter.lat} onChange={e => setNewShelter({...newShelter, lat: e.target.value})} />
-                  <input type="number" placeholder="Longitude" className="w-full bg-slate-800 text-white rounded-xl px-4 py-2 text-sm" value={newShelter.lng} onChange={e => setNewShelter({...newShelter, lng: e.target.value})} />
+                  <input type="number" placeholder="Latitude" className="w-full bg-slate-800 text-white rounded-xl px-4 py-2 text-sm border border-slate-700 focus:border-indigo-500 outline-none transition-colors" value={newShelter.lat} onChange={e => setNewShelter({...newShelter, lat: e.target.value})} />
+                  <input type="number" placeholder="Longitude" className="w-full bg-slate-800 text-white rounded-xl px-4 py-2 text-sm border border-slate-700 focus:border-indigo-500 outline-none transition-colors" value={newShelter.lng} onChange={e => setNewShelter({...newShelter, lng: e.target.value})} />
                 </div>
                 <div className="flex gap-3">
-                  <input type="number" placeholder="Kapasitas" className="w-full bg-slate-800 text-white rounded-xl px-4 py-2 text-sm" value={newShelter.capacity} onChange={e => setNewShelter({...newShelter, capacity: e.target.value})} />
-                  <input type="number" placeholder="Radius Aman (m)" className="w-full bg-slate-800 text-white rounded-xl px-4 py-2 text-sm" value={newShelter.radius} onChange={e => setNewShelter({...newShelter, radius: e.target.value})} />
+                  <input type="number" placeholder="Kapasitas" className="w-full bg-slate-800 text-white rounded-xl px-4 py-2 text-sm border border-slate-700 focus:border-indigo-500 outline-none transition-colors" value={newShelter.capacity} onChange={e => setNewShelter({...newShelter, capacity: e.target.value})} />
+                  <input type="number" placeholder="Radius Aman (m)" className="w-full bg-slate-800 text-white rounded-xl px-4 py-2 text-sm border border-slate-700 focus:border-indigo-500 outline-none transition-colors" value={newShelter.radius} onChange={e => setNewShelter({...newShelter, radius: e.target.value})} />
                 </div>
               </div>
               <div className="flex items-center gap-3 mt-6">
-                <button onClick={() => setShowAddShelter(false)} className="flex-1 py-3 text-slate-400 font-bold text-sm bg-slate-800 rounded-xl hover:bg-slate-700">Batal</button>
-                <button 
+                <button onClick={() => setShowAddShelter(false)} className="flex-1 py-3 text-slate-400 font-bold text-sm bg-slate-800 rounded-xl hover:bg-slate-700 transition-colors">Batal</button>
+                <button
                   disabled={isSavingShelter}
                   onClick={async () => {
                     if(!newShelter.name || !newShelter.lat || !newShelter.lng) return alert('Data tidak lengkap');
-                    
+
                     setIsSavingShelter(true);
+
+                    // Reverse geocode to get address
+                    let address = '';
+                    try {
+                      const isLocalhost = window.location.origin.includes('localhost');
+                      const API_URL = isLocalhost ? (import.meta.env.VITE_API_URL || 'https://tsunami-dimss.vercel.app') : '';
+                      const geo = await fetch(`${API_URL}/api/geocode/reverse?lat=${newShelter.lat}&lng=${newShelter.lng}`);
+                      if (geo.ok) {
+                        const gd = await geo.json();
+                        address = [gd.road, gd.suburb].filter(Boolean).join(', ');
+                      }
+                    } catch {}
+
                     const shelterPayload = {
-                      id: 'C'+Date.now(),
+                      id: 'C' + Date.now(),
                       name: newShelter.name,
                       lat: parseFloat(newShelter.lat),
                       lng: parseFloat(newShelter.lng),
                       capacity: parseInt(newShelter.capacity) || 0,
-                      radiusMeters: parseInt(newShelter.radius) || 50
+                      radiusMeters: parseInt(newShelter.radius) || 50,
+                      address: address || undefined,
                     };
-                    
+
                     const { ok } = await aegisApi.addCustomShelter(shelterPayload);
                     setIsSavingShelter(false);
 
                     if (ok) {
                       addCustomShelter(shelterPayload as any);
+                      setShelterVersion(v => v + 1);
                       setShowAddShelter(false);
                       setNewShelter({ name: '', lat: '', lng: '', capacity: '', radius: '50' });
                     } else {
                       alert('Gagal menyimpan shelter ke server. Silakan coba lagi.');
                     }
-                  }} 
-                  className="flex-1 py-3 text-white font-bold text-sm bg-indigo-600 rounded-xl hover:bg-indigo-500 disabled:opacity-50 disabled:cursor-not-allowed"
+                  }}
+                  className="flex-1 py-3 text-white font-bold text-sm bg-indigo-600 rounded-xl hover:bg-indigo-500 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
                 >
-                  {isSavingShelter ? 'Menyimpan...' : 'Simpan'}
+                  {isSavingShelter ? (
+                    <span className="flex items-center justify-center gap-2">
+                      <span className="w-3.5 h-3.5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                      Menyimpan...
+                    </span>
+                  ) : 'Simpan'}
                 </button>
               </div>
             </motion.div>
           </motion.div>
         )}
       </AnimatePresence>
+
+      {/* ─── SHELTER DETAIL PANEL ─── */}
+      <AnimatePresence>
+        {selectedShelterId && !showEditShelter && (() => {
+          const s = shelters.find(x => x.id === selectedShelterId);
+          if (!s) return null;
+          const isCustom = s.id.startsWith('C');
+          return (
+            <motion.div
+              key={`shelter-detail-${s.id}`}
+              initial={{ opacity: 0, y: 24, scale: 0.96 }}
+              animate={{ opacity: 1, y: 0, scale: 1 }}
+              exit={{ opacity: 0, y: 24, scale: 0.96 }}
+              transition={{ type: 'spring', damping: 28, stiffness: 320 }}
+              className="fixed bottom-[72px] md:bottom-6 left-1/2 md:left-auto -translate-x-1/2 md:translate-x-0 md:right-6 z-[600] w-[92vw] max-w-sm"
+            >
+              <div className="bg-[#0d1929]/95 backdrop-blur-md border border-indigo-500/30 rounded-2xl shadow-[0_8px_40px_rgba(99,102,241,0.25)] overflow-hidden">
+                {/* Top accent */}
+                <div className="h-0.5 w-full bg-gradient-to-r from-indigo-700 via-indigo-400 to-indigo-700" />
+
+                {/* Header */}
+                <div className="flex items-start justify-between px-4 pt-4 pb-2">
+                  <div className="flex items-center gap-3 min-w-0">
+                    <div className="w-10 h-10 rounded-xl bg-indigo-500/20 border border-indigo-500/30 flex items-center justify-center text-xl shrink-0">🏠</div>
+                    <div className="min-w-0">
+                      <p className="text-[9px] text-indigo-400 font-bold uppercase tracking-widest mb-0.5">
+                        {isCustom ? 'SHELTER KUSTOM' : 'SHELTER RESMI'}
+                      </p>
+                      <h3 className="text-white font-black text-sm leading-tight truncate">{s.name}</h3>
+                    </div>
+                  </div>
+                  <button
+                    onClick={() => setSelectedShelterId(null)}
+                    className="w-7 h-7 rounded-lg bg-slate-800 hover:bg-slate-700 flex items-center justify-center text-slate-400 hover:text-white transition-colors shrink-0 ml-2"
+                  >
+                    <X className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+
+                {/* Info grid */}
+                <div className="px-4 pb-4 space-y-2.5">
+                  {/* Address */}
+                  {s.address && (
+                    <div className="flex items-start gap-2.5 p-3 rounded-xl bg-slate-900/60 border border-slate-800">
+                      <MapPin className="w-3.5 h-3.5 text-indigo-400 shrink-0 mt-0.5" />
+                      <div className="min-w-0">
+                        <p className="text-[9px] text-slate-500 uppercase tracking-wider font-bold mb-0.5">ALAMAT</p>
+                        <p className="text-xs text-slate-300 leading-snug">{s.address}</p>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Stats row */}
+                  <div className="grid grid-cols-3 gap-2">
+                    <div className="p-2.5 rounded-xl bg-slate-900/60 border border-slate-800 text-center">
+                      <p className="text-[8px] text-slate-500 uppercase tracking-wider font-bold mb-1">KAPASITAS</p>
+                      <p className="text-sm font-black text-white">{s.capacity.toLocaleString('id-ID')}</p>
+                      <p className="text-[8px] text-slate-600 font-bold">orang</p>
+                    </div>
+                    <div className="p-2.5 rounded-xl bg-slate-900/60 border border-slate-800 text-center">
+                      <p className="text-[8px] text-slate-500 uppercase tracking-wider font-bold mb-1">RADIUS GPS</p>
+                      <p className="text-sm font-black text-emerald-400">{s.radiusMeters ?? 50}</p>
+                      <p className="text-[8px] text-slate-600 font-bold">meter</p>
+                    </div>
+                    <div className="p-2.5 rounded-xl bg-slate-900/60 border border-slate-800 text-center">
+                      <p className="text-[8px] text-slate-500 uppercase tracking-wider font-bold mb-1">KOORDINAT</p>
+                      <p className="text-[9px] font-mono text-slate-400">{s.lat.toFixed(4)}</p>
+                      <p className="text-[9px] font-mono text-slate-400">{s.lng.toFixed(4)}</p>
+                    </div>
+                  </div>
+
+                  {/* Actions */}
+                  <div className="flex gap-2 pt-1">
+                    <button
+                      onClick={() => {
+                        setViewport(v => ({ ...v, center: [s.lng, s.lat], zoom: 17 }));
+                      }}
+                      className="flex-1 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 transition-colors"
+                    >
+                      <Target className="w-3.5 h-3.5" /> Fokus
+                    </button>
+                    {isCustom && (
+                      <button
+                        onClick={() => {
+                          setEditShelterData({
+                            id: s.id,
+                            name: s.name,
+                            lat: String(s.lat),
+                            lng: String(s.lng),
+                            capacity: String(s.capacity),
+                            radius: String(s.radiusMeters ?? 50),
+                            address: s.address ?? '',
+                            customMessage: s.customMessage ?? '',
+                          });
+                          setEditShelterError(null);
+                          setShowEditShelter(true);
+                        }}
+                        className="flex-1 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 transition-colors shadow-[0_2px_12px_rgba(99,102,241,0.4)]"
+                      >
+                        <Edit2 className="w-3.5 h-3.5" /> Edit Shelter
+                      </button>
+                    )}
+                  </div>
+                </div>
+              </div>
+            </motion.div>
+          );
+        })()}
+      </AnimatePresence>
+
+      {/* ─── EDIT SHELTER MODAL ─── */}
+      <AnimatePresence>
+        {showEditShelter && editShelterData && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-[3100] flex items-center justify-center bg-black/80 backdrop-blur-md p-4"
+          >
+            <motion.div
+              initial={{ scale: 0.9, y: 20 }}
+              animate={{ scale: 1, y: 0 }}
+              exit={{ scale: 0.9, y: 20 }}
+              className="w-full max-w-sm bg-[#0d1929] border border-indigo-500/30 rounded-2xl shadow-[0_20px_60px_rgba(99,102,241,0.3)] overflow-hidden max-h-[92vh] flex flex-col"
+            >
+              {/* Top accent */}
+              <div className="h-0.5 w-full bg-gradient-to-r from-indigo-700 via-indigo-400 to-indigo-700 shrink-0" />
+
+              <div className="p-5 overflow-y-auto custom-scrollbar flex-1">
+                {/* Header */}
+                <div className="flex items-center justify-between mb-5">
+                  <div className="flex items-center gap-3">
+                    <div className="w-9 h-9 rounded-xl bg-indigo-500/20 border border-indigo-500/30 flex items-center justify-center shrink-0">
+                      <Edit2 className="w-4 h-4 text-indigo-400" />
+                    </div>
+                    <div>
+                      <h2 className="text-base font-black text-white leading-tight">Edit Shelter</h2>
+                      <p className="text-[9px] text-slate-500 font-mono mt-0.5 truncate max-w-[160px]">{editShelterData.id}</p>
+                    </div>
+                  </div>
+                  <button
+                    onClick={() => { setShowEditShelter(false); setEditShelterData(null); setEditShelterError(null); }}
+                    className="w-7 h-7 rounded-lg bg-slate-800 hover:bg-slate-700 flex items-center justify-center text-slate-400 hover:text-white transition-colors shrink-0"
+                  >
+                    <X className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+
+                {/* Inline error banner */}
+                <AnimatePresence>
+                  {editShelterError && (
+                    <motion.div
+                      initial={{ opacity: 0, height: 0, marginBottom: 0 }}
+                      animate={{ opacity: 1, height: 'auto', marginBottom: 12 }}
+                      exit={{ opacity: 0, height: 0, marginBottom: 0 }}
+                      className="flex items-start gap-2.5 p-3 rounded-xl bg-red-950/60 border border-red-700/50"
+                    >
+                      <AlertTriangle className="w-3.5 h-3.5 text-red-400 shrink-0 mt-0.5" />
+                      <p className="text-xs text-red-300 leading-snug flex-1">{editShelterError}</p>
+                      <button onClick={() => setEditShelterError(null)} className="text-red-500 hover:text-red-300 shrink-0">
+                        <X className="w-3 h-3" />
+                      </button>
+                    </motion.div>
+                  )}
+                </AnimatePresence>
+
+                {/* Form */}
+                <div className="space-y-4">
+                  {/* Nama */}
+                  <div>
+                    <label className="block text-[9px] text-slate-500 font-bold uppercase tracking-widest mb-1.5">Nama Shelter</label>
+                    <input
+                      type="text"
+                      className="w-full bg-slate-800/80 text-white rounded-xl px-4 py-2.5 text-sm border border-slate-700 focus:border-indigo-500 outline-none transition-colors"
+                      value={editShelterData.name}
+                      onChange={e => setEditShelterData({ ...editShelterData, name: e.target.value })}
+                    />
+                  </div>
+
+                  {/* Kapasitas */}
+                  <div>
+                    <label className="block text-[9px] text-slate-500 font-bold uppercase tracking-widest mb-1.5">Kapasitas (orang)</label>
+                    <input
+                      type="number"
+                      min="0"
+                      className="w-full bg-slate-800/80 text-white rounded-xl px-4 py-2.5 text-sm border border-slate-700 focus:border-indigo-500 outline-none transition-colors"
+                      value={editShelterData.capacity}
+                      onChange={e => setEditShelterData({ ...editShelterData, capacity: e.target.value })}
+                    />
+                  </div>
+
+                  {/* Radius GPS — slider + angka */}
+                  <div>
+                    <div className="flex items-center justify-between mb-2">
+                      <label className="text-[9px] text-slate-500 font-bold uppercase tracking-widest">Radius Aman GPS Auto-Stop</label>
+                      <div className="flex items-center gap-1">
+                        <input
+                          type="number"
+                          min="10"
+                          max="5000"
+                          className="w-16 bg-slate-800 text-indigo-300 font-black text-xs text-right rounded-lg px-2 py-1 border border-slate-700 focus:border-indigo-500 outline-none"
+                          value={editShelterData.radius}
+                          onChange={e => setEditShelterData({ ...editShelterData, radius: e.target.value })}
+                        />
+                        <span className="text-[9px] text-slate-500 font-bold">m</span>
+                      </div>
+                    </div>
+                    <input
+                      type="range"
+                      min="10"
+                      max="500"
+                      step="5"
+                      value={Math.min(parseInt(editShelterData.radius) || 50, 500)}
+                      onChange={e => setEditShelterData({ ...editShelterData, radius: e.target.value })}
+                      className="w-full accent-indigo-500"
+                    />
+                    <div className="flex justify-between text-[8px] text-slate-600 font-bold uppercase tracking-wider mt-0.5">
+                      <span>10 m</span>
+                      <span className="text-slate-500">Saat ini: {editShelterData.radius} m</span>
+                      <span>500+ m</span>
+                    </div>
+                    <p className="text-[10px] text-slate-600 mt-1.5 leading-relaxed">
+                      Navigasi berhenti otomatis saat user memasuki radius ini. Sesuaikan dengan kondisi lapangan shelter.
+                    </p>
+                  </div>
+
+                  {/* Alamat */}
+                  <div>
+                    <label className="block text-[9px] text-slate-500 font-bold uppercase tracking-widest mb-1.5">Alamat Singkat</label>
+                    <input
+                      type="text"
+                      placeholder="Contoh: Jl. Chairil Anwar, Besusu Tengah"
+                      className="w-full bg-slate-800/80 text-white rounded-xl px-4 py-2.5 text-sm border border-slate-700 focus:border-indigo-500 outline-none transition-colors placeholder:text-slate-600"
+                      value={editShelterData.address}
+                      onChange={e => setEditShelterData({ ...editShelterData, address: e.target.value })}
+                    />
+                  </div>
+
+                  {/* Pesan Khusus */}
+                  <div>
+                    <label className="block text-[9px] text-slate-500 font-bold uppercase tracking-widest mb-1.5">
+                      Pesan Khusus Shelter
+                      <span className="ml-1.5 text-slate-600 normal-case font-normal">(opsional)</span>
+                    </label>
+                    <textarea
+                      rows={3}
+                      placeholder="Contoh: Daftar ke petugas di pintu masuk. Bawa kartu identitas. Area evakuasi keluarga di Gedung B."
+                      className="w-full bg-slate-800/80 text-white rounded-xl px-4 py-2.5 text-sm border border-slate-700 focus:border-indigo-500 outline-none transition-colors placeholder:text-slate-600 resize-none leading-relaxed"
+                      value={editShelterData.customMessage}
+                      onChange={e => setEditShelterData({ ...editShelterData, customMessage: e.target.value })}
+                    />
+                    <p className="text-[10px] text-slate-600 mt-1 leading-relaxed">
+                      Pesan ini ditampilkan ke pengguna saat mereka tiba di shelter ini.
+                    </p>
+                  </div>
+
+                  {/* Read-only coords */}
+                  <div className="p-3 rounded-xl bg-slate-900/50 border border-slate-800">
+                    <p className="text-[9px] text-slate-600 font-bold uppercase tracking-widest mb-1">Koordinat (read-only)</p>
+                    <p className="text-xs font-mono text-slate-500">{parseFloat(editShelterData.lat).toFixed(6)}, {parseFloat(editShelterData.lng).toFixed(6)}</p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Actions — sticky bottom */}
+              <div className="flex gap-3 p-5 pt-3 shrink-0 border-t border-slate-800/60">
+                <button
+                  onClick={() => { setShowEditShelter(false); setEditShelterData(null); setEditShelterError(null); }}
+                  className="flex-1 py-3 text-slate-400 font-bold text-sm bg-slate-800 rounded-xl hover:bg-slate-700 transition-colors"
+                >
+                  Batal
+                </button>
+                <button
+                  disabled={isSavingEditShelter}
+                  onClick={async () => {
+                    if (!editShelterData.name.trim()) {
+                      setEditShelterError('Nama shelter tidak boleh kosong.');
+                      return;
+                    }
+                    const radiusVal = parseInt(editShelterData.radius);
+                    if (isNaN(radiusVal) || radiusVal < 10) {
+                      setEditShelterError('Radius GPS minimal 10 meter.');
+                      return;
+                    }
+
+                    setIsSavingEditShelter(true);
+                    setEditShelterError(null);
+
+                    const fields = {
+                      name: editShelterData.name.trim(),
+                      capacity: parseInt(editShelterData.capacity) || 0,
+                      radiusMeters: radiusVal,
+                      address: editShelterData.address.trim() || undefined,
+                      customMessage: editShelterData.customMessage.trim() || undefined,
+                    };
+
+                    const { ok } = await aegisApi.updateCustomShelter(editShelterData.id, fields);
+                    setIsSavingEditShelter(false);
+
+                    if (ok) {
+                      // Update in-memory shelter array immediately (no reload needed)
+                      const idx = shelters.findIndex(x => x.id === editShelterData.id);
+                      if (idx !== -1) {
+                        shelters[idx] = {
+                          ...shelters[idx],
+                          name: fields.name,
+                          capacity: fields.capacity,
+                          radiusMeters: fields.radiusMeters,
+                          address: fields.address,
+                          customMessage: fields.customMessage,
+                        };
+                      }
+                      setShelterVersion(v => v + 1);
+                      setShowEditShelter(false);
+                      setEditShelterData(null);
+                      setEditShelterError(null);
+                      // Re-select so detail panel shows updated data
+                      setSelectedShelterId(editShelterData.id);
+                    } else {
+                      setEditShelterError('Gagal menyimpan perubahan. Periksa koneksi dan coba lagi.');
+                    }
+                  }}
+                  className="flex-1 py-3 text-white font-bold text-sm bg-indigo-600 rounded-xl hover:bg-indigo-500 disabled:opacity-50 disabled:cursor-not-allowed transition-colors shadow-[0_2px_12px_rgba(99,102,241,0.4)]"
+                >
+                  {isSavingEditShelter ? (
+                    <span className="flex items-center justify-center gap-2">
+                      <span className="w-3.5 h-3.5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                      Menyimpan...
+                    </span>
+                  ) : 'Simpan Perubahan'}
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* ─── ADMIN PING MODAL (Admin to User) ─── */}
+      <AnimatePresence>
+        {showAdminPingModal && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-[3200] flex items-center justify-center bg-black/80 backdrop-blur-md p-4"
+          >
+            <motion.div
+              initial={{ scale: 0.9, y: 20 }}
+              animate={{ scale: 1, y: 0 }}
+              exit={{ scale: 0.9, y: 20 }}
+              className="w-full max-w-xs bg-[#0d1929] border border-amber-500/30 rounded-2xl shadow-[0_20px_60px_rgba(245,158,11,0.2)] overflow-hidden"
+            >
+              <div className="h-0.5 w-full bg-gradient-to-r from-amber-700 via-amber-400 to-amber-700" />
+              <div className="p-5">
+                <div className="flex items-center gap-3 mb-4">
+                  <div className="w-10 h-10 rounded-xl bg-amber-500/20 border border-amber-500/30 flex items-center justify-center">
+                    <Radio className="w-5 h-5 text-amber-400 animate-pulse" />
+                  </div>
+                  <div>
+                    <h2 className="text-sm font-black text-white leading-tight">Kirim Ping Darurat</h2>
+                    <p className="text-[10px] text-amber-300/70 uppercase tracking-widest font-bold mt-0.5">Ke: {showAdminPingModal.name}</p>
+                  </div>
+                </div>
+
+                <p className="text-xs text-slate-400 mb-4 leading-relaxed">
+                  Ping akan memunculkan peringatan layar penuh di perangkat pengguna untuk memastikan kondisi mereka aman.
+                </p>
+
+                <div className="mb-5">
+                  <label className="block text-[9px] text-slate-500 font-bold uppercase tracking-widest mb-1.5">
+                    Pesan Tambahan <span className="normal-case font-normal">(opsional)</span>
+                  </label>
+                  <textarea
+                    rows={2}
+                    placeholder="Contoh: Apakah Anda terjebak? Butuh bantuan medis?"
+                    value={adminPingMessage}
+                    onChange={e => setAdminPingMessage(e.target.value)}
+                    className="w-full bg-slate-900/80 text-white rounded-xl px-3 py-2.5 text-xs border border-slate-700 focus:border-amber-500 outline-none transition-colors placeholder:text-slate-600 resize-none"
+                  />
+                </div>
+
+                <div className="flex gap-2.5">
+                  <button
+                    onClick={() => setShowAdminPingModal(null)}
+                    className="flex-1 py-2.5 text-slate-400 font-bold text-xs bg-slate-800 hover:bg-slate-700 rounded-xl transition-colors"
+                  >
+                    Batal
+                  </button>
+                  <button
+                    onClick={() => {
+                      aegisApi.adminPing(terminalId, userName || 'Admin', showAdminPingModal.id, adminRole, adminPingMessage || undefined).catch(() => {});
+                      setPingSentToast({ name: showAdminPingModal.name, ts: Date.now() });
+                      setTimeout(() => setPingSentToast(null), 3000);
+                      setShowAdminPingModal(null);
+                    }}
+                    className="flex-[2] py-2.5 text-black font-black text-xs tracking-wider bg-amber-500 hover:bg-amber-400 rounded-xl shadow-[0_2px_12px_rgba(245,158,11,0.4)] transition-all flex items-center justify-center gap-1.5"
+                  >
+                    <Radio className="w-3.5 h-3.5" />
+                    KIRIM PING
+                  </button>
+                </div>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* ─── PING SENT TOAST (Admin side) ─── */}
+      <AnimatePresence>
+        {pingSentToast && (
+          <motion.div
+            initial={{ opacity: 0, y: 20, scale: 0.9 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, scale: 0.9 }}
+            className="fixed bottom-6 left-1/2 -translate-x-1/2 z-[3300] bg-amber-500 text-black px-4 py-2.5 rounded-full shadow-[0_10px_40px_rgba(245,158,11,0.4)] flex items-center gap-2"
+          >
+            <CheckCircle2 className="w-4 h-4 shrink-0" />
+            <p className="text-xs font-black tracking-wide">Ping terkirim ke {pingSentToast.name}!</p>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* ─── PING REPLIES TOAST CONTAINER (Admin side) ─── */}
+      <div className="fixed bottom-6 right-6 z-[3300] flex flex-col gap-2.5 pointer-events-none">
+        <AnimatePresence>
+          {pingReplies.map(reply => (
+            <motion.div
+              key={reply.ts}
+              initial={{ opacity: 0, x: 50, scale: 0.9 }}
+              animate={{ opacity: 1, x: 0, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.9 }}
+              className="bg-emerald-950/90 border border-emerald-500/40 text-white p-3 rounded-2xl shadow-[0_10px_40px_rgba(16,185,129,0.3)] flex items-center gap-3 w-64 pointer-events-auto backdrop-blur-md"
+            >
+              <div className="w-8 h-8 rounded-full bg-emerald-500/20 flex items-center justify-center shrink-0">
+                <Check className="w-4 h-4 text-emerald-400" />
+              </div>
+              <div className="min-w-0">
+                <p className="text-[9px] text-emerald-400 font-bold uppercase tracking-widest">Balasan Ping</p>
+                <p className="text-xs font-bold truncate">{reply.name} <span className="font-normal text-emerald-200">Aman.</span></p>
+              </div>
+            </motion.div>
+          ))}
+        </AnimatePresence>
+      </div>
     </div>
   );
 }

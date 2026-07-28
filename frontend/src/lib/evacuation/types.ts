@@ -11,7 +11,9 @@ export interface Shelter extends Point {
   id: string;
   name: string;
   capacity: number;
-  radiusMeters?: number; // Custom radius kedatangan untuk masing-masing shelter
+  radiusMeters?: number;  // Custom radius kedatangan untuk masing-masing shelter
+  address?: string;       // Alamat singkat dari reverse geocoding (hanya custom shelters)
+  customMessage?: string; // Pesan khusus dari admin, ditampilkan saat user tiba di shelter ini
 }
 
 export interface RoadNode extends Point {

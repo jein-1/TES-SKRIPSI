@@ -16,7 +16,8 @@ export interface AegisSyncEvent {
     | "PING"
     | "PING_REPLY"
     | "LOCATION_UPDATE"
-    | "SHELTER_ADDED";
+    | "SHELTER_ADDED"
+    | "SHELTER_UPDATED";
   fromId?: string;
   fromName?: string;
   toId?: string;
@@ -100,11 +101,11 @@ export const aegisApi = {
     });
   },
 
-  adminPing: async (fromId: string, fromName: string, toId: string, role: string) => {
+  adminPing: async (fromId: string, fromName: string, toId: string, role: string, message?: string) => {
     await broadcastChannel.send({
       type: "broadcast",
       event: "PING",
-      payload: { fromId, fromName, toId, role }, // using broadcast since serverless is slow
+      payload: { fromId, fromName, toId, role, message }, // using broadcast since serverless is slow
     });
   },
 
@@ -181,7 +182,8 @@ export const aegisApi = {
           lat: shelter.lat,
           lng: shelter.lng,
           capacity: shelter.capacity,
-          radiusMeters: shelter.radiusMeters ?? 50
+          radiusMeters: shelter.radiusMeters ?? 50,
+          address: shelter.address ?? null,
         }),
       });
 
@@ -202,12 +204,56 @@ export const aegisApi = {
     }
   },
 
+  /** Admin: update fields shelter custom di Supabase */
+  updateCustomShelter: async (
+    id: string,
+    fields: { name?: string; capacity?: number; radiusMeters?: number; address?: string; customMessage?: string }
+  ): Promise<{ ok: boolean }> => {
+    try {
+      const token = sessionStorage.getItem("aegisJWT");
+      if (!token) return { ok: false };
+
+      const isLocalhost = typeof window !== 'undefined' && window.location.origin.includes('localhost');
+      const API_URL = isLocalhost ? (import.meta.env.VITE_API_URL || "https://tsunami-dimss.vercel.app") : "";
+      const res = await fetch(`${API_URL}/api/shelters/update`, {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${token}`
+        },
+        body: JSON.stringify({ id, ...fields }),
+      });
+
+      if (!res.ok) {
+        console.error("[AegisSync] updateCustomShelter error:", await res.text());
+        return { ok: false };
+      }
+
+      // Server-side already broadcasts SHELTER_UPDATED on aegis-events.
+      // Broadcast here as client-side fallback in case the server broadcast
+      // doesn't reach other tabs in the same browser (different subscription scope).
+      const resData = await res.json().catch(() => ({}));
+      if (resData?.shelter) {
+        await broadcastChannel.send({
+          type: "broadcast",
+          event: "SHELTER_UPDATED",
+          payload: { shelter: resData.shelter },
+        });
+      }
+
+      return { ok: true };
+    } catch (e) {
+      console.error("[AegisSync] updateCustomShelter exception:", e);
+      return { ok: false };
+    }
+  },
+
   /** Semua device: ambil semua custom shelter dari Supabase saat load */
   fetchCustomShelters: async (): Promise<Shelter[]> => {
     try {
       const { data, error } = await supabase
         .from("custom_shelters")
-        .select("id, name, lat, lng, capacity, radius_meters")
+        .select("id, name, lat, lng, capacity, radius_meters, address, custom_message")
         .order("created_at", { ascending: true });
       if (error || !data) return [];
       return data.map((row: any) => ({
@@ -217,6 +263,8 @@ export const aegisApi = {
         lng: row.lng,
         capacity: row.capacity,
         radiusMeters: row.radius_meters,
+        address: row.address ?? undefined,
+        customMessage: row.custom_message ?? undefined,
       }));
     } catch {
       return [];
@@ -269,7 +317,7 @@ const tsunamiChannel = supabase
   )
   .subscribe();
 
-// Realtime listener untuk INSERT ke custom_shelters
+// Realtime listener untuk INSERT & UPDATE ke custom_shelters (via Postgres Changes)
 const customSheltersChannel = supabase
   .channel("public:custom_shelters")
   .on(
@@ -284,8 +332,28 @@ const customSheltersChannel = supabase
         lng: row.lng,
         capacity: row.capacity,
         radiusMeters: row.radius_meters,
+        address: row.address ?? undefined,
+        customMessage: row.custom_message ?? undefined,
       };
       listeners.forEach((fn) => fn({ type: "SHELTER_ADDED", shelter }));
+    }
+  )
+  .on(
+    "postgres_changes",
+    { event: "UPDATE", schema: "public", table: "custom_shelters" },
+    (payload) => {
+      const row = payload.new;
+      const shelter: Shelter = {
+        id: row.id,
+        name: row.name,
+        lat: row.lat,
+        lng: row.lng,
+        capacity: row.capacity,
+        radiusMeters: row.radius_meters,
+        address: row.address ?? undefined,
+        customMessage: row.custom_message ?? undefined,
+      };
+      listeners.forEach((fn) => fn({ type: "SHELTER_UPDATED", shelter }));
     }
   )
   .subscribe();
@@ -308,6 +376,9 @@ broadcastChannel
   })
   .on("broadcast", { event: "SHELTER_ADDED" }, (payload) => {
     listeners.forEach((fn) => fn({ type: "SHELTER_ADDED", ...payload.payload }));
+  })
+  .on("broadcast", { event: "SHELTER_UPDATED" }, (payload) => {
+    listeners.forEach((fn) => fn({ type: "SHELTER_UPDATED", ...payload.payload }));
   })
   .subscribe();
 

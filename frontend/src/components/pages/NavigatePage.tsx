@@ -21,7 +21,7 @@ interface Props {
   tsunamiAlert: boolean
   userPosition: [number, number] | null
   onBack?: () => void
-  adminPing?: { fromName: string; role: string; fromId: string } | null
+  adminPing?: { fromName: string; role: string; fromId: string; message?: string } | null
   onAdminPingDismiss?: () => void
   onStartGps?: () => void
   // BMKG — passed from App.tsx (single source of truth with localStorage persistence)
@@ -552,6 +552,14 @@ export default function NavigatePage({ routes, selectedRoute, tsunamiAlert, user
                 <p className="text-white font-black text-sm">{adminPing.fromName}</p>
                 <p className="text-[11px] text-red-300/70 mt-0.5">{adminPing.role}</p>
               </div>
+              
+              {adminPing.message && (
+                <div className="w-full p-3 rounded-2xl bg-amber-950/40 border border-amber-800/40 mb-4 text-left">
+                  <p className="text-[9px] text-amber-500 uppercase tracking-widest font-bold mb-1">Pesan Tambahan</p>
+                  <p className="text-xs text-amber-100/90 leading-relaxed italic">"{adminPing.message}"</p>
+                </div>
+              )}
+              
               <p className="text-xs text-slate-400 mb-6 leading-relaxed">
                 Tim petugas sedang memantau situasi Anda. Konfirmasi bahwa Anda aman dan sedang dalam proses evakuasi.
               </p>
