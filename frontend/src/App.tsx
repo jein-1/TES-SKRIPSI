@@ -2417,7 +2417,13 @@ function App() {
                       properties: { id: zone.id },
                       geometry: {
                         type: 'Polygon',
-                        coordinates: [zone.coords.map(c => [c[1], c[0]])] // [lat, lng] to [lng, lat]
+                        coordinates: [(() => {
+                          const ring = zone.coords.map(c => [c[1], c[0]]);
+                          const first = ring[0], last = ring[ring.length - 1];
+                          if (!first || !last) return ring;
+                          if (first[0] !== last[0] || first[1] !== last[1]) ring.push([first[0], first[1]]);
+                          return ring;
+                        })()]
                       }
                     }}
                     fillPaint={{ 'fill-color': tsunamiAlert ? '#ff0000' : color, 'fill-opacity': tsunamiAlert ? 0.35 : (isSelected ? 0.5 : 0.35) }}
