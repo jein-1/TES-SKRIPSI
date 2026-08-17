@@ -447,42 +447,7 @@ function App() {
         if (markerJustDraggedRef.current) return;
         const lat = e.lngLat.lat;
         const lng = e.lngLat.lng;
-        setDrawingZoneCoords(prev => {
-          if (prev.length < 2) return [...prev, [lat, lng]];
-          // Smart insertion: find the nearest existing segment and insert there
-          // so new points always end up between their neighbours (no cross-lines).
-          const ptSegDistSq = (
-            p: [number, number],
-            a: [number, number],
-            b: [number, number],
-          ): number => {
-            const ax = a[1], ay = a[0], bx = b[1], by = b[0], px = lng, py = lat;
-            const dx = bx - ax, dy = by - ay;
-            const lenSq = dx * dx + dy * dy;
-            if (lenSq === 0) return (px - ax) ** 2 + (py - ay) ** 2;
-            const t = Math.max(0, Math.min(1, ((px - ax) * dx + (py - ay) * dy) / lenSq));
-            return (px - (ax + t * dx)) ** 2 + (py - (ay + t * dy)) ** 2;
-          };
-          let minDist = Infinity;
-          let insertAt = prev.length; // default: append
-          for (let i = 0; i < prev.length - 1; i++) {
-            const d = ptSegDistSq([lat, lng], prev[i], prev[i + 1]);
-            if (d < minDist) { minDist = d; insertAt = i + 1; }
-          }
-          const next = [...prev];
-          next.splice(insertAt, 0, [lat, lng]);
-          // Shift manualBackOverrides indices >= insertAt up by 1
-          setManualBackOverrides(prev2 => {
-            const shifted: Record<number, [number, number]> = {};
-            for (const k in prev2) {
-              const ki = Number(k);
-              if (ki < insertAt) shifted[ki] = prev2[ki];
-              else shifted[ki + 1] = prev2[ki];
-            }
-            return shifted;
-          });
-          return next;
-        });
+        setDrawingZoneCoords(prev => [...prev, [lat, lng]]);
       };
       map.on('click', handleClick);
       return () => {
@@ -2475,22 +2440,21 @@ function App() {
               </>
             )}
 
-            {/* Drawing Zone Live Rendering — uses buildZonePolygon for accurate preview.
-                Key includes flip+length so MapLibre remounts the layer cleanly when
-                data changes, fixing the "disappear on zoom-out" bug. */}
-            {drawingZoneCoords.length >= 2 && drawingZoneBackCoords.length >= 2 && (() => {
-              const ring = buildZonePolygon(drawingZoneCoords, drawingZoneBackCoords);
+            {/* Drawing Zone Live Rendering — only while drawingZoneMode is active.
+                Uses MultiPolygon quads (one per segment pair) instead of a single
+                closed ring, so fill is always correct even on curved coastlines. */}
+            {drawingZoneMode && drawingZoneCoords.length >= 2 && drawingZoneBackCoords.length >= 2 && (() => {
+              const nF = drawingZoneCoords.length;
+              const front = drawingZoneCoords;               // [lat,lng]
+              const back  = drawingZoneBackCoords;           // [lat,lng], same length
+              const quads = front.slice(0, -1).map((p1, qi) => {
+                const p2 = front[qi + 1], b1 = back[qi], b2 = back[qi + 1];
+                return [[ [p1[1],p1[0]], [p2[1],p2[0]], [b2[1],b2[0]], [b1[1],b1[0]], [p1[1],p1[0]] ]];
+              });
               return (
                 <MapGeoJSON
-                  key={`zone-preview-${drawingZoneFlipSide}-${drawingZoneCoords.length}`}
-                  data={{
-                    type: 'Feature',
-                    properties: {},
-                    geometry: {
-                      type: 'Polygon',
-                      coordinates: [[...ring.map(c => [c[1], c[0]]), [ring[0][1], ring[0][0]]]],
-                    }
-                  } as any}
+                  key={`zone-preview-${drawingZoneFlipSide}-${nF}`}
+                  data={{ type: 'Feature', properties: {}, geometry: { type: 'MultiPolygon', coordinates: quads } } as any}
                   fillPaint={{ 'fill-color': ZRB_REFERENCE[newHazardZone.zrbLevel].color, 'fill-opacity': 0.35 }}
                   linePaint={{ 'line-color': ZRB_REFERENCE[newHazardZone.zrbLevel].color, 'line-width': 2, 'line-dasharray': [2, 2], 'line-opacity': 0.9 }}
                 />
@@ -2666,16 +2630,17 @@ function App() {
                       data={{
                         type: 'Feature',
                         properties: { id: zone.id },
-                        geometry: {
-                          type: 'Polygon',
-                          coordinates: [(() => {
-                            const ring = zone.coords.map(c => [c[1], c[0]]);
-                            const first = ring[0], last = ring[ring.length - 1];
-                            if (!first || !last) return ring;
-                            if (first[0] !== last[0] || first[1] !== last[1]) ring.push([first[0], first[1]]);
-                            return ring;
-                          })()]
-                        }
+                        geometry: (() => {
+                          const nF = Math.floor(zone.coords.length / 2);
+                          if (nF < 2) return { type: 'Polygon' as const, coordinates: [zone.coords.map(c => [c[1], c[0]])] };
+                          const front = zone.coords.slice(0, nF);
+                          const back  = [...zone.coords.slice(nF)].reverse(); // back[0..N]
+                          const quads = front.slice(0, -1).map((p1, qi) => {
+                            const p2 = front[qi+1], b1 = back[qi], b2 = back[qi+1];
+                            return [[ [p1[1],p1[0]], [p2[1],p2[0]], [b2[1],b2[0]], [b1[1],b1[0]], [p1[1],p1[0]] ]];
+                          });
+                          return { type: 'MultiPolygon' as const, coordinates: quads };
+                        })()
                       }}
                       fillPaint={{ 'fill-color': tsunamiAlert ? '#ff0000' : color, 'fill-opacity': tsunamiAlert ? 0.35 : (isSelected ? 0.5 : 0.35) }}
                       fillHoverPaint={{ 'fill-opacity': 0.25 }}

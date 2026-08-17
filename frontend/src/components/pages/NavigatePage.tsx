@@ -331,10 +331,17 @@ export default function NavigatePage({ routes, selectedRoute, tsunamiAlert, user
                 data={{
                   type: 'Feature',
                   properties: {},
-                  geometry: {
-                    type: 'Polygon',
-                    coordinates: [zone.coords.map(c => [c[1], c[0]])] // [lat, lng] to [lng, lat]
-                  }
+                  geometry: (() => {
+                    const nF = Math.floor(zone.coords.length / 2);
+                    if (nF < 2) return { type: 'Polygon' as const, coordinates: [zone.coords.map(c => [c[1], c[0]])] };
+                    const front = zone.coords.slice(0, nF);
+                    const back  = [...zone.coords.slice(nF)].reverse();
+                    const quads = front.slice(0, -1).map((p1, qi) => {
+                      const p2 = front[qi+1], b1 = back[qi], b2 = back[qi+1];
+                      return [[ [p1[1],p1[0]], [p2[1],p2[0]], [b2[1],b2[0]], [b1[1],b1[0]], [p1[1],p1[0]] ]];
+                    });
+                    return { type: 'MultiPolygon' as const, coordinates: quads };
+                  })()
                 }}
                 fillPaint={{ 'fill-color': color, 'fill-opacity': 0.12 }}
                 fillHoverPaint={{ 'fill-opacity': 0.25 }}
