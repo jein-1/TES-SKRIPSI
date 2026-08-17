@@ -2250,10 +2250,10 @@ function App() {
           <AnimatePresence>
             {drawingZoneMode && (
               <motion.div
-                initial={{ y: -20, opacity: 0 }}
+                initial={{ y: 20, opacity: 0 }}
                 animate={{ y: 0, opacity: 1 }}
-                exit={{ y: -20, opacity: 0 }}
-                className="absolute top-20 left-1/2 -translate-x-1/2 z-[1000] bg-slate-900/90 backdrop-blur-md border border-red-500/50 rounded-2xl p-4 shadow-2xl flex flex-col items-center gap-3 w-[300px]"
+                exit={{ y: 20, opacity: 0 }}
+                className="absolute bottom-24 left-1/2 -translate-x-1/2 z-[1000] bg-slate-900/90 backdrop-blur-md border border-red-500/50 rounded-2xl p-4 shadow-2xl flex flex-col items-center gap-3 w-[300px]"
               >
                 <div className="flex items-center gap-2">
                   <MapPin className="w-4 h-4 text-red-400 animate-bounce" />
@@ -2401,6 +2401,31 @@ function App() {
                 linePaint={{ 'line-color': ZRB_REFERENCE[newHazardZone.zrbLevel].color, 'line-width': 2, 'line-dasharray': [2, 2], 'line-opacity': 0.9 }}
               />
             )}
+
+            {/* Closing-line preview: dashed line from last point back to first,
+                shows the edge that 'Selesai' will close, so admin can judge
+                whether to add more points or finish now. */}
+            {drawingZoneCoords.length >= 2 && (
+              <MapGeoJSON
+                data={{
+                  type: 'Feature',
+                  properties: {},
+                  geometry: {
+                    type: 'LineString',
+                    coordinates: [
+                      [drawingZoneCoords[drawingZoneCoords.length - 1][1], drawingZoneCoords[drawingZoneCoords.length - 1][0]],
+                      [drawingZoneCoords[0][1], drawingZoneCoords[0][0]],
+                    ],
+                  },
+                } as any}
+                linePaint={{
+                  'line-color': '#facc15',
+                  'line-width': 1.5,
+                  'line-dasharray': [4, 5],
+                  'line-opacity': 0.55,
+                }}
+              />
+            )}
             
             {/* Render markers for drawing zone coords — draggable, hoverable, deletable */}
             {drawingZoneCoords.map((coord, i) => (
@@ -2431,11 +2456,32 @@ function App() {
                       boxShadow: `0 0 6px ${ZRB_REFERENCE[newHazardZone.zrbLevel].color}88`,
                       transform: 'translate(-7px, -7px)',
                     }}
-                    title={`Titik ${i + 1} — double-click untuk hapus`}
-                    onDoubleClick={(e) => {
+                    title={`Titik ${i + 1} — klik-kanan untuk hapus`}
+                    onContextMenu={(e) => {
+                      e.preventDefault();
                       e.stopPropagation();
                       setDrawingZoneCoords(prev => prev.filter((_, idx) => idx !== i));
                     }}
+                    onTouchStart={(() => {
+                      let timer: ReturnType<typeof setTimeout> | null = null;
+                      return (e: React.TouchEvent) => {
+                        e.stopPropagation();
+                        timer = setTimeout(() => {
+                          setDrawingZoneCoords(prev => prev.filter((_, idx) => idx !== i));
+                          timer = null;
+                        }, 500);
+                        (e.currentTarget as HTMLElement).addEventListener(
+                          'touchend',
+                          () => { if (timer !== null) clearTimeout(timer); },
+                          { once: true },
+                        );
+                        (e.currentTarget as HTMLElement).addEventListener(
+                          'touchmove',
+                          () => { if (timer !== null) clearTimeout(timer); },
+                          { once: true },
+                        );
+                      };
+                    })()}
                     onMouseEnter={e => {
                       (e.currentTarget as HTMLElement).style.width = '18px';
                       (e.currentTarget as HTMLElement).style.height = '18px';
