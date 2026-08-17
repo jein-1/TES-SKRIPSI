@@ -1,7 +1,7 @@
 // ═══════════════════════════════════════════════════════════════
 // NAVIGATE PAGE — Peta interaktif shelter, rute & simulasi (MAPCN VERSION)
 // ═══════════════════════════════════════════════════════════════
-import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
+import { useState, useEffect, useRef, useCallback, useMemo, Fragment } from 'react'
 import { Map, MapMarker, MarkerContent, MapRoute, MapGeoJSON, type MapViewport, type MapRef } from '@/components/ui/map'
 import { fetchOsrmRoute, type OsrmRouteData } from '../../lib/osrm'
 import {
@@ -14,6 +14,9 @@ import type { GempaData } from "../../lib/useBMKG";
 import { shelters, hazardZones } from '../../lib/evacuation'
 import { Geolocation } from '@capacitor/geolocation'
 import type * as GeoJSON from 'geojson'
+import { polygonCentroid } from '../../lib/zoneOffset'
+import { ZRB_REFERENCE } from '../../lib/evacuation/zrbReference'
+import type { HazardZone } from '../../lib/evacuation/hazardZones'
 
 interface Props {
   routes: RouteResult[]
@@ -61,6 +64,7 @@ function bearingLabel(b: number): { label: string; icon: string } {
 // ── MAIN ──────────────────────────────────────────────────────
 export default function NavigatePage({ routes, selectedRoute, tsunamiAlert, userPosition, onBack, adminPing, onAdminPingDismiss, onStartGps, gempa, isGempaDismissed, onDismissGempa, settings }: Props) {
   const [showMedical, setShowMedical]     = useState(false)
+  const [selectedZoneInfo, setSelectedZoneInfo] = useState<HazardZone | null>(null)
   const [deviceHeading, setDeviceHeading] = useState<number | null>(null)
   const [headingLocked, setHeadingLocked] = useState(true)
   const [activeRouteIdx, setActiveRouteIdx] = useState(selectedRoute)
@@ -317,21 +321,36 @@ export default function NavigatePage({ routes, selectedRoute, tsunamiAlert, user
           {/* BMKG GEMPA TERKINI (Epicenter & Radius) - Removed from User POV to avoid squished view, but Overlay widget is kept at the top */}
 
           {/* Hazard Zones MapGeoJSON */}
-          {hazardZones.map((zone, i) => (
-            <MapGeoJSON 
-              key={`hazard-${i}`}
-              data={{
-                type: 'Feature',
-                properties: {},
-                geometry: {
-                  type: 'Polygon',
-                  coordinates: [zone.coords.map(c => [c[1], c[0]])] // [lat, lng] to [lng, lat]
-                }
-              }}
-              fillPaint={{ 'fill-color': '#ef4444', 'fill-opacity': 0.12 }}
-              linePaint={{ 'line-color': '#ef4444', 'line-width': 1.5, 'line-dasharray': [5, 5] }}
-            />
-          ))}
+          {hazardZones.map((zone, i) => {
+            const centroid = polygonCentroid(zone.coords);
+            const color = ZRB_REFERENCE[zone.zrbLevel]?.color || '#ef4444';
+            return (
+            <Fragment key={`hazard-group-${i}`}>
+              <MapGeoJSON 
+                key={`hazard-${i}`}
+                data={{
+                  type: 'Feature',
+                  properties: {},
+                  geometry: {
+                    type: 'Polygon',
+                    coordinates: [zone.coords.map(c => [c[1], c[0]])] // [lat, lng] to [lng, lat]
+                  }
+                }}
+                fillPaint={{ 'fill-color': color, 'fill-opacity': 0.12 }}
+                fillHoverPaint={{ 'fill-opacity': 0.25 }}
+                linePaint={{ 'line-color': color, 'line-width': 1.5, 'line-dasharray': [5, 5] }}
+                interactive={true}
+                onClick={() => setSelectedZoneInfo(zone)}
+              />
+              <MapMarker latitude={centroid[0]} longitude={centroid[1]}>
+                <MarkerContent>
+                  <div style={{ pointerEvents: 'none' }} className="bg-black/50 text-white text-[10px] px-2 py-0.5 rounded-full whitespace-nowrap font-bold shadow-sm">
+                    {zone.name}
+                  </div>
+                </MarkerContent>
+              </MapMarker>
+            </Fragment>
+          )})}
 
           {/* Shelters */}
           {shelters.map((s, i) => {
@@ -575,6 +594,56 @@ export default function NavigatePage({ routes, selectedRoute, tsunamiAlert, user
           </motion.div>
         </div>
       )}
+
+      {/* ─── HAZARD ZONE INFO PANEL ─── */}
+      <AnimatePresence>
+        {selectedZoneInfo && (
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: 20 }}
+            className="fixed bottom-24 left-4 z-[2500] w-64 bg-[#0b1120] border border-slate-700/60 rounded-2xl p-4 shadow-[0_10px_40px_rgba(0,0,0,0.5)]"
+          >
+            <button
+              onClick={() => setSelectedZoneInfo(null)}
+              className="absolute top-3 right-3 p-1.5 text-slate-400 hover:text-white hover:bg-slate-800 rounded-full transition-colors"
+            >
+              <X className="w-4 h-4" />
+            </button>
+            
+            <div className="flex items-center gap-2 mb-2">
+              <span className="text-xs font-black uppercase tracking-wider text-slate-400">INFO ZONA</span>
+              {(() => {
+                const zrb = ZRB_REFERENCE[selectedZoneInfo.zrbLevel];
+                if (!zrb) return null;
+                const badges: Record<number, string> = {
+                  1: 'bg-slate-500/20 text-slate-400 border-slate-500/30',
+                  2: 'bg-yellow-500/20 text-yellow-400 border-yellow-500/30',
+                  3: 'bg-orange-500/20 text-orange-400 border-orange-500/30',
+                  4: 'bg-red-500/20 text-red-400 border-red-500/30',
+                };
+                return (
+                  <div className={`px-2 py-0.5 rounded-full border text-[10px] font-bold ${badges[selectedZoneInfo.zrbLevel]}`}>
+                    ZRB {selectedZoneInfo.zrbLevel}
+                  </div>
+                );
+              })()}
+            </div>
+            
+            <h3 className="text-lg font-black text-white mb-2 leading-tight">
+              {selectedZoneInfo.name}
+            </h3>
+            
+            {selectedZoneInfo.description ? (
+              <p className="text-xs text-slate-300 leading-relaxed max-h-24 overflow-y-auto pr-1 custom-scrollbar">
+                {selectedZoneInfo.description}
+              </p>
+            ) : (
+              <p className="text-xs text-slate-500 italic">Tidak ada deskripsi tambahan.</p>
+            )}
+          </motion.div>
+        )}
+      </AnimatePresence>
     </motion.div>
   )
 }

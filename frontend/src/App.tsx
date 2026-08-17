@@ -1,7 +1,7 @@
-import { useState, useCallback, useEffect, useRef, useMemo } from "react";
+import { useState, useCallback, useEffect, useRef, useMemo, Fragment } from "react";
 import { Map, MapMarker, MarkerContent, MarkerTooltip, MapRoute, MapGeoJSON, type MapRef, type MapViewport } from '@/components/ui/map'
 import AlertModal, { type AlertModalState } from './components/AlertModal';
-import { computeBackLine, buildZonePolygon } from './lib/zoneOffset';
+import { computeBackLine, buildZonePolygon, polygonCentroid } from './lib/zoneOffset';
 // â”€â”€ Modules â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 import {
   shelters,
@@ -324,6 +324,7 @@ function App() {
   // Zone offset (back-line) state — Part C
   const [drawingZoneDepthKm, setDrawingZoneDepthKm] = useState(0.2); // default 200 m
   const [drawingZoneFlipSide, setDrawingZoneFlipSide] = useState(false);
+  const [selectedZoneInfo, setSelectedZoneInfo] = useState<HazardZone | null>(null);
   const [drawingZoneBackCoords, setDrawingZoneBackCoords] = useState<[number, number][]>([]);
   const [manualBackOverrides, setManualBackOverrides] = useState<Record<number, [number, number]>>({}); // index -> manual position
   const [showAddHazardZone, setShowAddHazardZone] = useState(false);
@@ -2601,7 +2602,24 @@ function App() {
                       transform: 'translate(-6px, -6px)',
                       boxShadow: '0 0 5px rgba(250,204,21,0.5)',
                     }}
-                    title={`Titik belakang ${i + 1} — drag untuk sesuaikan`}
+                    title={`Titik belakang ${i + 1} — klik-kanan untuk reset ke posisi otomatis`}
+                    onContextMenu={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      setManualBackOverrides(prev => { const next = {...prev}; delete next[i]; return next; });
+                    }}
+                    onTouchStart={(() => {
+                      let timer: ReturnType<typeof setTimeout> | null = null;
+                      return (e: React.TouchEvent) => {
+                        e.stopPropagation();
+                        timer = setTimeout(() => {
+                          setManualBackOverrides(prev => { const next = {...prev}; delete next[i]; return next; });
+                          timer = null;
+                        }, 500);
+                        (e.currentTarget as HTMLElement).addEventListener('touchend', () => { if (timer !== null) clearTimeout(timer); }, { once: true });
+                        (e.currentTarget as HTMLElement).addEventListener('touchmove', () => { if (timer !== null) clearTimeout(timer); }, { once: true });
+                      };
+                    })()}
                     onMouseEnter={e => {
                       (e.currentTarget as HTMLElement).style.width = '16px';
                       (e.currentTarget as HTMLElement).style.height = '16px';
@@ -2625,31 +2643,42 @@ function App() {
                 const isSelected = selectedHazardZoneId === zone.id;
                 const color = ZRB_REFERENCE[zone.zrbLevel]?.color || '#ef4444';
                 return (
-                  <MapGeoJSON 
-                    key={`hazard-${i}-${hazardZoneVersion}`}
-                    data={{
-                      type: 'Feature',
-                      properties: { id: zone.id },
-                      geometry: {
-                        type: 'Polygon',
-                        coordinates: [(() => {
-                          const ring = zone.coords.map(c => [c[1], c[0]]);
-                          const first = ring[0], last = ring[ring.length - 1];
-                          if (!first || !last) return ring;
-                          if (first[0] !== last[0] || first[1] !== last[1]) ring.push([first[0], first[1]]);
-                          return ring;
-                        })()]
-                      }
-                    }}
-                    fillPaint={{ 'fill-color': tsunamiAlert ? '#ff0000' : color, 'fill-opacity': tsunamiAlert ? 0.35 : (isSelected ? 0.5 : 0.35) }}
-                    linePaint={{ 'line-color': tsunamiAlert ? '#ff0000' : color, 'line-width': tsunamiAlert ? 3 : (isSelected ? 3 : 1), 'line-opacity': 0.9 }}
-                    interactive={!drawingZoneMode}
-                    onClick={() => {
-                      if (!drawingZoneMode) {
-                        setSelectedHazardZoneId(isSelected ? null : zone.id);
-                      }
-                    }}
-                  />
+                  <Fragment key={`hazard-group-${i}-${hazardZoneVersion}`}>
+                    <MapGeoJSON 
+                      key={`hazard-${i}-${hazardZoneVersion}`}
+                      data={{
+                        type: 'Feature',
+                        properties: { id: zone.id },
+                        geometry: {
+                          type: 'Polygon',
+                          coordinates: [(() => {
+                            const ring = zone.coords.map(c => [c[1], c[0]]);
+                            const first = ring[0], last = ring[ring.length - 1];
+                            if (!first || !last) return ring;
+                            if (first[0] !== last[0] || first[1] !== last[1]) ring.push([first[0], first[1]]);
+                            return ring;
+                          })()]
+                        }
+                      }}
+                      fillPaint={{ 'fill-color': tsunamiAlert ? '#ff0000' : color, 'fill-opacity': tsunamiAlert ? 0.35 : (isSelected ? 0.5 : 0.35) }}
+                      fillHoverPaint={{ 'fill-opacity': 0.25 }}
+                      linePaint={{ 'line-color': tsunamiAlert ? '#ff0000' : color, 'line-width': tsunamiAlert ? 3 : (isSelected ? 3 : 1), 'line-opacity': 0.9 }}
+                      interactive={!drawingZoneMode}
+                      onClick={() => {
+                        if (!drawingZoneMode) {
+                          setSelectedHazardZoneId(isSelected ? null : zone.id);
+                          setSelectedZoneInfo(zone);
+                        }
+                      }}
+                    />
+                    <MapMarker latitude={polygonCentroid(zone.coords)[0]} longitude={polygonCentroid(zone.coords)[1]}>
+                      <MarkerContent>
+                        <div style={{ pointerEvents: 'none' }} className="bg-black/50 text-white text-[10px] px-2 py-0.5 rounded-full whitespace-nowrap font-bold shadow-sm">
+                          {zone.name}
+                        </div>
+                      </MarkerContent>
+                    </MapMarker>
+                  </Fragment>
                 );
               })}
 
@@ -4875,6 +4904,57 @@ function App() {
         </AnimatePresence>
       </div>
     </div>
+
+    {/* ─── HAZARD ZONE INFO PANEL ─── */}
+    <AnimatePresence>
+      {selectedZoneInfo && (
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          exit={{ opacity: 0, y: 20 }}
+          className="fixed bottom-6 right-6 z-[2500] w-72 bg-[#0b1120] border border-slate-700/60 rounded-2xl p-4 shadow-[0_10px_40px_rgba(0,0,0,0.5)]"
+        >
+          <button
+            onClick={() => setSelectedZoneInfo(null)}
+            className="absolute top-3 right-3 p-1.5 text-slate-400 hover:text-white hover:bg-slate-800 rounded-full transition-colors"
+          >
+            <X className="w-4 h-4" />
+          </button>
+          
+          <div className="flex items-center gap-2 mb-2">
+            <span className="text-xs font-black uppercase tracking-wider text-slate-400">INFO ZONA</span>
+            {(() => {
+              const zrb = ZRB_REFERENCE[selectedZoneInfo.zrbLevel];
+              if (!zrb) return null;
+              const badges: Record<number, string> = {
+                1: 'bg-slate-500/20 text-slate-400 border-slate-500/30',
+                2: 'bg-yellow-500/20 text-yellow-400 border-yellow-500/30',
+                3: 'bg-orange-500/20 text-orange-400 border-orange-500/30',
+                4: 'bg-red-500/20 text-red-400 border-red-500/30',
+              };
+              return (
+                <div className={`px-2 py-0.5 rounded-full border text-[10px] font-bold ${badges[selectedZoneInfo.zrbLevel]}`}>
+                  ZRB {selectedZoneInfo.zrbLevel}
+                </div>
+              );
+            })()}
+          </div>
+          
+          <h3 className="text-lg font-black text-white mb-2 leading-tight">
+            {selectedZoneInfo.name}
+          </h3>
+          
+          {selectedZoneInfo.description ? (
+            <p className="text-xs text-slate-300 leading-relaxed max-h-24 overflow-y-auto pr-1 custom-scrollbar">
+              {selectedZoneInfo.description}
+            </p>
+          ) : (
+            <p className="text-xs text-slate-500 italic">Tidak ada deskripsi tambahan.</p>
+          )}
+        </motion.div>
+      )}
+    </AnimatePresence>
+
     <AlertModal state={alertModal} onClose={() => setAlertModal(null)} />
     </>
   );
