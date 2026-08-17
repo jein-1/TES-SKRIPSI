@@ -28,6 +28,8 @@ interface Props {
   gempa?: GempaData | null
   isGempaDismissed?: boolean
   onDismissGempa?: () => void
+  // Settings — required to forward the selected routing algorithm
+  settings?: { algorithm: 'dijkstra' | 'haversine' }
 }
 
 // ── Helpers ────────────────────────────────────────────────────
@@ -57,7 +59,7 @@ function bearingLabel(b: number): { label: string; icon: string } {
 }
 
 // ── MAIN ──────────────────────────────────────────────────────
-export default function NavigatePage({ routes, selectedRoute, tsunamiAlert, userPosition, onBack, adminPing, onAdminPingDismiss, onStartGps, gempa, isGempaDismissed, onDismissGempa }: Props) {
+export default function NavigatePage({ routes, selectedRoute, tsunamiAlert, userPosition, onBack, adminPing, onAdminPingDismiss, onStartGps, gempa, isGempaDismissed, onDismissGempa, settings }: Props) {
   const [showMedical, setShowMedical]     = useState(false)
   const [deviceHeading, setDeviceHeading] = useState<number | null>(null)
   const [headingLocked, setHeadingLocked] = useState(true)
@@ -111,7 +113,7 @@ export default function NavigatePage({ routes, selectedRoute, tsunamiAlert, user
   }
   const emergency = tsunamiAlert
 
-  const activeRoutes = routes.length > 0 ? routes : (effectivePosRaw ? findOptimalEvacuationRoutes(effectivePosRaw[0], effectivePosRaw[1]) : [])
+  const activeRoutes = routes.length > 0 ? routes : (effectivePosRaw ? findOptimalEvacuationRoutes(effectivePosRaw[0], effectivePosRaw[1], 99, settings?.algorithm ?? 'dijkstra') : [])
   const nearestIdx = effectivePosRaw
     ? (() => {
         if (activeRoutes.length === 0) return 0

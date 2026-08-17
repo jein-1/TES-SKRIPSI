@@ -69,7 +69,23 @@ export function findOptimalEvacuationRoutes(
   userLat: number,
   userLng: number,
   maxRoutes: number = 99,
+  algorithm: 'dijkstra' | 'haversine' = 'dijkstra',
 ): RouteResult[] {
+  // ── Haversine mode: skip Dijkstra entirely, return straight-line results ──
+  if (algorithm === 'haversine') {
+    return getNearestSheltersByHaversine(userLat, userLng, maxRoutes).map(s => ({
+      shelterName: s.name,
+      shelterId: s.id,
+      shelterCapacity: s.capacity,
+      haversineDistance: s.haversineDistance,
+      dijkstraDistance: Infinity,
+      totalDistance: s.haversineDistance,
+      coordinates: [[userLat, userLng], [s.lat, s.lng]],
+      walkingTime: Math.ceil((s.haversineDistance / 5) * 60),
+      runningTime: Math.ceil((s.haversineDistance / 10) * 60),
+    }));
+  }
+
   ensureGraphInitialized();
   if (!baseAdjacency || !edgeLookup || !cachedRoadNodesForDijkstra) {
     return getNearestSheltersByHaversine(userLat, userLng, maxRoutes).map(s => ({

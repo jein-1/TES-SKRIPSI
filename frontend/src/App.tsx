@@ -317,6 +317,8 @@ function App() {
   const [hazardZoneVersion, setHazardZoneVersion] = useState(0);
   const [drawingZoneMode, setDrawingZoneMode] = useState(false);
   const [drawingZoneCoords, setDrawingZoneCoords] = useState<[number, number][]>([]); // [lat, lng]
+  // Guard: suppress the map's click event that fires right after a marker drag-end
+  const markerJustDraggedRef = useRef(false);
   const [showAddHazardZone, setShowAddHazardZone] = useState(false);
   const [newHazardZone, setNewHazardZone] = useState<{name: string; zrbLevel: ZRBLevel; description: string}>({ name: '', zrbLevel: 4, description: '' });
   const [isSavingHazardZone, setIsSavingHazardZone] = useState(false);
@@ -431,8 +433,8 @@ function App() {
     if (drawingZoneMode && adminMapRef.current) {
       const map = adminMapRef.current;
       const handleClick = (e: any) => {
-        // Only trigger if we aren't clicking on an existing zone or shelter marker.
-        // Actually map.on('click') fires. Let's just push coords.
+        // Suppress click that fires immediately after a marker drag-end
+        if (markerJustDraggedRef.current) return;
         const lat = e.lngLat.lat;
         const lng = e.lngLat.lng;
         setDrawingZoneCoords(prev => [...prev, [lat, lng]]);
@@ -773,6 +775,8 @@ function App() {
             const routeResults = findOptimalEvacuationRoutes(
               newPos[0],
               newPos[1],
+              99,
+              settings.algorithm as 'dijkstra' | 'haversine',
             );
             lastRouteCalcResultsRef.current = routeResults;
             
@@ -910,7 +914,7 @@ function App() {
       setGpsError("Gagal mengaktifkan sensor lokasi GPS.");
       setGpsTracking(false);
     }
-  }, [saveHistoryRecord, tsunamiAlert]);
+  }, [saveHistoryRecord, tsunamiAlert, settings.algorithm]);
 
   const stopGpsTracking = useCallback(async () => {
     if (gpsWatchRef.current !== null) {
@@ -992,7 +996,7 @@ function App() {
       setUserPosition([lat, lng]);
       setIsCalculating(true);
       setTimeout(() => {
-        const routeResults = findOptimalEvacuationRoutes(lat, lng);
+        const routeResults = findOptimalEvacuationRoutes(lat, lng, 99, settings.algorithm as 'dijkstra' | 'haversine');
         setRoutes(routeResults);
         setSelectedRoute(0);
         setShowPanel(true);
@@ -1000,7 +1004,7 @@ function App() {
         saveHistoryRecord(routeResults, "real", [lat, lng]);
       }, 300);
     },
-    [gpsTracking, saveHistoryRecord],
+    [gpsTracking, saveHistoryRecord, settings.algorithm],
   );
 
   // â”€â”€ Derived â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
@@ -1349,6 +1353,7 @@ function App() {
                 setAdminPing(null);
               }}
               onStartGps={!gpsTracking ? startGpsTracking : undefined}
+              settings={{ algorithm: settings.algorithm }}
             />
           )}
           {activePage === "family" && (
@@ -2397,13 +2402,57 @@ function App() {
               />
             )}
             
-            {/* Render markers for drawing zone coords */}
+            {/* Render markers for drawing zone coords — draggable, hoverable, deletable */}
             {drawingZoneCoords.map((coord, i) => (
-              <MapMarker key={`draw-${i}`} latitude={coord[0]} longitude={coord[1]}>
+              <MapMarker
+                key={`draw-${i}`}
+                latitude={coord[0]}
+                longitude={coord[1]}
+                draggable={true}
+                onDragEnd={({ lat, lng }) => {
+                  // Set guard so the map's click handler doesn't add a new point
+                  markerJustDraggedRef.current = true;
+                  setTimeout(() => { markerJustDraggedRef.current = false; }, 150);
+                  setDrawingZoneCoords(prev => {
+                    const next = [...prev];
+                    next[i] = [lat, lng];
+                    return next;
+                  });
+                }}
+              >
                 <MarkerContent>
-                  <div 
-                    className="w-3 h-3 rounded-full border border-white" 
-                    style={{ backgroundColor: ZRB_REFERENCE[newHazardZone.zrbLevel].color }} 
+                  <div
+                    className="draw-zone-dot rounded-full border-2 border-white transition-all duration-100"
+                    style={{
+                      width: 14,
+                      height: 14,
+                      backgroundColor: ZRB_REFERENCE[newHazardZone.zrbLevel].color,
+                      cursor: 'grab',
+                      boxShadow: `0 0 6px ${ZRB_REFERENCE[newHazardZone.zrbLevel].color}88`,
+                      transform: 'translate(-7px, -7px)',
+                    }}
+                    title={`Titik ${i + 1} — double-click untuk hapus`}
+                    onDoubleClick={(e) => {
+                      e.stopPropagation();
+                      setDrawingZoneCoords(prev => prev.filter((_, idx) => idx !== i));
+                    }}
+                    onMouseEnter={e => {
+                      (e.currentTarget as HTMLElement).style.width = '18px';
+                      (e.currentTarget as HTMLElement).style.height = '18px';
+                      (e.currentTarget as HTMLElement).style.transform = 'translate(-9px, -9px)';
+                      (e.currentTarget as HTMLElement).style.cursor = 'grab';
+                    }}
+                    onMouseLeave={e => {
+                      (e.currentTarget as HTMLElement).style.width = '14px';
+                      (e.currentTarget as HTMLElement).style.height = '14px';
+                      (e.currentTarget as HTMLElement).style.transform = 'translate(-7px, -7px)';
+                    }}
+                    onMouseDown={e => {
+                      (e.currentTarget as HTMLElement).style.cursor = 'grabbing';
+                    }}
+                    onMouseUp={e => {
+                      (e.currentTarget as HTMLElement).style.cursor = 'grab';
+                    }}
                   />
                 </MarkerContent>
               </MapMarker>
