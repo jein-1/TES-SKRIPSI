@@ -2442,38 +2442,33 @@ function App() {
               </>
             )}
 
-            {/* Drawing Zone Live Rendering — only while drawingZoneMode is active.
-                Fill = MultiPolygon quads (no interior edge lines).
-                Outline = separate LineString of the outer boundary.
-                Guard: use Math.min so we never read back[qi+1] that hasn't arrived yet
-                (drawingZoneBackCoords updates one render after drawingZoneCoords). */}
-            {drawingZoneMode && drawingZoneCoords.length >= 2 && drawingZoneBackCoords.length >= 2 && (() => {
-              const front = drawingZoneCoords;
-              const back  = drawingZoneBackCoords;
-              const safeLen = Math.min(front.length, back.length);
+            {/* Drawing Zone Live Rendering — active only while drawing.
+                Fill: buildZonePolygon ring (single Polygon, correct color, no opacity stacking).
+                Outline: two separate LineStrings (front & back) — never scattered, never self-closing. */}
+            {drawingZoneMode && (() => {
+              const safeLen = Math.min(drawingZoneCoords.length, drawingZoneBackCoords.length);
+              if (safeLen < 2) return null;
+              const front = drawingZoneCoords.slice(0, safeLen);
+              const back  = drawingZoneBackCoords.slice(0, safeLen);
               const color = ZRB_REFERENCE[newHazardZone.zrbLevel].color;
-              const quads = front.slice(0, safeLen - 1).flatMap((p1, qi) => {
-                const p2 = front[qi + 1], b1 = back[qi], b2 = back[qi + 1];
-                if (!p2 || !b1 || !b2) return [];
-                return [[ [p1[1],p1[0]], [p2[1],p2[0]], [b2[1],b2[0]], [b1[1],b1[0]], [p1[1],p1[0]] ]];
-              });
-              if (quads.length === 0) return null;
-              // Outer boundary for outline (front line + reversed back line)
-              const frontSlice = front.slice(0, safeLen);
-              const backSlice  = back.slice(0, safeLen);
-              const boundary   = [...frontSlice, ...[...backSlice].reverse(), frontSlice[0]]
-                                   .map(c => [c[1], c[0]]);
+              const ring  = buildZonePolygon(front, back);
+              const ringLng = [...ring.map(c => [c[1], c[0]]), [ring[0][1], ring[0][0]]];
               return (
                 <>
                   <MapGeoJSON
-                    key={`zone-preview-fill-${drawingZoneFlipSide}-${safeLen}`}
-                    data={{ type: 'Feature', properties: {}, geometry: { type: 'MultiPolygon', coordinates: quads } } as any}
-                    fillPaint={{ 'fill-color': color, 'fill-opacity': 0.35 }}
+                    key={`zpf-${drawingZoneFlipSide}-${safeLen}`}
+                    data={{ type: 'Feature', properties: {}, geometry: { type: 'Polygon', coordinates: [ringLng] } } as any}
+                    fillPaint={{ 'fill-color': color, 'fill-opacity': 0.25 }}
                   />
                   <MapGeoJSON
-                    key={`zone-preview-line-${drawingZoneFlipSide}-${safeLen}`}
-                    data={{ type: 'Feature', properties: {}, geometry: { type: 'LineString', coordinates: boundary } } as any}
-                    linePaint={{ 'line-color': color, 'line-width': 2, 'line-dasharray': [4, 3], 'line-opacity': 0.9 }}
+                    key={`zpl-${drawingZoneFlipSide}-${safeLen}`}
+                    data={{ type: 'Feature', properties: {}, geometry: { type: 'LineString', coordinates: front.map(c => [c[1], c[0]]) } } as any}
+                    linePaint={{ 'line-color': color, 'line-width': 2.5, 'line-opacity': 0.95 }}
+                  />
+                  <MapGeoJSON
+                    key={`zpb-${drawingZoneFlipSide}-${safeLen}`}
+                    data={{ type: 'Feature', properties: {}, geometry: { type: 'LineString', coordinates: back.map(c => [c[1], c[0]]) } } as any}
+                    linePaint={{ 'line-color': color, 'line-width': 1.5, 'line-dasharray': [5, 4], 'line-opacity': 0.8 }}
                   />
                 </>
               );
@@ -2643,25 +2638,20 @@ function App() {
                 const color = ZRB_REFERENCE[zone.zrbLevel]?.color || '#ef4444';
                 return (
                   <Fragment key={`hazard-group-${i}-${hazardZoneVersion}`}>
-                    {/* Fill layer — quads, no interior edge lines */}
+                    {/* Fill layer */}
                     <MapGeoJSON 
                       key={`hazard-fill-${i}-${hazardZoneVersion}`}
                       data={{
                         type: 'Feature',
                         properties: { id: zone.id },
-                        geometry: (() => {
-                          const nF = Math.floor(zone.coords.length / 2);
-                          if (nF < 2) return { type: 'Polygon' as const, coordinates: [zone.coords.map(c => [c[1], c[0]])] };
-                          const front = zone.coords.slice(0, nF);
-                          const back  = [...zone.coords.slice(nF)].reverse();
-                          const quads = front.slice(0, -1).flatMap((p1, qi) => {
-                            const p2 = front[qi+1], b1 = back[qi], b2 = back[qi+1];
-                            if (!p2 || !b1 || !b2) return [];
-                            return [[ [p1[1],p1[0]], [p2[1],p2[0]], [b2[1],b2[0]], [b1[1],b1[0]], [p1[1],p1[0]] ]];
-                          });
-                          if (quads.length === 0) return { type: 'Polygon' as const, coordinates: [zone.coords.map(c => [c[1], c[0]])] };
-                          return { type: 'MultiPolygon' as const, coordinates: quads };
-                        })() as any
+                        geometry: {
+                          type: 'Polygon',
+                          coordinates: [(() => {
+                            const ring = zone.coords.map(c => [c[1], c[0]]);
+                            ring.push([zone.coords[0][1], zone.coords[0][0]]);
+                            return ring;
+                          })()]
+                        } as any
                       }}
                       fillPaint={{ 'fill-color': tsunamiAlert ? '#ff0000' : color, 'fill-opacity': tsunamiAlert ? 0.35 : (isSelected ? 0.5 : 0.35) }}
                       fillHoverPaint={{ 'fill-opacity': 0.25 }}
@@ -2673,18 +2663,25 @@ function App() {
                         }
                       }}
                     />
-                    {/* Outline layer — outer boundary only, no interior quad edges */}
-                    {(() => {
+                    {/* Front line */}
+                    {zone.coords.length >= 2 && (() => {
                       const nF = Math.floor(zone.coords.length / 2);
-                      if (nF < 1) return null;
-                      const front   = zone.coords.slice(0, nF);
-                      const backRev = zone.coords.slice(nF); // stored as back[N]..back[0]
-                      const boundary = [...front, ...backRev, front[0]].map(c => [c[1], c[0]]);
                       return (
                         <MapGeoJSON
-                          key={`hazard-line-${i}-${hazardZoneVersion}`}
-                          data={{ type: 'Feature', properties: {}, geometry: { type: 'LineString', coordinates: boundary } } as any}
-                          linePaint={{ 'line-color': tsunamiAlert ? '#ff0000' : color, 'line-width': tsunamiAlert ? 3 : (isSelected ? 3 : 1), 'line-opacity': 0.9 }}
+                          key={`hazard-front-${i}-${hazardZoneVersion}`}
+                          data={{ type: 'Feature', properties: {}, geometry: { type: 'LineString', coordinates: zone.coords.slice(0, nF).map(c => [c[1], c[0]]) } } as any}
+                          linePaint={{ 'line-color': tsunamiAlert ? '#ff0000' : color, 'line-width': tsunamiAlert ? 3 : (isSelected ? 2.5 : 1.5), 'line-opacity': 0.9 }}
+                        />
+                      );
+                    })()}
+                    {/* Back line */}
+                    {zone.coords.length >= 4 && (() => {
+                      const nF = Math.floor(zone.coords.length / 2);
+                      return (
+                        <MapGeoJSON
+                          key={`hazard-back-${i}-${hazardZoneVersion}`}
+                          data={{ type: 'Feature', properties: {}, geometry: { type: 'LineString', coordinates: zone.coords.slice(nF).map(c => [c[1], c[0]]) } } as any}
+                          linePaint={{ 'line-color': tsunamiAlert ? '#ff0000' : color, 'line-width': tsunamiAlert ? 2 : 1, 'line-opacity': 0.7, 'line-dasharray': [5, 4] }}
                         />
                       );
                     })()}
