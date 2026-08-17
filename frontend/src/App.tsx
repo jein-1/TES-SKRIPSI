@@ -1336,8 +1336,9 @@ function App() {
   // Pages use fixed inset-0 z-[1800]; nav uses fixed z-[1900]
   if (userRole === "user") {
     return (
-      <div
-        className="fixed inset-0 bg-[#080e1a] text-slate-300 font-sans"
+      <>
+        <div
+          className="fixed inset-0 bg-[#080e1a] text-slate-300 font-sans"
         style={{ paddingTop: "env(safe-area-inset-top, 0px)" }}
       >
         {/* Pages */}
@@ -1944,13 +1945,16 @@ function App() {
           )}
         </AnimatePresence>
       </div>
+      <AlertModal state={alertModal} onClose={() => setAlertModal(null)} />
+      </>
     );
   }
 
   // â”€â”€ ADMIN layout (full tactical dashboard) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   return (
-    <div
-      className="w-full h-full bg-[#0b1120] text-slate-300 font-sans overflow-hidden flex flex-col"
+    <>
+      <div
+        className="w-full h-full bg-[#0b1120] text-slate-300 font-sans overflow-hidden flex flex-col"
       style={{ paddingTop: "env(safe-area-inset-top, 0px)" }}
     >
       {/* â•â•â• MOBILE HEADER â€” 2-row compact layout for all screen sizes â•â•â• */}
@@ -4077,7 +4081,7 @@ function App() {
                       description: newHazardZone.description || undefined
                     };
 
-                    const { ok } = await aegisApi.addHazardZone(payload);
+                    const { ok, error } = await aegisApi.addHazardZone(payload);
                     setIsSavingHazardZone(false);
 
                     if (ok) {
@@ -4091,7 +4095,7 @@ function App() {
                       setDrawingZoneFlipSide(false);
                       setNewHazardZone({ name: '', zrbLevel: 4, description: '' });
                     } else {
-                      setAlertModal({ title: 'Gagal Menyimpan Zona', message: res.error ?? 'Gagal menyimpan zona bahaya ke server. Cek console untuk detail.', variant: 'error' });
+                      setAlertModal({ title: 'Gagal Menyimpan Zona', message: error ?? 'Gagal menyimpan zona bahaya ke server. Cek console untuk detail.', variant: 'error' });
                     }
                   }}
                   className="flex-1 py-3 text-white font-bold text-sm bg-red-600 rounded-xl hover:bg-red-500 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
@@ -4258,7 +4262,7 @@ function App() {
                       description: editHazardZoneData.description
                     };
 
-                    const { ok } = await aegisApi.updateHazardZone(editHazardZoneData.id, payload);
+                    const { ok, error } = await aegisApi.updateHazardZone(editHazardZoneData.id, payload);
                     setIsSavingEditHazardZone(false);
 
                     if (ok) {
@@ -4269,7 +4273,7 @@ function App() {
                       setHazardZoneVersion(v => v + 1);
                       setShowEditHazardZone(false);
                     } else {
-                      setAlertModal({ title: 'Gagal Update Zona', message: res.error ?? 'Gagal mengupdate zona bahaya. Cek console untuk detail.', variant: 'error' });
+                      setAlertModal({ title: 'Gagal Update Zona', message: error ?? 'Gagal mengupdate zona bahaya. Cek console untuk detail.', variant: 'error' });
                     }
                   }}
                   className="flex-1 py-3 text-white font-bold text-sm bg-indigo-600 rounded-xl hover:bg-indigo-500 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
@@ -4872,6 +4876,7 @@ function App() {
       </div>
     </div>
     <AlertModal state={alertModal} onClose={() => setAlertModal(null)} />
+    </>
   );
 }
 
