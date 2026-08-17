@@ -70,6 +70,16 @@ async function apiPost(path: string, body: object, isAdmin = false) {
   }
 }
 
+function parseApiError(errText: string, status: number): string {
+  if (!errText) return `HTTP ${status}`;
+  try {
+    const json = JSON.parse(errText);
+    return json.error || json.message || errText;
+  } catch {
+    return errText;
+  }
+}
+
 // Broadcast channel for ephemeral events
 const broadcastChannel = supabase.channel("aegis-events");
 
@@ -197,7 +207,7 @@ export const aegisApi = {
       if (!res.ok) {
         const errText = await res.text();
         console.error("[AegisSync] addCustomShelter error:", errText);
-        return { ok: false, error: errText || `HTTP ${res.status}` };
+        return { ok: false, error: parseApiError(errText, res.status) };
       }
       // Broadcast ke semua device agar langsung muncul tanpa refresh
       await broadcastChannel.send({
@@ -275,7 +285,7 @@ export const aegisApi = {
       if (!res.ok) {
         const errText = await res.text();
         console.error("[AegisSync] deleteCustomShelter error:", errText);
-        return { ok: false, error: errText || `HTTP ${res.status}` };
+        return { ok: false, error: parseApiError(errText, res.status) };
       }
 
       await broadcastChannel.send({
@@ -358,7 +368,7 @@ export const aegisApi = {
       if (!res.ok) {
         const errText = await res.text();
         console.error("[AegisSync] addHazardZone error:", errText);
-        return { ok: false, error: errText || `HTTP ${res.status}` };
+        return { ok: false, error: parseApiError(errText, res.status) };
       }
       await broadcastChannel.send({
         type: "broadcast",
@@ -394,7 +404,7 @@ export const aegisApi = {
       if (!res.ok) {
         const errText = await res.text();
         console.error("[AegisSync] updateHazardZone error:", errText);
-        return { ok: false, error: errText || `HTTP ${res.status}` };
+        return { ok: false, error: parseApiError(errText, res.status) };
       }
 
       const resData = await res.json().catch(() => ({}));
@@ -439,7 +449,7 @@ export const aegisApi = {
       if (!res.ok) {
         const errText = await res.text();
         console.error("[AegisSync] deleteHazardZone error:", errText);
-        return { ok: false, error: errText || `HTTP ${res.status}` };
+        return { ok: false, error: parseApiError(errText, res.status) };
       }
 
       await broadcastChannel.send({
