@@ -2661,7 +2661,7 @@ function App() {
                           });
                           if (quads.length === 0) return { type: 'Polygon' as const, coordinates: [zone.coords.map(c => [c[1], c[0]])] };
                           return { type: 'MultiPolygon' as const, coordinates: quads };
-                        })()
+                        })() as any
                       }}
                       fillPaint={{ 'fill-color': tsunamiAlert ? '#ff0000' : color, 'fill-opacity': tsunamiAlert ? 0.35 : (isSelected ? 0.5 : 0.35) }}
                       fillHoverPaint={{ 'fill-opacity': 0.25 }}

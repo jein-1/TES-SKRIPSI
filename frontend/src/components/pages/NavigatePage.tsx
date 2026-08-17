@@ -344,7 +344,7 @@ export default function NavigatePage({ routes, selectedRoute, tsunamiAlert, user
               {/* Fill — quads, no interior edge lines */}
               <MapGeoJSON 
                 key={`hazard-fill-${i}`}
-                data={{ type: 'Feature', properties: {}, geometry: fillGeom }}
+                data={{ type: 'Feature', properties: {}, geometry: fillGeom as any }}
                 fillPaint={{ 'fill-color': color, 'fill-opacity': 0.12 }}
                 fillHoverPaint={{ 'fill-opacity': 0.25 }}
                 interactive={true}
