@@ -2246,27 +2246,29 @@ function App() {
 
           {/* BMKG OVERLAY */}
           {gempa && !isGempaDismissed && (
-            <div className="absolute top-4 left-1/2 -translate-x-1/2 z-[600] bg-slate-900/90 backdrop-blur-md border border-slate-700 rounded-2xl p-4 shadow-2xl flex items-center gap-4 max-w-sm w-[90%] pr-10">
-              <button 
+            <div className="absolute top-4 left-1/2 -translate-x-1/2 z-[600] bg-slate-900/90 backdrop-blur-md border border-slate-700 rounded-2xl p-4 shadow-2xl w-[90%] max-w-sm">
+              <button
                 onClick={handleDismissGempa}
-                className="absolute top-3 right-3 p-1.5 text-slate-400 hover:text-white hover:bg-slate-800 rounded-full transition-colors"
+                className="absolute top-2 right-2 p-1.5 text-slate-400 hover:text-white hover:bg-slate-800 rounded-full transition-colors z-10"
                 title="Tutup Notifikasi"
               >
                 <X className="w-4 h-4" />
               </button>
-              <div className={`w-12 h-12 rounded-full flex items-center justify-center shrink-0 ${gempa.Potensi.toLowerCase().includes('tsunami') ? 'bg-red-500/20 text-red-500' : 'bg-orange-500/20 text-orange-400'}`}>
-                <AlertTriangle className="w-6 h-6" />
-              </div>
-              <div className="flex-1 min-w-0">
-                <div className="flex items-center justify-between mb-1">
-                  <h3 className="text-xs font-black text-white uppercase tracking-wider">INFO GEMPA BMKG</h3>
-                  <span className="text-[10px] font-bold text-slate-400">{gempa.Jam.split(' ')[0]}</span>
+              <div className="flex items-start gap-3 pr-6">
+                <div className={`w-10 h-10 rounded-full flex items-center justify-center shrink-0 mt-0.5 ${gempa.Potensi.toLowerCase().includes('tsunami') ? 'bg-red-500/20 text-red-500' : 'bg-orange-500/20 text-orange-400'}`}>
+                  <AlertTriangle className="w-5 h-5" />
                 </div>
-                <p className="text-xs text-slate-300 font-medium truncate">Mag: {gempa.Magnitude} • Kedalaman: {gempa.Kedalaman}</p>
-                <p className="text-[10px] text-slate-400 truncate">{gempa.Wilayah}</p>
-                <p className={`text-[10px] font-bold mt-1 ${gempa.Potensi.toLowerCase().includes('tsunami') ? 'text-red-400 animate-pulse' : 'text-emerald-400'}`}>
-                  {gempa.Potensi}
-                </p>
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center justify-between mb-1">
+                    <h3 className="text-xs font-black text-white uppercase tracking-wider">INFO GEMPA BMKG</h3>
+                    <span className="text-[10px] font-bold text-slate-400 ml-2 shrink-0">{gempa.Jam.split(' ')[0]}</span>
+                  </div>
+                  <p className="text-xs text-slate-300 font-medium">Mag: {gempa.Magnitude} • Kedalaman: {gempa.Kedalaman}</p>
+                  <p className="text-[10px] text-slate-400 leading-relaxed mt-0.5 break-words">{gempa.Wilayah}</p>
+                  <p className={`text-[10px] font-bold mt-1 ${gempa.Potensi.toLowerCase().includes('tsunami') ? 'text-red-400 animate-pulse' : 'text-emerald-400'}`}>
+                    {gempa.Potensi}
+                  </p>
+                </div>
               </div>
             </div>
           )}
@@ -2441,23 +2443,39 @@ function App() {
             )}
 
             {/* Drawing Zone Live Rendering — only while drawingZoneMode is active.
-                Uses MultiPolygon quads (one per segment pair) instead of a single
-                closed ring, so fill is always correct even on curved coastlines. */}
+                Fill = MultiPolygon quads (no interior edge lines).
+                Outline = separate LineString of the outer boundary.
+                Guard: use Math.min so we never read back[qi+1] that hasn't arrived yet
+                (drawingZoneBackCoords updates one render after drawingZoneCoords). */}
             {drawingZoneMode && drawingZoneCoords.length >= 2 && drawingZoneBackCoords.length >= 2 && (() => {
-              const nF = drawingZoneCoords.length;
-              const front = drawingZoneCoords;               // [lat,lng]
-              const back  = drawingZoneBackCoords;           // [lat,lng], same length
-              const quads = front.slice(0, -1).map((p1, qi) => {
+              const front = drawingZoneCoords;
+              const back  = drawingZoneBackCoords;
+              const safeLen = Math.min(front.length, back.length);
+              const color = ZRB_REFERENCE[newHazardZone.zrbLevel].color;
+              const quads = front.slice(0, safeLen - 1).flatMap((p1, qi) => {
                 const p2 = front[qi + 1], b1 = back[qi], b2 = back[qi + 1];
+                if (!p2 || !b1 || !b2) return [];
                 return [[ [p1[1],p1[0]], [p2[1],p2[0]], [b2[1],b2[0]], [b1[1],b1[0]], [p1[1],p1[0]] ]];
               });
+              if (quads.length === 0) return null;
+              // Outer boundary for outline (front line + reversed back line)
+              const frontSlice = front.slice(0, safeLen);
+              const backSlice  = back.slice(0, safeLen);
+              const boundary   = [...frontSlice, ...[...backSlice].reverse(), frontSlice[0]]
+                                   .map(c => [c[1], c[0]]);
               return (
-                <MapGeoJSON
-                  key={`zone-preview-${drawingZoneFlipSide}-${nF}`}
-                  data={{ type: 'Feature', properties: {}, geometry: { type: 'MultiPolygon', coordinates: quads } } as any}
-                  fillPaint={{ 'fill-color': ZRB_REFERENCE[newHazardZone.zrbLevel].color, 'fill-opacity': 0.35 }}
-                  linePaint={{ 'line-color': ZRB_REFERENCE[newHazardZone.zrbLevel].color, 'line-width': 2, 'line-dasharray': [2, 2], 'line-opacity': 0.9 }}
-                />
+                <>
+                  <MapGeoJSON
+                    key={`zone-preview-fill-${drawingZoneFlipSide}-${safeLen}`}
+                    data={{ type: 'Feature', properties: {}, geometry: { type: 'MultiPolygon', coordinates: quads } } as any}
+                    fillPaint={{ 'fill-color': color, 'fill-opacity': 0.35 }}
+                  />
+                  <MapGeoJSON
+                    key={`zone-preview-line-${drawingZoneFlipSide}-${safeLen}`}
+                    data={{ type: 'Feature', properties: {}, geometry: { type: 'LineString', coordinates: boundary } } as any}
+                    linePaint={{ 'line-color': color, 'line-width': 2, 'line-dasharray': [4, 3], 'line-opacity': 0.9 }}
+                  />
+                </>
               );
             })()}
             
@@ -2625,8 +2643,9 @@ function App() {
                 const color = ZRB_REFERENCE[zone.zrbLevel]?.color || '#ef4444';
                 return (
                   <Fragment key={`hazard-group-${i}-${hazardZoneVersion}`}>
+                    {/* Fill layer — quads, no interior edge lines */}
                     <MapGeoJSON 
-                      key={`hazard-${i}-${hazardZoneVersion}`}
+                      key={`hazard-fill-${i}-${hazardZoneVersion}`}
                       data={{
                         type: 'Feature',
                         properties: { id: zone.id },
@@ -2634,17 +2653,18 @@ function App() {
                           const nF = Math.floor(zone.coords.length / 2);
                           if (nF < 2) return { type: 'Polygon' as const, coordinates: [zone.coords.map(c => [c[1], c[0]])] };
                           const front = zone.coords.slice(0, nF);
-                          const back  = [...zone.coords.slice(nF)].reverse(); // back[0..N]
-                          const quads = front.slice(0, -1).map((p1, qi) => {
+                          const back  = [...zone.coords.slice(nF)].reverse();
+                          const quads = front.slice(0, -1).flatMap((p1, qi) => {
                             const p2 = front[qi+1], b1 = back[qi], b2 = back[qi+1];
+                            if (!p2 || !b1 || !b2) return [];
                             return [[ [p1[1],p1[0]], [p2[1],p2[0]], [b2[1],b2[0]], [b1[1],b1[0]], [p1[1],p1[0]] ]];
                           });
+                          if (quads.length === 0) return { type: 'Polygon' as const, coordinates: [zone.coords.map(c => [c[1], c[0]])] };
                           return { type: 'MultiPolygon' as const, coordinates: quads };
                         })()
                       }}
                       fillPaint={{ 'fill-color': tsunamiAlert ? '#ff0000' : color, 'fill-opacity': tsunamiAlert ? 0.35 : (isSelected ? 0.5 : 0.35) }}
                       fillHoverPaint={{ 'fill-opacity': 0.25 }}
-                      linePaint={{ 'line-color': tsunamiAlert ? '#ff0000' : color, 'line-width': tsunamiAlert ? 3 : (isSelected ? 3 : 1), 'line-opacity': 0.9 }}
                       interactive={!drawingZoneMode}
                       onClick={() => {
                         if (!drawingZoneMode) {
@@ -2653,6 +2673,21 @@ function App() {
                         }
                       }}
                     />
+                    {/* Outline layer — outer boundary only, no interior quad edges */}
+                    {(() => {
+                      const nF = Math.floor(zone.coords.length / 2);
+                      if (nF < 1) return null;
+                      const front   = zone.coords.slice(0, nF);
+                      const backRev = zone.coords.slice(nF); // stored as back[N]..back[0]
+                      const boundary = [...front, ...backRev, front[0]].map(c => [c[1], c[0]]);
+                      return (
+                        <MapGeoJSON
+                          key={`hazard-line-${i}-${hazardZoneVersion}`}
+                          data={{ type: 'Feature', properties: {}, geometry: { type: 'LineString', coordinates: boundary } } as any}
+                          linePaint={{ 'line-color': tsunamiAlert ? '#ff0000' : color, 'line-width': tsunamiAlert ? 3 : (isSelected ? 3 : 1), 'line-opacity': 0.9 }}
+                        />
+                      );
+                    })()}
                     <MapMarker latitude={polygonCentroid(zone.coords)[0]} longitude={polygonCentroid(zone.coords)[1]}>
                       <MarkerContent>
                         <div style={{ pointerEvents: 'none' }} className="bg-black/50 text-white text-[10px] px-2 py-0.5 rounded-full whitespace-nowrap font-bold shadow-sm">

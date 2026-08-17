@@ -324,30 +324,37 @@ export default function NavigatePage({ routes, selectedRoute, tsunamiAlert, user
           {hazardZones.map((zone, i) => {
             const centroid = polygonCentroid(zone.coords);
             const color = ZRB_REFERENCE[zone.zrbLevel]?.color || '#ef4444';
+            const nF = Math.floor(zone.coords.length / 2);
+            const front   = zone.coords.slice(0, nF);
+            const backRev = zone.coords.slice(nF); // back[N]..back[0]
+            const back    = [...backRev].reverse(); // back[0..N]
+            const quads = nF >= 2 ? front.slice(0, -1).flatMap((p1, qi) => {
+              const p2 = front[qi+1], b1 = back[qi], b2 = back[qi+1];
+              if (!p2 || !b1 || !b2) return [];
+              return [[ [p1[1],p1[0]], [p2[1],p2[0]], [b2[1],b2[0]], [b1[1],b1[0]], [p1[1],p1[0]] ]];
+            }) : [];
+            const fillGeom = quads.length > 0
+              ? { type: 'MultiPolygon' as const, coordinates: quads }
+              : { type: 'Polygon' as const, coordinates: [zone.coords.map(c => [c[1], c[0]])] };
+            const boundary = nF >= 1
+              ? [...front, ...backRev, front[0]].map(c => [c[1], c[0]])
+              : zone.coords.map(c => [c[1], c[0]]);
             return (
             <Fragment key={`hazard-group-${i}`}>
+              {/* Fill — quads, no interior edge lines */}
               <MapGeoJSON 
-                key={`hazard-${i}`}
-                data={{
-                  type: 'Feature',
-                  properties: {},
-                  geometry: (() => {
-                    const nF = Math.floor(zone.coords.length / 2);
-                    if (nF < 2) return { type: 'Polygon' as const, coordinates: [zone.coords.map(c => [c[1], c[0]])] };
-                    const front = zone.coords.slice(0, nF);
-                    const back  = [...zone.coords.slice(nF)].reverse();
-                    const quads = front.slice(0, -1).map((p1, qi) => {
-                      const p2 = front[qi+1], b1 = back[qi], b2 = back[qi+1];
-                      return [[ [p1[1],p1[0]], [p2[1],p2[0]], [b2[1],b2[0]], [b1[1],b1[0]], [p1[1],p1[0]] ]];
-                    });
-                    return { type: 'MultiPolygon' as const, coordinates: quads };
-                  })()
-                }}
+                key={`hazard-fill-${i}`}
+                data={{ type: 'Feature', properties: {}, geometry: fillGeom }}
                 fillPaint={{ 'fill-color': color, 'fill-opacity': 0.12 }}
                 fillHoverPaint={{ 'fill-opacity': 0.25 }}
-                linePaint={{ 'line-color': color, 'line-width': 1.5, 'line-dasharray': [5, 5] }}
                 interactive={true}
                 onClick={() => setSelectedZoneInfo(zone)}
+              />
+              {/* Outline — outer boundary only */}
+              <MapGeoJSON
+                key={`hazard-line-${i}`}
+                data={{ type: 'Feature', properties: {}, geometry: { type: 'LineString', coordinates: boundary } }}
+                linePaint={{ 'line-color': color, 'line-width': 1.5, 'line-dasharray': [5, 5] }}
               />
               <MapMarker latitude={centroid[0]} longitude={centroid[1]}>
                 <MarkerContent>
