@@ -1,5 +1,7 @@
 import { useState, useCallback, useEffect, useRef, useMemo } from "react";
 import { Map, MapMarker, MarkerContent, MarkerTooltip, MapRoute, MapGeoJSON, type MapRef, type MapViewport } from '@/components/ui/map'
+import AlertModal, { type AlertModalState } from './components/AlertModal';
+import { computeBackLine, buildZonePolygon } from './lib/zoneOffset';
 // â”€â”€ Modules â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 import {
   shelters,
@@ -319,9 +321,16 @@ function App() {
   const [drawingZoneCoords, setDrawingZoneCoords] = useState<[number, number][]>([]); // [lat, lng]
   // Guard: suppress the map's click event that fires right after a marker drag-end
   const markerJustDraggedRef = useRef(false);
+  // Zone offset (back-line) state — Part C
+  const [drawingZoneDepthKm, setDrawingZoneDepthKm] = useState(0.2); // default 200 m
+  const [drawingZoneFlipSide, setDrawingZoneFlipSide] = useState(false);
+  const [drawingZoneBackCoords, setDrawingZoneBackCoords] = useState<[number, number][]>([]);
+  const [manualBackOverrides, setManualBackOverrides] = useState<Record<number, [number, number]>>({}); // index -> manual position
   const [showAddHazardZone, setShowAddHazardZone] = useState(false);
   const [newHazardZone, setNewHazardZone] = useState<{name: string; zrbLevel: ZRBLevel; description: string}>({ name: '', zrbLevel: 4, description: '' });
   const [isSavingHazardZone, setIsSavingHazardZone] = useState(false);
+  // AlertModal state
+  const [alertModal, setAlertModal] = useState<AlertModalState>(null);
   
   const [selectedHazardZoneId, setSelectedHazardZoneId] = useState<string | null>(null);
   const [showEditHazardZone, setShowEditHazardZone] = useState(false);
@@ -445,6 +454,14 @@ function App() {
       };
     }
   }, [drawingZoneMode]);
+
+  // Auto-generate back-line whenever front coords, depth, or flip side changes
+  useEffect(() => {
+    const computed = computeBackLine(drawingZoneCoords, drawingZoneDepthKm, drawingZoneFlipSide);
+    // Preserve manually-dragged positions; only auto-fill un-overridden indices
+    const merged: [number, number][] = computed.map((pt, i) => manualBackOverrides[i] ?? pt);
+    setDrawingZoneBackCoords(merged);
+  }, [drawingZoneCoords, drawingZoneDepthKm, drawingZoneFlipSide, manualBackOverrides]);
 
   // User mode:  any other URL (default — no login required)
   const isAdminURL = (() => {
@@ -2253,18 +2270,45 @@ function App() {
                 initial={{ y: 20, opacity: 0 }}
                 animate={{ y: 0, opacity: 1 }}
                 exit={{ y: 20, opacity: 0 }}
-                className="absolute bottom-24 left-1/2 -translate-x-1/2 z-[1000] bg-slate-900/90 backdrop-blur-md border border-red-500/50 rounded-2xl p-4 shadow-2xl flex flex-col items-center gap-3 w-[300px]"
+                className="absolute bottom-24 left-1/2 -translate-x-1/2 z-[1000] bg-slate-900/90 backdrop-blur-md border border-red-500/50 rounded-2xl p-4 shadow-2xl flex flex-col gap-3 w-[320px]"
               >
                 <div className="flex items-center gap-2">
                   <MapPin className="w-4 h-4 text-red-400 animate-bounce" />
                   <span className="text-sm font-bold text-white">Mode Gambar Zona</span>
                 </div>
-                <p className="text-[10px] text-slate-400 text-center">Klik di peta untuk membuat titik poligon. Minimal 3 titik.</p>
-                <div className="flex gap-2 w-full mt-2">
+                <p className="text-[10px] text-slate-400 text-center">Klik tepi laut untuk menambah titik. Klik-kanan titik untuk hapus.</p>
+
+                {/* Depth slider */}
+                <div className="flex flex-col gap-1">
+                  <div className="flex justify-between items-center">
+                    <span className="text-[10px] text-slate-400 font-bold">Kedalaman ke Darat</span>
+                    <span className="text-[10px] text-amber-400 font-black">{Math.round(drawingZoneDepthKm * 1000)} m</span>
+                  </div>
+                  <input
+                    type="range" min={50} max={1000} step={10}
+                    value={Math.round(drawingZoneDepthKm * 1000)}
+                    onChange={e => setDrawingZoneDepthKm(Number(e.target.value) / 1000)}
+                    className="w-full accent-red-500 cursor-pointer"
+                  />
+                </div>
+
+                {/* Flip side button */}
+                <button
+                  onClick={() => setDrawingZoneFlipSide(f => !f)}
+                  className="py-1.5 rounded-lg bg-amber-600/30 hover:bg-amber-600/50 border border-amber-500/40 text-amber-300 text-[10px] font-bold transition-colors"
+                >
+                  {drawingZoneFlipSide ? '↩ Balik ke Sisi Semula' : '↪ Balik Sisi (ke Laut?)'}
+                </button>
+
+                <div className="flex gap-2 w-full">
                   <button
                     onClick={() => {
                       setDrawingZoneMode(false);
                       setDrawingZoneCoords([]);
+                      setDrawingZoneBackCoords([]);
+                      setManualBackOverrides({});
+                      setDrawingZoneDepthKm(0.2);
+                      setDrawingZoneFlipSide(false);
                     }}
                     className="flex-1 py-2 bg-slate-800 hover:bg-slate-700 text-white rounded-lg text-xs font-bold transition-colors"
                   >
@@ -2272,12 +2316,12 @@ function App() {
                   </button>
                   <button
                     onClick={() => {
-                      if (drawingZoneCoords.length < 3) return;
+                      if (drawingZoneCoords.length < 2) return;
                       setDrawingZoneMode(false);
                       setShowAddHazardZone(true);
                     }}
                     className={`flex-1 py-2 rounded-lg text-xs font-bold transition-colors ${
-                      drawingZoneCoords.length >= 3 ? "bg-red-600 hover:bg-red-500 text-white" : "bg-red-900/50 text-red-300/50 cursor-not-allowed"
+                      drawingZoneCoords.length >= 2 ? "bg-red-600 hover:bg-red-500 text-white" : "bg-red-900/50 text-red-300/50 cursor-not-allowed"
                     }`}
                   >
                     Selesai ({drawingZoneCoords.length})
@@ -2384,23 +2428,24 @@ function App() {
               </>
             )}
 
-            {/* Drawing Zone Live Rendering */}
-            {drawingZoneCoords.length > 0 && (
-              <MapGeoJSON
-                data={{
-                  type: 'Feature',
-                  properties: {},
-                  geometry: {
-                    type: drawingZoneCoords.length > 2 ? 'Polygon' : 'LineString',
-                    coordinates: drawingZoneCoords.length > 2 
-                      ? [[...drawingZoneCoords.map(c => [c[1], c[0]]), [drawingZoneCoords[0][1], drawingZoneCoords[0][0]]]] 
-                      : drawingZoneCoords.map(c => [c[1], c[0]])
-                  }
-                } as any}
-                fillPaint={{ 'fill-color': ZRB_REFERENCE[newHazardZone.zrbLevel].color, 'fill-opacity': 0.35 }}
-                linePaint={{ 'line-color': ZRB_REFERENCE[newHazardZone.zrbLevel].color, 'line-width': 2, 'line-dasharray': [2, 2], 'line-opacity': 0.9 }}
-              />
-            )}
+            {/* Drawing Zone Live Rendering — uses buildZonePolygon for accurate preview */}
+            {drawingZoneCoords.length >= 2 && drawingZoneBackCoords.length >= 2 && (() => {
+              const ring = buildZonePolygon(drawingZoneCoords, drawingZoneBackCoords);
+              return (
+                <MapGeoJSON
+                  data={{
+                    type: 'Feature',
+                    properties: {},
+                    geometry: {
+                      type: 'Polygon',
+                      coordinates: [[...ring.map(c => [c[1], c[0]]), [ring[0][1], ring[0][0]]]],
+                    }
+                  } as any}
+                  fillPaint={{ 'fill-color': ZRB_REFERENCE[newHazardZone.zrbLevel].color, 'fill-opacity': 0.35 }}
+                  linePaint={{ 'line-color': ZRB_REFERENCE[newHazardZone.zrbLevel].color, 'line-width': 2, 'line-dasharray': [2, 2], 'line-opacity': 0.9 }}
+                />
+              );
+            })()}
 
             {/* Closing-line preview: dashed line from last point back to first,
                 shows the edge that 'Selesai' will close, so admin can judge
@@ -2461,6 +2506,17 @@ function App() {
                       e.preventDefault();
                       e.stopPropagation();
                       setDrawingZoneCoords(prev => prev.filter((_, idx) => idx !== i));
+                      // Reindex manual back overrides: shift indices > i down by 1
+                      setManualBackOverrides(prev => {
+                        const next: Record<number, [number, number]> = {};
+                        for (const k in prev) {
+                          const ki = Number(k);
+                          if (ki < i) next[ki] = prev[ki];
+                          else if (ki > i) next[ki - 1] = prev[ki];
+                          // ki === i is dropped
+                        }
+                        return next;
+                      });
                     }}
                     onTouchStart={(() => {
                       let timer: ReturnType<typeof setTimeout> | null = null;
@@ -2468,6 +2524,15 @@ function App() {
                         e.stopPropagation();
                         timer = setTimeout(() => {
                           setDrawingZoneCoords(prev => prev.filter((_, idx) => idx !== i));
+                          setManualBackOverrides(prev => {
+                            const next: Record<number, [number, number]> = {};
+                            for (const k in prev) {
+                              const ki = Number(k);
+                              if (ki < i) next[ki] = prev[ki];
+                              else if (ki > i) next[ki - 1] = prev[ki];
+                            }
+                            return next;
+                          });
                           timer = null;
                         }, 500);
                         (e.currentTarget as HTMLElement).addEventListener(
@@ -2499,6 +2564,49 @@ function App() {
                     onMouseUp={e => {
                       (e.currentTarget as HTMLElement).style.cursor = 'grab';
                     }}
+                  />
+                </MarkerContent>
+              </MapMarker>
+            ))}
+
+            {/* Back-line markers — draggable, distinct style (yellow border) */}
+            {drawingZoneMode && drawingZoneBackCoords.map((coord, i) => (
+              <MapMarker
+                key={`draw-back-${i}`}
+                latitude={coord[0]}
+                longitude={coord[1]}
+                draggable={true}
+                onDragEnd={({ lat, lng }) => {
+                  markerJustDraggedRef.current = true;
+                  setTimeout(() => { markerJustDraggedRef.current = false; }, 150);
+                  setManualBackOverrides(prev => ({ ...prev, [i]: [lat, lng] }));
+                }}
+              >
+                <MarkerContent>
+                  <div
+                    style={{
+                      width: 12,
+                      height: 12,
+                      backgroundColor: '#1e293b',
+                      border: '2px solid #facc15',
+                      borderRadius: '50%',
+                      cursor: 'grab',
+                      transform: 'translate(-6px, -6px)',
+                      boxShadow: '0 0 5px rgba(250,204,21,0.5)',
+                    }}
+                    title={`Titik belakang ${i + 1} — drag untuk sesuaikan`}
+                    onMouseEnter={e => {
+                      (e.currentTarget as HTMLElement).style.width = '16px';
+                      (e.currentTarget as HTMLElement).style.height = '16px';
+                      (e.currentTarget as HTMLElement).style.transform = 'translate(-8px, -8px)';
+                    }}
+                    onMouseLeave={e => {
+                      (e.currentTarget as HTMLElement).style.width = '12px';
+                      (e.currentTarget as HTMLElement).style.height = '12px';
+                      (e.currentTarget as HTMLElement).style.transform = 'translate(-6px, -6px)';
+                    }}
+                    onMouseDown={e => { (e.currentTarget as HTMLElement).style.cursor = 'grabbing'; }}
+                    onMouseUp={e => { (e.currentTarget as HTMLElement).style.cursor = 'grab'; }}
                   />
                 </MarkerContent>
               </MapMarker>
@@ -3844,7 +3952,7 @@ function App() {
                 <button
                   disabled={isSavingShelter}
                   onClick={async () => {
-                    if(!newShelter.name || !newShelter.lat || !newShelter.lng) return alert('Data tidak lengkap');
+                    if(!newShelter.name || !newShelter.lat || !newShelter.lng) return setAlertModal({ title: 'Data Tidak Lengkap', message: 'Nama, latitude, dan longitude shelter harus diisi.', variant: 'error' });
 
                     setIsSavingShelter(true);
 
@@ -3879,7 +3987,7 @@ function App() {
                       setShowAddShelter(false);
                       setNewShelter({ name: '', lat: '', lng: '', capacity: '', radius: '50' });
                     } else {
-                      alert(`Gagal menyimpan shelter. Sesi login Anda mungkin telah berakhir (Token Expired). Silakan Logout dan Login kembali.`);
+                      setAlertModal({ title: 'Gagal Menyimpan Shelter', message: res.error ?? 'Sesi login Anda mungkin telah berakhir (Token Expired). Silakan Logout dan Login kembali.', variant: 'error' });
                     }
                   }}
                   className="flex-1 py-3 text-white font-bold text-sm bg-indigo-600 rounded-xl hover:bg-indigo-500 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
@@ -3947,17 +4055,21 @@ function App() {
                 <button onClick={() => {
                   setShowAddHazardZone(false);
                   setDrawingZoneCoords([]);
+                  setDrawingZoneBackCoords([]);
+                  setManualBackOverrides({});
+                  setDrawingZoneDepthKm(0.2);
+                  setDrawingZoneFlipSide(false);
                 }} className="flex-1 py-3 text-slate-400 font-bold text-sm bg-slate-800 rounded-xl hover:bg-slate-700 transition-colors">Batal</button>
                 <button
                   disabled={isSavingHazardZone}
                   onClick={async () => {
-                    if(!newHazardZone.name) return alert('Nama zona harus diisi');
+                    if(!newHazardZone.name) return setAlertModal({ title: 'Nama Wajib Diisi', message: 'Nama zona bahaya tidak boleh kosong.', variant: 'error' });
                     setIsSavingHazardZone(true);
                     
                     const payload: HazardZone = {
                       id: 'HZ' + Date.now(),
                       name: newHazardZone.name,
-                      coords: drawingZoneCoords,
+                      coords: buildZonePolygon(drawingZoneCoords, drawingZoneBackCoords),
                       zrbLevel: newHazardZone.zrbLevel,
                       description: newHazardZone.description || undefined
                     };
@@ -3970,9 +4082,13 @@ function App() {
                       setHazardZoneVersion(v => v + 1);
                       setShowAddHazardZone(false);
                       setDrawingZoneCoords([]);
+                      setDrawingZoneBackCoords([]);
+                      setManualBackOverrides({});
+                      setDrawingZoneDepthKm(0.2);
+                      setDrawingZoneFlipSide(false);
                       setNewHazardZone({ name: '', zrbLevel: 4, description: '' });
                     } else {
-                      alert('Gagal menyimpan zona bahaya ke server.');
+                      setAlertModal({ title: 'Gagal Menyimpan Zona', message: res.error ?? 'Gagal menyimpan zona bahaya ke server. Cek console untuk detail.', variant: 'error' });
                     }
                   }}
                   className="flex-1 py-3 text-white font-bold text-sm bg-red-600 rounded-xl hover:bg-red-500 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
@@ -4130,7 +4246,7 @@ function App() {
                 <button
                   disabled={isSavingEditHazardZone}
                   onClick={async () => {
-                    if(!editHazardZoneData.name) return alert('Nama zona harus diisi');
+                    if(!editHazardZoneData.name) return setAlertModal({ title: 'Nama Wajib Diisi', message: 'Nama zona bahaya tidak boleh kosong.', variant: 'error' });
                     setIsSavingEditHazardZone(true);
                     
                     const payload = {
@@ -4150,7 +4266,7 @@ function App() {
                       setHazardZoneVersion(v => v + 1);
                       setShowEditHazardZone(false);
                     } else {
-                      alert('Gagal mengupdate zona bahaya.');
+                      setAlertModal({ title: 'Gagal Update Zona', message: res.error ?? 'Gagal mengupdate zona bahaya. Cek console untuk detail.', variant: 'error' });
                     }
                   }}
                   className="flex-1 py-3 text-white font-bold text-sm bg-indigo-600 rounded-xl hover:bg-indigo-500 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
@@ -4203,7 +4319,7 @@ function App() {
                         setShowDeleteHazardZoneConfirm(false);
                         setSelectedHazardZoneId(null);
                       } else {
-                        alert('Gagal menghapus zona bahaya dari server.');
+                        setAlertModal({ title: 'Gagal Menghapus Zona', message: 'Gagal menghapus zona bahaya dari server.', variant: 'error' });
                       }
                     }}
                     className="flex-1 py-3 text-white font-bold text-sm bg-red-600 rounded-xl hover:bg-red-500 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
@@ -4752,6 +4868,7 @@ function App() {
         </AnimatePresence>
       </div>
     </div>
+    <AlertModal state={alertModal} onClose={() => setAlertModal(null)} />
   );
 }
 

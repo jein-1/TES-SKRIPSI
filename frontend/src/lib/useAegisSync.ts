@@ -170,10 +170,10 @@ export const aegisApi = {
   // ── Custom Shelter API ─────────────────────────────────────
 
   /** Admin: simpan shelter custom ke Supabase + broadcast ke semua device */
-  addCustomShelter: async (shelter: Shelter): Promise<{ ok: boolean }> => {
+  addCustomShelter: async (shelter: Shelter): Promise<{ ok: boolean; error?: string }> => {
     try {
       const token = sessionStorage.getItem("aegisJWT");
-      if (!token) return { ok: false };
+      if (!token) return { ok: false, error: 'Token tidak ditemukan. Silakan login ulang.' };
 
       const isLocalhost = typeof window !== 'undefined' && window.location.origin.includes('localhost');
       const API_URL = isLocalhost ? (import.meta.env.VITE_API_URL || "https://tsunami-dimss.vercel.app") : "";
@@ -195,8 +195,9 @@ export const aegisApi = {
       });
 
       if (!res.ok) {
-        console.error("[AegisSync] addCustomShelter error:", await res.text());
-        return { ok: false };
+        const errText = await res.text();
+        console.error("[AegisSync] addCustomShelter error:", errText);
+        return { ok: false, error: errText || `HTTP ${res.status}` };
       }
       // Broadcast ke semua device agar langsung muncul tanpa refresh
       await broadcastChannel.send({
@@ -207,7 +208,7 @@ export const aegisApi = {
       return { ok: true };
     } catch (e) {
       console.error("[AegisSync] addCustomShelter exception:", e);
-      return { ok: false };
+      return { ok: false, error: String(e) };
     }
   },
 
@@ -337,10 +338,10 @@ export const aegisApi = {
 
   // ── Hazard Zone API ────────────────────────────────────────
 
-  addHazardZone: async (zone: HazardZone): Promise<{ ok: boolean }> => {
+  addHazardZone: async (zone: HazardZone): Promise<{ ok: boolean; error?: string }> => {
     try {
       const token = sessionStorage.getItem("aegisJWT");
-      if (!token) return { ok: false };
+      if (!token) return { ok: false, error: 'Token tidak ditemukan. Silakan login ulang.' };
 
       const isLocalhost = typeof window !== 'undefined' && window.location.origin.includes('localhost');
       const API_URL = isLocalhost ? (import.meta.env.VITE_API_URL || "https://tsunami-dimss.vercel.app") : "";
@@ -354,8 +355,9 @@ export const aegisApi = {
       });
 
       if (!res.ok) {
-        console.error("[AegisSync] addHazardZone error:", await res.text());
-        return { ok: false };
+        const errText = await res.text();
+        console.error("[AegisSync] addHazardZone error:", errText);
+        return { ok: false, error: errText || `HTTP ${res.status}` };
       }
       await broadcastChannel.send({
         type: "broadcast",
@@ -365,17 +367,17 @@ export const aegisApi = {
       return { ok: true };
     } catch (e) {
       console.error("[AegisSync] addHazardZone exception:", e);
-      return { ok: false };
+      return { ok: false, error: String(e) };
     }
   },
 
   updateHazardZone: async (
     id: string,
     fields: { name?: string; coords?: [number, number][]; zrbLevel?: ZRBLevel; description?: string }
-  ): Promise<{ ok: boolean }> => {
+  ): Promise<{ ok: boolean; error?: string }> => {
     try {
       const token = sessionStorage.getItem("aegisJWT");
-      if (!token) return { ok: false };
+      if (!token) return { ok: false, error: 'Token tidak ditemukan. Silakan login ulang.' };
 
       const isLocalhost = typeof window !== 'undefined' && window.location.origin.includes('localhost');
       const API_URL = isLocalhost ? (import.meta.env.VITE_API_URL || "https://tsunami-dimss.vercel.app") : "";
@@ -389,8 +391,9 @@ export const aegisApi = {
       });
 
       if (!res.ok) {
-        console.error("[AegisSync] updateHazardZone error:", await res.text());
-        return { ok: false };
+        const errText = await res.text();
+        console.error("[AegisSync] updateHazardZone error:", errText);
+        return { ok: false, error: errText || `HTTP ${res.status}` };
       }
 
       const resData = await res.json().catch(() => ({}));
@@ -412,7 +415,7 @@ export const aegisApi = {
       return { ok: true };
     } catch (e) {
       console.error("[AegisSync] updateHazardZone exception:", e);
-      return { ok: false };
+      return { ok: false, error: String(e) };
     }
   },
 
