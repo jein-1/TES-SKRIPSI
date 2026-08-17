@@ -2209,6 +2209,9 @@ function App() {
                     onClick={() => {
                       setDrawingZoneMode(true);
                       setDrawingZoneCoords([]);
+                      setManualBackOverrides({});
+                      setDrawingZoneDepthKm(0.2);
+                      setDrawingZoneFlipSide(false);
                     }}
                     className="flex items-center gap-3 text-red-400 hover:text-red-300 transition-colors mb-4"
                   >

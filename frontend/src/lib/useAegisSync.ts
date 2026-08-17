@@ -256,10 +256,10 @@ export const aegisApi = {
   },
 
   /** Admin: delete shelter custom di Supabase */
-  deleteCustomShelter: async (id: string): Promise<{ ok: boolean }> => {
+  deleteCustomShelter: async (id: string): Promise<{ ok: boolean; error?: string }> => {
     try {
       const token = sessionStorage.getItem("aegisJWT");
-      if (!token) return { ok: false };
+      if (!token) return { ok: false, error: 'Token tidak ditemukan. Silakan login ulang.' };
 
       const isLocalhost = typeof window !== 'undefined' && window.location.origin.includes('localhost');
       const API_URL = isLocalhost ? (import.meta.env.VITE_API_URL || "https://tsunami-dimss.vercel.app") : "";
@@ -273,8 +273,9 @@ export const aegisApi = {
       });
 
       if (!res.ok) {
-        console.error("[AegisSync] deleteCustomShelter error:", await res.text());
-        return { ok: false };
+        const errText = await res.text();
+        console.error("[AegisSync] deleteCustomShelter error:", errText);
+        return { ok: false, error: errText || `HTTP ${res.status}` };
       }
 
       await broadcastChannel.send({
@@ -286,7 +287,7 @@ export const aegisApi = {
       return { ok: true };
     } catch (e) {
       console.error("[AegisSync] deleteCustomShelter exception:", e);
-      return { ok: false };
+      return { ok: false, error: String(e) };
     }
   },
 
@@ -419,10 +420,10 @@ export const aegisApi = {
     }
   },
 
-  deleteHazardZone: async (id: string): Promise<{ ok: boolean }> => {
+  deleteHazardZone: async (id: string): Promise<{ ok: boolean; error?: string }> => {
     try {
       const token = sessionStorage.getItem("aegisJWT");
-      if (!token) return { ok: false };
+      if (!token) return { ok: false, error: 'Token tidak ditemukan. Silakan login ulang.' };
 
       const isLocalhost = typeof window !== 'undefined' && window.location.origin.includes('localhost');
       const API_URL = isLocalhost ? (import.meta.env.VITE_API_URL || "https://tsunami-dimss.vercel.app") : "";
@@ -436,8 +437,9 @@ export const aegisApi = {
       });
 
       if (!res.ok) {
-        console.error("[AegisSync] deleteHazardZone error:", await res.text());
-        return { ok: false };
+        const errText = await res.text();
+        console.error("[AegisSync] deleteHazardZone error:", errText);
+        return { ok: false, error: errText || `HTTP ${res.status}` };
       }
 
       await broadcastChannel.send({
@@ -449,7 +451,7 @@ export const aegisApi = {
       return { ok: true };
     } catch (e) {
       console.error("[AegisSync] deleteHazardZone exception:", e);
-      return { ok: false };
+      return { ok: false, error: String(e) };
     }
   },
 
