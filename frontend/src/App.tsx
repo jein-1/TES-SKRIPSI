@@ -464,6 +464,27 @@ function App() {
     setDrawingZoneBackCoords(merged);
   }, [drawingZoneCoords, drawingZoneDepthKm, drawingZoneFlipSide, manualBackOverrides]);
 
+  // Cleanup lingering MapGeoJSON layers when exiting drawingZoneMode
+  useEffect(() => {
+    if (!drawingZoneMode && adminMapRef.current) {
+      const map = adminMapRef.current;
+      const idsToCleanup = [
+        "zone-preview-fill",
+        "zone-preview-front-line",
+        "zone-preview-back-line",
+      ];
+      idsToCleanup.forEach(id => {
+        try {
+          if (map.getLayer(`geojson-fill-${id}`)) map.removeLayer(`geojson-fill-${id}`);
+          if (map.getLayer(`geojson-line-${id}`)) map.removeLayer(`geojson-line-${id}`);
+          if (map.getSource(`geojson-source-${id}`)) map.removeSource(`geojson-source-${id}`);
+        } catch (e) {
+          console.warn("Cleanup lingering layer failed for", id, e);
+        }
+      });
+    }
+  }, [drawingZoneMode]);
+
   // User mode:  any other URL (default — no login required)
   const isAdminURL = (() => {
     // APK Admin build: env var set at build time via .env.admin
@@ -2462,18 +2483,21 @@ function App() {
                 <>
                   {quads.length > 0 && (
                     <MapGeoJSON
-                      key={`zpf-${drawingZoneFlipSide}-${safeLen}`}
+                      key="zone-preview-fill"
+                      id="zone-preview-fill"
                       data={{ type: 'Feature', properties: {}, geometry: { type: 'MultiPolygon', coordinates: quads } } as any}
                       fillPaint={{ 'fill-color': color, 'fill-opacity': 0.25 }}
                     />
                   )}
                   <MapGeoJSON
-                    key={`zpl-${drawingZoneFlipSide}-${safeLen}`}
+                    key="zone-preview-front-line"
+                    id="zone-preview-front-line"
                     data={{ type: 'Feature', properties: {}, geometry: { type: 'LineString', coordinates: front.map(c => [c[1], c[0]]) } } as any}
                     linePaint={{ 'line-color': color, 'line-width': 2.5, 'line-opacity': 0.95 }}
                   />
                   <MapGeoJSON
-                    key={`zpb-${drawingZoneFlipSide}-${safeLen}`}
+                    key="zone-preview-back-line"
+                    id="zone-preview-back-line"
                     data={{ type: 'Feature', properties: {}, geometry: { type: 'LineString', coordinates: back.map(c => [c[1], c[0]]) } } as any}
                     linePaint={{ 'line-color': color, 'line-width': 1.5, 'line-dasharray': [5, 4], 'line-opacity': 0.8 }}
                   />
