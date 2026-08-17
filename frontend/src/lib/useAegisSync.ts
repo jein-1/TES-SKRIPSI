@@ -71,6 +71,9 @@ async function apiPost(path: string, body: object, isAdmin = false) {
 }
 
 function parseApiError(errText: string, status: number): string {
+  if (status === 401) {
+    return "Sesi login kedaluwarsa. Silakan LOGOUT di pojok kanan atas dan LOGIN kembali.";
+  }
   if (!errText) return `HTTP ${status}`;
   try {
     const json = JSON.parse(errText);
