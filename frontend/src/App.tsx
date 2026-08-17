@@ -447,7 +447,42 @@ function App() {
         if (markerJustDraggedRef.current) return;
         const lat = e.lngLat.lat;
         const lng = e.lngLat.lng;
-        setDrawingZoneCoords(prev => [...prev, [lat, lng]]);
+        setDrawingZoneCoords(prev => {
+          if (prev.length < 2) return [...prev, [lat, lng]];
+          // Smart insertion: find the nearest existing segment and insert there
+          // so new points always end up between their neighbours (no cross-lines).
+          const ptSegDistSq = (
+            p: [number, number],
+            a: [number, number],
+            b: [number, number],
+          ): number => {
+            const ax = a[1], ay = a[0], bx = b[1], by = b[0], px = lng, py = lat;
+            const dx = bx - ax, dy = by - ay;
+            const lenSq = dx * dx + dy * dy;
+            if (lenSq === 0) return (px - ax) ** 2 + (py - ay) ** 2;
+            const t = Math.max(0, Math.min(1, ((px - ax) * dx + (py - ay) * dy) / lenSq));
+            return (px - (ax + t * dx)) ** 2 + (py - (ay + t * dy)) ** 2;
+          };
+          let minDist = Infinity;
+          let insertAt = prev.length; // default: append
+          for (let i = 0; i < prev.length - 1; i++) {
+            const d = ptSegDistSq([lat, lng], prev[i], prev[i + 1]);
+            if (d < minDist) { minDist = d; insertAt = i + 1; }
+          }
+          const next = [...prev];
+          next.splice(insertAt, 0, [lat, lng]);
+          // Shift manualBackOverrides indices >= insertAt up by 1
+          setManualBackOverrides(prev2 => {
+            const shifted: Record<number, [number, number]> = {};
+            for (const k in prev2) {
+              const ki = Number(k);
+              if (ki < insertAt) shifted[ki] = prev2[ki];
+              else shifted[ki + 1] = prev2[ki];
+            }
+            return shifted;
+          });
+          return next;
+        });
       };
       map.on('click', handleClick);
       return () => {
@@ -2302,7 +2337,11 @@ function App() {
 
                 {/* Flip side button */}
                 <button
-                  onClick={() => setDrawingZoneFlipSide(f => !f)}
+                  onClick={() => {
+                    setDrawingZoneFlipSide(f => !f);
+                    // Clear manual overrides — they point to the wrong side after flip
+                    setManualBackOverrides({});
+                  }}
                   className="py-1.5 rounded-lg bg-amber-600/30 hover:bg-amber-600/50 border border-amber-500/40 text-amber-300 text-[10px] font-bold transition-colors"
                 >
                   {drawingZoneFlipSide ? '↩ Balik ke Sisi Semula' : '↪ Balik Sisi (ke Laut?)'}
@@ -2436,11 +2475,14 @@ function App() {
               </>
             )}
 
-            {/* Drawing Zone Live Rendering — uses buildZonePolygon for accurate preview */}
+            {/* Drawing Zone Live Rendering — uses buildZonePolygon for accurate preview.
+                Key includes flip+length so MapLibre remounts the layer cleanly when
+                data changes, fixing the "disappear on zoom-out" bug. */}
             {drawingZoneCoords.length >= 2 && drawingZoneBackCoords.length >= 2 && (() => {
               const ring = buildZonePolygon(drawingZoneCoords, drawingZoneBackCoords);
               return (
                 <MapGeoJSON
+                  key={`zone-preview-${drawingZoneFlipSide}-${drawingZoneCoords.length}`}
                   data={{
                     type: 'Feature',
                     properties: {},
@@ -2454,31 +2496,6 @@ function App() {
                 />
               );
             })()}
-
-            {/* Closing-line preview: dashed line from last point back to first,
-                shows the edge that 'Selesai' will close, so admin can judge
-                whether to add more points or finish now. */}
-            {drawingZoneCoords.length >= 2 && (
-              <MapGeoJSON
-                data={{
-                  type: 'Feature',
-                  properties: {},
-                  geometry: {
-                    type: 'LineString',
-                    coordinates: [
-                      [drawingZoneCoords[drawingZoneCoords.length - 1][1], drawingZoneCoords[drawingZoneCoords.length - 1][0]],
-                      [drawingZoneCoords[0][1], drawingZoneCoords[0][0]],
-                    ],
-                  },
-                } as any}
-                linePaint={{
-                  'line-color': '#facc15',
-                  'line-width': 1.5,
-                  'line-dasharray': [4, 5],
-                  'line-opacity': 0.55,
-                }}
-              />
-            )}
             
             {/* Render markers for drawing zone coords — draggable, hoverable, deletable */}
             {drawingZoneCoords.map((coord, i) => (
