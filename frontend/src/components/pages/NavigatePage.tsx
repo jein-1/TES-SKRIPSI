@@ -325,12 +325,24 @@ export default function NavigatePage({ routes, selectedRoute, tsunamiAlert, user
             const centroid = polygonCentroid(zone.coords);
             const color = ZRB_REFERENCE[zone.zrbLevel]?.color || '#ef4444';
             const nF = Math.floor(zone.coords.length / 2);
-            const ring = [...zone.coords.map(c => [c[1], c[0]]), [zone.coords[0][1], zone.coords[0][0]]];
+            
+            const front   = zone.coords.slice(0, nF);
+            const backRev = zone.coords.slice(nF);
+            const back    = [...backRev].reverse();
+            const quads = nF >= 2 ? front.slice(0, -1).flatMap((p1, qi) => {
+              const p2 = front[qi+1], b1 = back[qi], b2 = back[qi+1];
+              if (!p2 || !b1 || !b2) return [];
+              return [[ [p1[1],p1[0]], [p2[1],p2[0]], [b2[1],b2[0]], [b1[1],b1[0]], [p1[1],p1[0]] ]];
+            }) : [];
+            const fillGeom = quads.length > 0
+              ? { type: 'MultiPolygon' as const, coordinates: quads }
+              : { type: 'Polygon' as const, coordinates: [zone.coords.map(c => [c[1], c[0]])] };
+              
             return (
             <Fragment key={`hazard-group-${i}`}>
               <MapGeoJSON 
                 key={`hazard-fill-${i}`}
-                data={{ type: 'Feature', properties: {}, geometry: { type: 'Polygon', coordinates: [ring] } as any }}
+                data={{ type: 'Feature', properties: {}, geometry: fillGeom as any }}
                 fillPaint={{ 'fill-color': color, 'fill-opacity': 0.12 }}
                 fillHoverPaint={{ 'fill-opacity': 0.25 }}
                 interactive={true}

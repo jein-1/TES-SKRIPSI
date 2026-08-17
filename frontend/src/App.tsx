@@ -2443,7 +2443,7 @@ function App() {
             )}
 
             {/* Drawing Zone Live Rendering — active only while drawing.
-                Fill: buildZonePolygon ring (single Polygon, correct color, no opacity stacking).
+                Fill: MultiPolygon quads (avoids WebGL tessellation bugs on self-intersecting curves).
                 Outline: two separate LineStrings (front & back) — never scattered, never self-closing. */}
             {drawingZoneMode && (() => {
               const safeLen = Math.min(drawingZoneCoords.length, drawingZoneBackCoords.length);
@@ -2451,15 +2451,22 @@ function App() {
               const front = drawingZoneCoords.slice(0, safeLen);
               const back  = drawingZoneBackCoords.slice(0, safeLen);
               const color = ZRB_REFERENCE[newHazardZone.zrbLevel].color;
-              const ring  = buildZonePolygon(front, back);
-              const ringLng = [...ring.map(c => [c[1], c[0]]), [ring[0][1], ring[0][0]]];
+              
+              const quads = front.slice(0, safeLen - 1).flatMap((p1, qi) => {
+                const p2 = front[qi + 1], b1 = back[qi], b2 = back[qi + 1];
+                if (!p2 || !b1 || !b2) return [];
+                return [[ [p1[1],p1[0]], [p2[1],p2[0]], [b2[1],b2[0]], [b1[1],b1[0]], [p1[1],p1[0]] ]];
+              });
+              
               return (
                 <>
-                  <MapGeoJSON
-                    key={`zpf-${drawingZoneFlipSide}-${safeLen}`}
-                    data={{ type: 'Feature', properties: {}, geometry: { type: 'Polygon', coordinates: [ringLng] } } as any}
-                    fillPaint={{ 'fill-color': color, 'fill-opacity': 0.25 }}
-                  />
+                  {quads.length > 0 && (
+                    <MapGeoJSON
+                      key={`zpf-${drawingZoneFlipSide}-${safeLen}`}
+                      data={{ type: 'Feature', properties: {}, geometry: { type: 'MultiPolygon', coordinates: quads } } as any}
+                      fillPaint={{ 'fill-color': color, 'fill-opacity': 0.25 }}
+                    />
+                  )}
                   <MapGeoJSON
                     key={`zpl-${drawingZoneFlipSide}-${safeLen}`}
                     data={{ type: 'Feature', properties: {}, geometry: { type: 'LineString', coordinates: front.map(c => [c[1], c[0]]) } } as any}
@@ -2638,20 +2645,25 @@ function App() {
                 const color = ZRB_REFERENCE[zone.zrbLevel]?.color || '#ef4444';
                 return (
                   <Fragment key={`hazard-group-${i}-${hazardZoneVersion}`}>
-                    {/* Fill layer */}
+                    {/* Fill layer — using quads to prevent WebGL black glitches on sharp curves */}
                     <MapGeoJSON 
                       key={`hazard-fill-${i}-${hazardZoneVersion}`}
                       data={{
                         type: 'Feature',
                         properties: { id: zone.id },
-                        geometry: {
-                          type: 'Polygon',
-                          coordinates: [(() => {
-                            const ring = zone.coords.map(c => [c[1], c[0]]);
-                            ring.push([zone.coords[0][1], zone.coords[0][0]]);
-                            return ring;
-                          })()]
-                        } as any
+                        geometry: (() => {
+                          const nF = Math.floor(zone.coords.length / 2);
+                          if (nF < 2) return { type: 'Polygon' as const, coordinates: [zone.coords.map(c => [c[1], c[0]])] };
+                          const front = zone.coords.slice(0, nF);
+                          const back  = [...zone.coords.slice(nF)].reverse();
+                          const quads = front.slice(0, -1).flatMap((p1, qi) => {
+                            const p2 = front[qi+1], b1 = back[qi], b2 = back[qi+1];
+                            if (!p2 || !b1 || !b2) return [];
+                            return [[ [p1[1],p1[0]], [p2[1],p2[0]], [b2[1],b2[0]], [b1[1],b1[0]], [p1[1],p1[0]] ]];
+                          });
+                          if (quads.length === 0) return { type: 'Polygon' as const, coordinates: [zone.coords.map(c => [c[1], c[0]])] };
+                          return { type: 'MultiPolygon' as const, coordinates: quads };
+                        })() as any
                       }}
                       fillPaint={{ 'fill-color': tsunamiAlert ? '#ff0000' : color, 'fill-opacity': tsunamiAlert ? 0.35 : (isSelected ? 0.5 : 0.35) }}
                       fillHoverPaint={{ 'fill-opacity': 0.25 }}
