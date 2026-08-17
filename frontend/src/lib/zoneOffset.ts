@@ -49,14 +49,8 @@ export function computeBackLine(
     segPerp.push({ x: px, y: py })
   }
 
-  // 2. Paksa arah konsisten: kalau segmen ini berlawanan arah (dot < 0)
-  //    dibanding segmen sebelumnya, balik supaya tetap searah.
-  for (let i = 1; i < segPerp.length; i++) {
-    const dot = segPerp[i].x * segPerp[i - 1].x + segPerp[i].y * segPerp[i - 1].y
-    if (dot < 0) {
-      segPerp[i] = { x: -segPerp[i].x, y: -segPerp[i].y }
-    }
-  }
+  // 2. (Dihapus) Paksa arah konsisten dengan dot product dihapus karena
+  // menyebabkan offset membalik arah 180 derajat jika garis pantai melengkung.
 
   // 3. Per titik: rata-rata perpendicular segmen sebelum & sesudahnya
   return front.map((_, i) => {
