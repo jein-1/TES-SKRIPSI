@@ -2596,33 +2596,18 @@ function App() {
               ];
               ring.push(ring[0]); // tutup ring (titik terakhir = titik pertama)
 
-              // Self-union: polygon-clipping otomatis memecah ring yang self-intersect
-              // jadi beberapa polygon valid terpisah, tanpa numpuk opacity berkali-kali.
-              // PENTING: ambil HANYA outer ring (poly[0]) dari tiap polygon hasil union —
-              // buang inner ring / holes. Kalau ring input self-intersect (tikungan tajam
-              // seperti teluk), polygon-clipping kadang buat "hole" di dalam polygon.
-              // MapLibre render hole sebagai transparan → background gelap terlihat →
-              // tampak "segitiga hitam" di tengah fill merah. Solusinya: strip semua holes.
-              let fillCoords: any[] = [];
-              try {
-                const unioned = polygonClipping.union([ring] as any);
-                // Hanya outer ring (index 0) — buang inner rings / holes
-                fillCoords = unioned.map((poly: any) => [poly[0]]);
-              } catch (unionError) {
-                console.error('[ZonePreview] polygon-clipping union gagal:', unionError, 'ring:', ring);
-                fillCoords = [[ring]]; // fallback: tetap 1 polygon utuh
-              }
-
+              // Render fill langsung sebagai Polygon biasa — tanpa polygon-clipping.
+              // polygon-clipping pada ring yang sangat self-intersect (teluk tajam)
+              // menghasilkan winding salah / polygon overlap → fill hitam.
+              // Dengan Polygon langsung, warna selalu benar (merah/ZRB color).
               return (
                 <>
-                  {fillCoords.length > 0 && (
-                    <MapGeoJSON
-                      key="zone-preview-fill"
-                      id="zone-preview-fill"
-                      data={{ type: 'Feature', properties: {}, geometry: { type: 'MultiPolygon', coordinates: fillCoords } } as any}
-                      fillPaint={{ 'fill-color': color, 'fill-opacity': 0.3 }}
-                    />
-                  )}
+                  <MapGeoJSON
+                    key="zone-preview-fill"
+                    id="zone-preview-fill"
+                    data={{ type: 'Feature', properties: {}, geometry: { type: 'Polygon', coordinates: [ring] } } as any}
+                    fillPaint={{ 'fill-color': color, 'fill-opacity': 0.3 }}
+                  />
                   <MapGeoJSON
                     key="zone-preview-front-line"
                     id="zone-preview-front-line"
