@@ -527,25 +527,42 @@ function App() {
     setZoneLineSelfCrossing(isCrossing);
   }, [drawingZoneCoords, drawingZoneMode]);
 
-  // Cleanup lingering MapGeoJSON layers when exiting drawingZoneMode
+  // Sapu bersih semua layer/source "zone-preview-*" langsung dari style map yang aktif.
+  // Jalan SETIAP kali drawingZoneMode berubah (baik mulai MAUPUN selesai/batal) supaya:
+  //   - saat mode ON  → bersih dulu sebelum MapGeoJSON baru nambah layer
+  //   - saat mode OFF → pastikan semua sisa layer terbuang walau cleanup sebelumnya gagal
   useEffect(() => {
-    if (!drawingZoneMode && adminMapRef.current) {
-      const map = adminMapRef.current;
-      const idsToCleanup = [
-        "zone-preview-fill",
-        "zone-preview-front-line",
-        "zone-preview-back-line",
-      ];
-      idsToCleanup.forEach(id => {
-        try {
-          if (map.getLayer(`geojson-fill-${id}`)) map.removeLayer(`geojson-fill-${id}`);
-          if (map.getLayer(`geojson-line-${id}`)) map.removeLayer(`geojson-line-${id}`);
-          if (map.getSource(`geojson-source-${id}`)) map.removeSource(`geojson-source-${id}`);
-        } catch (e) {
-          console.warn("Cleanup lingering layer failed for", id, e);
+    const map = adminMapRef.current;
+    if (!map) return;
+
+    const purgeZonePreviewLayers = () => {
+      try {
+        const style = map.getStyle();
+        if (!style) return;
+        const layerIds = (style.layers || [])
+          .map(l => l.id)
+          .filter(id => id.includes('zone-preview'));
+        const sourceIds = Object.keys(style.sources || {})
+          .filter(id => id.includes('zone-preview'));
+
+        layerIds.forEach(id => {
+          try { if (map.getLayer(id)) map.removeLayer(id); }
+          catch (e) { console.warn('[ZonePreview] Gagal hapus layer', id, e); }
+        });
+        sourceIds.forEach(id => {
+          try { if (map.getSource(id)) map.removeSource(id); }
+          catch (e) { console.warn('[ZonePreview] Gagal hapus source', id, e); }
+        });
+
+        if (layerIds.length || sourceIds.length) {
+          console.log('[ZonePreview] Sapu bersih layer hantu:', [...layerIds, ...sourceIds]);
         }
-      });
-    }
+      } catch (e) {
+        console.warn('[ZonePreview] purgeZonePreviewLayers gagal total:', e);
+      }
+    };
+
+    purgeZonePreviewLayers();
   }, [drawingZoneMode]);
 
   // User mode:  any other URL (default — no login required)
