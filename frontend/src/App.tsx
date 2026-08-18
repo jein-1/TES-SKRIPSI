@@ -1,7 +1,7 @@
 import { useState, useCallback, useEffect, useRef, useMemo, Fragment } from "react";
 import { Map, MapMarker, MarkerContent, MarkerTooltip, MapRoute, MapGeoJSON, type MapRef, type MapViewport } from '@/components/ui/map'
 import AlertModal, { type AlertModalState } from './components/AlertModal';
-import { computeBackLine, buildZonePolygon, polygonCentroid } from './lib/zoneOffset';
+import { computeBackLine, buildZonePolygon, polygonCentroid, wouldSelfCross } from './lib/zoneOffset';
 // â”€â”€ Modules â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 import {
   shelters,
@@ -319,8 +319,12 @@ function App() {
   const [hazardZoneVersion, setHazardZoneVersion] = useState(0);
   const [drawingZoneMode, setDrawingZoneMode] = useState(false);
   const [drawingZoneCoords, setDrawingZoneCoords] = useState<[number, number][]>([]); // [lat, lng]
+  // Ref mirror of drawingZoneCoords — for reading inside the map click handler
+  // without stale-closure issues (handler is registered only when drawingZoneMode changes).
+  const drawingZoneCoordsRef = useRef<[number, number][]>([]);
   // Guard: suppress the map's click event that fires right after a marker drag-end
   const markerJustDraggedRef = useRef(false);
+
   // Zone offset (back-line) state — Part C
   const [drawingZoneDepthKm, setDrawingZoneDepthKm] = useState(0.2); // default 200 m
   const [drawingZoneFlipSide, setDrawingZoneFlipSide] = useState(false);
@@ -332,6 +336,12 @@ function App() {
   const [isSavingHazardZone, setIsSavingHazardZone] = useState(false);
   // AlertModal state
   const [alertModal, setAlertModal] = useState<AlertModalState>(null);
+
+  // ── Drawing Zone safety guards ──────────────────────────────────────────
+  // Pending point waiting for jump-distance confirmation
+  const [pendingZonePoint, setPendingZonePoint] = useState<[number, number] | null>(null);
+  // Whether current front-line self-intersects
+  const [zoneLineSelfCrossing, setZoneLineSelfCrossing] = useState(false);
   
   const [selectedHazardZoneId, setSelectedHazardZoneId] = useState<string | null>(null);
   const [showEditHazardZone, setShowEditHazardZone] = useState(false);
@@ -447,7 +457,38 @@ function App() {
         if (markerJustDraggedRef.current) return;
         const lat = e.lngLat.lat;
         const lng = e.lngLat.lng;
-        setDrawingZoneCoords(prev => [...prev, [lat, lng]]);
+        const newPt: [number, number] = [lat, lng];
+
+        // Guard 1: Jump-distance confirmation
+        // Read current coords via ref to avoid stale closure issue.
+        // We use a ref updated by the drawingZoneCoords state.
+        const currentCoords = drawingZoneCoordsRef.current;
+        if (currentCoords.length >= 1) {
+          const last = currentCoords[currentCoords.length - 1];
+          const distKm = calculateHaversine(last[0], last[1], newPt[0], newPt[1]);
+          if (distKm > 1) {
+            // Show confirmation — do NOT add the point yet
+            setPendingZonePoint(newPt);
+            setAlertModal({
+              type: 'confirm',
+              title: 'Titik Meloncat Jauh',
+              message: `Titik ini ~${distKm.toFixed(1)} km dari titik terakhir \u2014 yakin ini masih bagian pantai yang sama?`,
+              confirmLabel: 'Tambahkan',
+              cancelLabel: 'Batal',
+              onConfirm: () => {
+                setDrawingZoneCoords(c => [...c, newPt]);
+                setPendingZonePoint(null);
+                setAlertModal(null);
+              },
+              onCancel: () => {
+                setPendingZonePoint(null);
+                setAlertModal(null);
+              },
+            });
+            return; // Don't add the point yet
+          }
+        }
+        setDrawingZoneCoords(prev => [...prev, newPt]);
       };
       map.on('click', handleClick);
       return () => {
@@ -456,6 +497,12 @@ function App() {
     }
   }, [drawingZoneMode]);
 
+
+  // Keep ref mirror in sync with state so the map click handler always reads fresh coords
+  useEffect(() => {
+    drawingZoneCoordsRef.current = drawingZoneCoords;
+  }, [drawingZoneCoords]);
+
   // Auto-generate back-line whenever front coords, depth, or flip side changes
   useEffect(() => {
     const computed = computeBackLine(drawingZoneCoords, drawingZoneDepthKm, drawingZoneFlipSide);
@@ -463,6 +510,19 @@ function App() {
     const merged: [number, number][] = computed.map((pt, i) => manualBackOverrides[i] ?? pt);
     setDrawingZoneBackCoords(merged);
   }, [drawingZoneCoords, drawingZoneDepthKm, drawingZoneFlipSide, manualBackOverrides]);
+
+
+  // Guard 3: Detect self-crossing whenever drawingZoneCoords changes
+  useEffect(() => {
+    if (!drawingZoneMode || drawingZoneCoords.length < 3) {
+      setZoneLineSelfCrossing(false);
+      return;
+    }
+    // Check if the last segment creates a self-intersection
+    const lastPt = drawingZoneCoords[drawingZoneCoords.length - 1];
+    const isCrossing = wouldSelfCross(drawingZoneCoords.slice(0, -1), lastPt);
+    setZoneLineSelfCrossing(isCrossing);
+  }, [drawingZoneCoords, drawingZoneMode]);
 
   // Cleanup lingering MapGeoJSON layers when exiting drawingZoneMode
   useEffect(() => {
@@ -2309,6 +2369,16 @@ function App() {
                 </div>
                 <p className="text-[10px] text-slate-400 text-center">Klik tepi laut untuk menambah titik. Klik-kanan titik untuk hapus.</p>
 
+                {/* Guard 3: Self-crossing warning */}
+                {zoneLineSelfCrossing && (
+                  <div className="flex items-start gap-1.5 px-2.5 py-2 rounded-lg bg-yellow-500/15 border border-yellow-500/40">
+                    <span className="text-yellow-400 text-xs leading-none mt-0.5">⚠️</span>
+                    <p className="text-[10px] text-yellow-300 font-semibold leading-snug">
+                      Garis pantai menyilang diri sendiri — cek titik yang baru ditambah
+                    </p>
+                  </div>
+                )}
+
                 {/* Depth slider */}
                 <div className="flex flex-col gap-1">
                   <div className="flex justify-between items-center">
@@ -2335,6 +2405,16 @@ function App() {
                   {drawingZoneFlipSide ? '↩ Balik ke Sisi Semula' : '↪ Balik Sisi (ke Laut?)'}
                 </button>
 
+                {/* Guard 2: Undo last point button */}
+                <button
+                  id="zone-undo-last-point"
+                  onClick={() => setDrawingZoneCoords(prev => prev.slice(0, -1))}
+                  disabled={drawingZoneCoords.length === 0}
+                  className="py-1.5 rounded-lg bg-slate-700/60 hover:bg-slate-600/60 border border-slate-600/50 text-slate-300 text-[10px] font-bold transition-colors disabled:opacity-30 disabled:cursor-not-allowed flex items-center justify-center gap-1"
+                >
+                  ↩ Undo Titik Terakhir
+                </button>
+
                 <div className="flex gap-2 w-full">
                   <button
                     onClick={() => {
@@ -2344,6 +2424,7 @@ function App() {
                       setManualBackOverrides({});
                       setDrawingZoneDepthKm(0.2);
                       setDrawingZoneFlipSide(false);
+                      setZoneLineSelfCrossing(false);
                     }}
                     className="flex-1 py-2 bg-slate-800 hover:bg-slate-700 text-white rounded-lg text-xs font-bold transition-colors"
                   >
@@ -2493,7 +2574,7 @@ function App() {
                     key="zone-preview-front-line"
                     id="zone-preview-front-line"
                     data={{ type: 'Feature', properties: {}, geometry: { type: 'LineString', coordinates: front.map(c => [c[1], c[0]]) } } as any}
-                    linePaint={{ 'line-color': color, 'line-width': 2.5, 'line-opacity': 0.95 }}
+                    linePaint={{ 'line-color': zoneLineSelfCrossing ? '#f97316' : color, 'line-width': zoneLineSelfCrossing ? 3 : 2.5, 'line-opacity': 0.95 }}
                   />
                   <MapGeoJSON
                     key="zone-preview-back-line"

@@ -81,3 +81,62 @@ export function polygonCentroid(ring: [number, number][]): [number, number] {
   const lng = ring.reduce((sum, p) => sum + p[1], 0) / ring.length
   return [lat, lng]
 }
+
+// =============================================================================
+// SELF-INTERSECTION DETECTION
+// =============================================================================
+
+/**
+ * Cek apakah dua segmen garis (p1→p2) dan (p3→p4) saling berpotongan.
+ * Menggunakan metode cross product (orientasi titik).
+ * [lat, lng] coords — order tidak penting karena hanya cek silang 2D.
+ */
+export function segmentsIntersect(
+  p1: [number, number],
+  p2: [number, number],
+  p3: [number, number],
+  p4: [number, number],
+): boolean {
+  const cross = (o: [number, number], a: [number, number], b: [number, number]) =>
+    (a[0] - o[0]) * (b[1] - o[1]) - (a[1] - o[1]) * (b[0] - o[0])
+
+  const d1 = cross(p3, p4, p1)
+  const d2 = cross(p3, p4, p2)
+  const d3 = cross(p1, p2, p3)
+  const d4 = cross(p1, p2, p4)
+
+  if (((d1 > 0 && d2 < 0) || (d1 < 0 && d2 > 0)) &&
+      ((d3 > 0 && d4 < 0) || (d3 < 0 && d4 > 0))) {
+    return true
+  }
+
+  // Collinear / on-segment cases (treated as non-crossing to avoid false positives)
+  return false
+}
+
+/**
+ * Cek apakah menambahkan `newPoint` ke ujung `existingLine` akan membuat
+ * garis menyilang diri sendiri.
+ *
+ * Segmen baru = [lastPoint → newPoint].
+ * Kita skip 1 segmen terakhir (bertetangga dengan segmen baru) karena
+ * keduanya berbagi titik ujung — itu bukan silangan asli.
+ */
+export function wouldSelfCross(
+  existingLine: [number, number][],
+  newPoint: [number, number],
+): boolean {
+  const n = existingLine.length
+  if (n < 2) return false
+
+  const last = existingLine[n - 1]
+  // Segmen baru: last → newPoint
+  // Cek terhadap semua segmen KECUALI segmen terakhir (index n-2 → n-1),
+  // karena itu bertetangga dan berbagi titik `last`.
+  for (let i = 0; i < n - 2; i++) {
+    if (segmentsIntersect(last, newPoint, existingLine[i], existingLine[i + 1])) {
+      return true
+    }
+  }
+  return false
+}
