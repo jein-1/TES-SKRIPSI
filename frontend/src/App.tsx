@@ -2602,12 +2602,13 @@ function App() {
               const back  = drawingZoneBackCoords.slice(0, safeLen);
               const color = ZRB_REFERENCE[newHazardZone.zrbLevel].color;
 
-              // Build raw quads (one per front segment)
-              const quads = front.slice(0, safeLen - 1).flatMap((p1, qi) => {
+              // Build raw quads — each element is a Polygon (Ring[]) for polygon-clipping
+              const quads = front.slice(0, safeLen - 1).map((p1, qi) => {
                 const p2 = front[qi + 1], b1 = back[qi], b2 = back[qi + 1];
-                if (!p2 || !b1 || !b2) return [];
+                if (!p2 || !b1 || !b2) return null;
+                // Polygon = [ ring ], ring = Position[]
                 return [[ [p1[1],p1[0]], [p2[1],p2[0]], [b2[1],b2[0]], [b1[1],b1[0]], [p1[1],p1[0]] ]];
-              });
+              }).filter((q): q is NonNullable<typeof q> => q !== null);
 
               // Union all quads into one clean shape to avoid dark overlap artifact at sharp bends
               let fillCoords: any[] = [];
@@ -2825,11 +2826,11 @@ function App() {
                           if (nF < 2) return { type: 'Polygon' as const, coordinates: [zone.coords.map(c => [c[1], c[0]])] };
                           const front = zone.coords.slice(0, nF);
                           const back  = [...zone.coords.slice(nF)].reverse();
-                          const quads = front.slice(0, -1).flatMap((p1, qi) => {
+                          const quads = front.slice(0, -1).map((p1, qi) => {
                             const p2 = front[qi+1], b1 = back[qi], b2 = back[qi+1];
-                            if (!p2 || !b1 || !b2) return [];
+                            if (!p2 || !b1 || !b2) return null;
                             return [[ [p1[1],p1[0]], [p2[1],p2[0]], [b2[1],b2[0]], [b1[1],b1[0]], [p1[1],p1[0]] ]];
-                          });
+                          }).filter((q): q is NonNullable<typeof q> => q !== null);
                           if (quads.length === 0) return { type: 'Polygon' as const, coordinates: [zone.coords.map(c => [c[1], c[0]])] };
                           try {
                             const unioned = polygonClipping.union(quads[0] as any, ...(quads.slice(1) as any[]));
