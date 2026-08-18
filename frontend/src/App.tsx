@@ -2598,12 +2598,19 @@ function App() {
 
               // Self-union: polygon-clipping otomatis memecah ring yang self-intersect
               // jadi beberapa polygon valid terpisah, tanpa numpuk opacity berkali-kali.
+              // PENTING: ambil HANYA outer ring (poly[0]) dari tiap polygon hasil union —
+              // buang inner ring / holes. Kalau ring input self-intersect (tikungan tajam
+              // seperti teluk), polygon-clipping kadang buat "hole" di dalam polygon.
+              // MapLibre render hole sebagai transparan → background gelap terlihat →
+              // tampak "segitiga hitam" di tengah fill merah. Solusinya: strip semua holes.
               let fillCoords: any[] = [];
               try {
-                fillCoords = polygonClipping.union([ring] as any);
+                const unioned = polygonClipping.union([ring] as any);
+                // Hanya outer ring (index 0) — buang inner rings / holes
+                fillCoords = unioned.map((poly: any) => [poly[0]]);
               } catch (unionError) {
                 console.error('[ZonePreview] polygon-clipping union gagal:', unionError, 'ring:', ring);
-                fillCoords = [[ring]]; // fallback: tetap 1 polygon utuh, bukan quad-quad kecil
+                fillCoords = [[ring]]; // fallback: tetap 1 polygon utuh
               }
 
               return (
