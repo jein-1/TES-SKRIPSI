@@ -2,6 +2,7 @@ import { useState, useCallback, useEffect, useRef, useMemo, Fragment } from "rea
 import { Map, MapMarker, MarkerContent, MarkerTooltip, MapRoute, MapGeoJSON, type MapRef, type MapViewport } from '@/components/ui/map'
 import AlertModal, { type AlertModalState } from './components/AlertModal';
 import { computeBackLine, buildZonePolygon, polygonCentroid, wouldSelfCross } from './lib/zoneOffset';
+import polygonClipping from 'polygon-clipping';
 // â”€â”€ Modules â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 import {
   shelters,
@@ -332,6 +333,9 @@ function App() {
   const [drawingZoneBackCoords, setDrawingZoneBackCoords] = useState<[number, number][]>([]);
   const [manualBackOverrides, setManualBackOverrides] = useState<Record<number, [number, number]>>({}); // index -> manual position
   const [showAddHazardZone, setShowAddHazardZone] = useState(false);
+  // Bagian B: draggable zone panel offset
+  const [zonePanelOffset, setZonePanelOffset] = useState({ x: 0, y: 0 });
+  const zonePanelDragRef = useRef<{ startX: number; startY: number; originX: number; originY: number } | null>(null);
   const [newHazardZone, setNewHazardZone] = useState<{name: string; zrbLevel: ZRBLevel; description: string}>({ name: '', zrbLevel: 4, description: '' });
   const [isSavingHazardZone, setIsSavingHazardZone] = useState(false);
   // AlertModal state
@@ -2354,18 +2358,61 @@ function App() {
             </div>
           )}
 
-          {/* Drawing Zone Overlay */}
+          {/* Drawing Zone Overlay — draggable */}
           <AnimatePresence>
             {drawingZoneMode && (
               <motion.div
                 initial={{ y: 20, opacity: 0 }}
                 animate={{ y: 0, opacity: 1 }}
                 exit={{ y: 20, opacity: 0 }}
-                className="absolute bottom-24 left-1/2 -translate-x-1/2 z-[1000] bg-slate-900/90 backdrop-blur-md border border-red-500/50 rounded-2xl p-4 shadow-2xl flex flex-col gap-3 w-[320px]"
+                className="absolute bottom-24 left-1/2 z-[1000] bg-slate-900/90 backdrop-blur-md border border-red-500/50 rounded-2xl p-4 shadow-2xl flex flex-col gap-3 w-[320px]"
+                style={{ transform: `translate(calc(-50% + ${zonePanelOffset.x}px), ${zonePanelOffset.y}px)` }}
               >
-                <div className="flex items-center gap-2">
+                {/* Drag handle — title row */}
+                <div
+                  className="flex items-center gap-2 select-none"
+                  style={{ cursor: zonePanelDragRef.current ? 'grabbing' : 'grab' }}
+                  onMouseDown={(e) => {
+                    zonePanelDragRef.current = { startX: e.clientX, startY: e.clientY, originX: zonePanelOffset.x, originY: zonePanelOffset.y };
+                    const onMove = (ev: MouseEvent) => {
+                      if (!zonePanelDragRef.current) return;
+                      setZonePanelOffset({
+                        x: zonePanelDragRef.current.originX + ev.clientX - zonePanelDragRef.current.startX,
+                        y: zonePanelDragRef.current.originY + ev.clientY - zonePanelDragRef.current.startY,
+                      });
+                    };
+                    const onUp = () => {
+                      zonePanelDragRef.current = null;
+                      window.removeEventListener('mousemove', onMove);
+                      window.removeEventListener('mouseup', onUp);
+                    };
+                    window.addEventListener('mousemove', onMove);
+                    window.addEventListener('mouseup', onUp);
+                  }}
+                  onTouchStart={(e) => {
+                    const t = e.touches[0];
+                    zonePanelDragRef.current = { startX: t.clientX, startY: t.clientY, originX: zonePanelOffset.x, originY: zonePanelOffset.y };
+                    const onMove = (ev: TouchEvent) => {
+                      if (!zonePanelDragRef.current) return;
+                      const tt = ev.touches[0];
+                      setZonePanelOffset({
+                        x: zonePanelDragRef.current.originX + tt.clientX - zonePanelDragRef.current.startX,
+                        y: zonePanelDragRef.current.originY + tt.clientY - zonePanelDragRef.current.startY,
+                      });
+                    };
+                    const onEnd = () => {
+                      zonePanelDragRef.current = null;
+                      window.removeEventListener('touchmove', onMove);
+                      window.removeEventListener('touchend', onEnd);
+                    };
+                    window.addEventListener('touchmove', onMove, { passive: true });
+                    window.addEventListener('touchend', onEnd);
+                  }}
+                >
                   <MapPin className="w-4 h-4 text-red-400 animate-bounce" />
                   <span className="text-sm font-bold text-white">Mode Gambar Zona</span>
+                  {/* Grab hint dots */}
+                  <span className="ml-auto text-slate-600 text-xs tracking-widest select-none" title="Geser panel">⠿</span>
                 </div>
                 <p className="text-[10px] text-slate-400 text-center">Klik tepi laut untuk menambah titik. Klik-kanan titik untuk hapus.</p>
 
@@ -2425,6 +2472,7 @@ function App() {
                       setDrawingZoneDepthKm(0.2);
                       setDrawingZoneFlipSide(false);
                       setZoneLineSelfCrossing(false);
+                      setZonePanelOffset({ x: 0, y: 0 });
                     }}
                     className="flex-1 py-2 bg-slate-800 hover:bg-slate-700 text-white rounded-lg text-xs font-bold transition-colors"
                   >
@@ -2545,7 +2593,7 @@ function App() {
             )}
 
             {/* Drawing Zone Live Rendering — active only while drawing.
-                Fill: MultiPolygon quads (avoids WebGL tessellation bugs on self-intersecting curves).
+                Fill: quad polygons unioned via polygon-clipping to prevent dark overlap at sharp bends.
                 Outline: two separate LineStrings (front & back) — never scattered, never self-closing. */}
             {drawingZoneMode && (() => {
               const safeLen = Math.min(drawingZoneCoords.length, drawingZoneBackCoords.length);
@@ -2553,20 +2601,36 @@ function App() {
               const front = drawingZoneCoords.slice(0, safeLen);
               const back  = drawingZoneBackCoords.slice(0, safeLen);
               const color = ZRB_REFERENCE[newHazardZone.zrbLevel].color;
-              
+
+              // Build raw quads (one per front segment)
               const quads = front.slice(0, safeLen - 1).flatMap((p1, qi) => {
                 const p2 = front[qi + 1], b1 = back[qi], b2 = back[qi + 1];
                 if (!p2 || !b1 || !b2) return [];
                 return [[ [p1[1],p1[0]], [p2[1],p2[0]], [b2[1],b2[0]], [b1[1],b1[0]], [p1[1],p1[0]] ]];
               });
-              
+
+              // Union all quads into one clean shape to avoid dark overlap artifact at sharp bends
+              let fillCoords: any[] = [];
+              if (quads.length > 0) {
+                try {
+                  // polygon-clipping.union expects each polygon as [ring], so wrap each quad ring in an array
+                  const unioned = polygonClipping.union(
+                    quads[0] as any,
+                    ...(quads.slice(1) as any[])
+                  );
+                  fillCoords = unioned; // MultiPolygon coordinates
+                } catch {
+                  fillCoords = quads; // Fallback to raw quads if union fails
+                }
+              }
+
               return (
                 <>
-                  {quads.length > 0 && (
+                  {fillCoords.length > 0 && (
                     <MapGeoJSON
                       key="zone-preview-fill"
                       id="zone-preview-fill"
-                      data={{ type: 'Feature', properties: {}, geometry: { type: 'MultiPolygon', coordinates: quads } } as any}
+                      data={{ type: 'Feature', properties: {}, geometry: { type: 'MultiPolygon', coordinates: fillCoords } } as any}
                       fillPaint={{ 'fill-color': color, 'fill-opacity': 0.25 }}
                     />
                   )}
@@ -2750,7 +2814,7 @@ function App() {
                 const color = ZRB_REFERENCE[zone.zrbLevel]?.color || '#ef4444';
                 return (
                   <Fragment key={`hazard-group-${i}-${hazardZoneVersion}`}>
-                    {/* Fill layer — using quads to prevent WebGL black glitches on sharp curves */}
+                    {/* Fill layer — quads unioned via polygon-clipping to fix dark overlap on sharp bends */}
                     <MapGeoJSON 
                       key={`hazard-fill-${i}-${hazardZoneVersion}`}
                       data={{
@@ -2767,7 +2831,12 @@ function App() {
                             return [[ [p1[1],p1[0]], [p2[1],p2[0]], [b2[1],b2[0]], [b1[1],b1[0]], [p1[1],p1[0]] ]];
                           });
                           if (quads.length === 0) return { type: 'Polygon' as const, coordinates: [zone.coords.map(c => [c[1], c[0]])] };
-                          return { type: 'MultiPolygon' as const, coordinates: quads };
+                          try {
+                            const unioned = polygonClipping.union(quads[0] as any, ...(quads.slice(1) as any[]));
+                            return { type: 'MultiPolygon' as const, coordinates: unioned };
+                          } catch {
+                            return { type: 'MultiPolygon' as const, coordinates: quads };
+                          }
                         })() as any
                       }}
                       fillPaint={{ 'fill-color': tsunamiAlert ? '#ff0000' : color, 'fill-opacity': tsunamiAlert ? 0.35 : (isSelected ? 0.5 : 0.35) }}
