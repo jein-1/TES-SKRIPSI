@@ -2577,8 +2577,11 @@ function App() {
             )}
 
             {/* Drawing Zone Live Rendering — active only while drawing.
-                Fill: quad polygons unioned via polygon-clipping to prevent dark overlap at sharp bends.
-                Outline: two separate LineStrings (front & back) — never scattered, never self-closing. */}
+                Fill: SATU ring polygon (depan + belakang dibalik), lalu self-union via
+                polygon-clipping untuk otomatis membersihkan self-intersection jadi
+                bagian-bagian valid — jauh lebih simpel & lebih tahan banting daripada
+                pendekatan "banyak quad kecil" yang rawan menumpuk gelap di tikungan tajam.
+                Outline: dua LineString terpisah (depan & belakang). */}
             {drawingZoneMode && (() => {
               const safeLen = Math.min(drawingZoneCoords.length, drawingZoneBackCoords.length);
               if (safeLen < 2) return null;
@@ -2586,28 +2589,21 @@ function App() {
               const back  = drawingZoneBackCoords.slice(0, safeLen);
               const color = ZRB_REFERENCE[newHazardZone.zrbLevel].color;
 
-              // Build raw quads — each element is a Polygon (Ring[]) for polygon-clipping
-              const quads = front.slice(0, safeLen - 1).map((p1, qi) => {
-                const p2 = front[qi + 1], b1 = back[qi], b2 = back[qi + 1];
-                if (!p2 || !b1 || !b2) return null;
-                // Polygon = [ ring ], ring = Position[]
-                return [[ [p1[1],p1[0]], [p2[1],p2[0]], [b2[1],b2[0]], [b1[1],b1[0]], [p1[1],p1[0]] ]];
-              }).filter((q): q is NonNullable<typeof q> => q !== null);
+              // Bangun SATU ring utuh: titik depan urut, lalu titik belakang dibalik, lalu tutup ring.
+              const ring: [number, number][] = [
+                ...front.map(c => [c[1], c[0]] as [number, number]),
+                ...[...back].reverse().map(c => [c[1], c[0]] as [number, number]),
+              ];
+              ring.push(ring[0]); // tutup ring (titik terakhir = titik pertama)
 
-              // Union all quads into one clean shape to avoid dark overlap artifact at sharp bends
+              // Self-union: polygon-clipping otomatis memecah ring yang self-intersect
+              // jadi beberapa polygon valid terpisah, tanpa numpuk opacity berkali-kali.
               let fillCoords: any[] = [];
-              if (quads.length > 0) {
-                try {
-                  // polygon-clipping.union expects each polygon as [ring], so wrap each quad ring in an array
-                  const unioned = polygonClipping.union(
-                    quads[0] as any,
-                    ...(quads.slice(1) as any[])
-                  );
-                  fillCoords = unioned; // MultiPolygon coordinates
-                } catch (unionError) {
-                  console.error('[ZonePreview] polygon-clipping union gagal:', unionError, 'quads:', quads);
-                  fillCoords = quads; // Fallback to raw quads if union fails
-                }
+              try {
+                fillCoords = polygonClipping.union([ring] as any);
+              } catch (unionError) {
+                console.error('[ZonePreview] polygon-clipping union gagal:', unionError, 'ring:', ring);
+                fillCoords = [[ring]]; // fallback: tetap 1 polygon utuh, bukan quad-quad kecil
               }
 
               return (
@@ -2617,7 +2613,7 @@ function App() {
                       key="zone-preview-fill"
                       id="zone-preview-fill"
                       data={{ type: 'Feature', properties: {}, geometry: { type: 'MultiPolygon', coordinates: fillCoords } } as any}
-                      fillPaint={{ 'fill-color': color, 'fill-opacity': 0.25 }}
+                      fillPaint={{ 'fill-color': color, 'fill-opacity': 0.3 }}
                     />
                   )}
                   <MapGeoJSON
