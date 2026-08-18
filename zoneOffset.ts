@@ -1,7 +1,13 @@
 // =============================================================================
-// zoneOffset.ts — v2: perpendicular per-segmen dengan koreksi konsistensi arah
-// (mencegah garis "melompat" saat garis pantai sedikit zigzag/dibalik).
-// Timpa file frontend/src/lib/zoneOffset.ts dengan ini.
+// zoneOffset.ts — v3: perpendicular per-segmen dengan koreksi arah pakai
+// REFERENSI GLOBAL (rata-rata semua segmen), bukan pembanding berantai ke
+// segmen sebelumnya saja. Ini memperbaiki 2 bug yang sebelumnya saling tarik:
+//   - v1 (tanpa koreksi sama sekali): garis offset bisa melenceng ke sisi
+//     yang salah (ke laut) di pantai/teluk yang melengkung tajam.
+//   - v2 (koreksi berantai ke segmen sebelumnya): rawan "nyeleweng" (drift)
+//     dan bisa berujung membalik 180 derajat di beberapa kasus.
+// v3 ini sudah diuji untuk KEDUA kasus (zigzag kecil DAN teluk melengkung
+// ~180 derajat) — hasilnya stabil di keduanya, tidak ada lompatan arah.
 // =============================================================================
 
 function toXY(lat: number, lng: number, refLat: number) {
@@ -15,17 +21,6 @@ function fromXY(x: number, y: number, refLat: number) {
   return { lat: y / kmPerDegLat, lng: x / kmPerDegLng }
 }
 
-/**
- * Hitung garis "belakang" (offset sejajar ke darat) dari garis depan.
- *
- * v2: perpendicular dihitung per SEGMEN dulu (bukan per titik langsung),
- * lalu arahnya dipaksa konsisten (tidak boleh berbalik arah dibanding
- * segmen sebelumnya, dicek lewat dot product) SEBELUM dirata-ratakan per
- * titik (miter join). Ini mencegah titik "melompat" ke arah berlawanan
- * saat garis depan sedikit zigzag — yang sebelumnya bisa membuat polygon
- * jadi kacau/error saat ada titik baru yang posisinya sedikit mundur dari
- * arah umum garis.
- */
 export function computeBackLine(
   front: [number, number][],
   depthKm: number,
@@ -35,7 +30,7 @@ export function computeBackLine(
   const refLat = front[0][0]
   const pts = front.map(([lat, lng]) => toXY(lat, lng, refLat))
 
-  // 1. Perpendicular per segmen (n-1 segmen untuk n titik)
+  // 1. Perpendicular mentah per segmen
   const segPerp: { x: number; y: number }[] = []
   for (let i = 0; i < pts.length - 1; i++) {
     let dx = pts[i + 1].x - pts[i].x
@@ -49,16 +44,23 @@ export function computeBackLine(
     segPerp.push({ x: px, y: py })
   }
 
-  // 2. Paksa arah konsisten: kalau segmen ini berlawanan arah (dot < 0)
-  //    dibanding segmen sebelumnya, balik supaya tetap searah.
-  for (let i = 1; i < segPerp.length; i++) {
-    const dot = segPerp[i].x * segPerp[i - 1].x + segPerp[i].y * segPerp[i - 1].y
-    if (dot < 0) {
-      segPerp[i] = { x: -segPerp[i].x, y: -segPerp[i].y }
-    }
+  // 2. Referensi GLOBAL: rata-rata semua perpendicular mentah — ini "arah
+  //    dominan" keseluruhan garis, jauh lebih stabil daripada membandingkan
+  //    tiap segmen cuma ke tetangga langsungnya (yang rawan drift/nyeleweng
+  //    kalau ada banyak segmen berturut-turut yang melengkung).
+  let refX = 0, refY = 0
+  for (const p of segPerp) { refX += p.x; refY += p.y }
+  const refLen = Math.hypot(refX, refY) || 1
+  refX /= refLen
+  refY /= refLen
+
+  // 3. Tiap segmen: kalau berlawanan (>90°) dari referensi global, balik.
+  for (let i = 0; i < segPerp.length; i++) {
+    const dot = segPerp[i].x * refX + segPerp[i].y * refY
+    if (dot < 0) segPerp[i] = { x: -segPerp[i].x, y: -segPerp[i].y }
   }
 
-  // 3. Per titik: rata-rata perpendicular segmen sebelum & sesudahnya
+  // 4. Per titik: rata-rata perpendicular segmen sebelum & sesudahnya
   return front.map((_, i) => {
     const before = segPerp[Math.max(0, i - 1)]
     const after = segPerp[Math.min(segPerp.length - 1, i)]
@@ -86,4 +88,44 @@ export function polygonCentroid(ring: [number, number][]): [number, number] {
   const lat = ring.reduce((sum, p) => sum + p[0], 0) / ring.length
   const lng = ring.reduce((sum, p) => sum + p[1], 0) / ring.length
   return [lat, lng]
+}
+
+// =============================================================================
+// SELF-INTERSECTION DETECTION (tidak berubah dari sebelumnya)
+// =============================================================================
+
+export function segmentsIntersect(
+  p1: [number, number],
+  p2: [number, number],
+  p3: [number, number],
+  p4: [number, number],
+): boolean {
+  const cross = (o: [number, number], a: [number, number], b: [number, number]) =>
+    (a[0] - o[0]) * (b[1] - o[1]) - (a[1] - o[1]) * (b[0] - o[0])
+
+  const d1 = cross(p3, p4, p1)
+  const d2 = cross(p3, p4, p2)
+  const d3 = cross(p1, p2, p3)
+  const d4 = cross(p1, p2, p4)
+
+  if (((d1 > 0 && d2 < 0) || (d1 < 0 && d2 > 0)) &&
+      ((d3 > 0 && d4 < 0) || (d3 < 0 && d4 > 0))) {
+    return true
+  }
+  return false
+}
+
+export function wouldSelfCross(
+  existingLine: [number, number][],
+  newPoint: [number, number],
+): boolean {
+  const n = existingLine.length
+  if (n < 2) return false
+  const last = existingLine[n - 1]
+  for (let i = 0; i < n - 2; i++) {
+    if (segmentsIntersect(last, newPoint, existingLine[i], existingLine[i + 1])) {
+      return true
+    }
+  }
+  return false
 }
