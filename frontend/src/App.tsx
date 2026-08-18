@@ -89,7 +89,7 @@ import {
   Edit2,
   Target,
 } from "lucide-react";
-import { motion, AnimatePresence } from "motion/react";
+import { motion, AnimatePresence, useDragControls } from "motion/react";
 
 // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 // ALARM SOUND
@@ -333,9 +333,8 @@ function App() {
   const [drawingZoneBackCoords, setDrawingZoneBackCoords] = useState<[number, number][]>([]);
   const [manualBackOverrides, setManualBackOverrides] = useState<Record<number, [number, number]>>({}); // index -> manual position
   const [showAddHazardZone, setShowAddHazardZone] = useState(false);
-  // Bagian B: draggable zone panel offset
-  const [zonePanelOffset, setZonePanelOffset] = useState({ x: 0, y: 0 });
-  const zonePanelDragRef = useRef<{ startX: number; startY: number; originX: number; originY: number } | null>(null);
+  // Zone panel drag — managed by framer-motion useDragControls
+  const zoneDragControls = useDragControls();
   const [newHazardZone, setNewHazardZone] = useState<{name: string; zrbLevel: ZRBLevel; description: string}>({ name: '', zrbLevel: 4, description: '' });
   const [isSavingHazardZone, setIsSavingHazardZone] = useState(false);
   // AlertModal state
@@ -2365,49 +2364,18 @@ function App() {
                 initial={{ y: 20, opacity: 0 }}
                 animate={{ y: 0, opacity: 1 }}
                 exit={{ y: 20, opacity: 0 }}
-                className="absolute bottom-24 left-1/2 z-[1000] bg-slate-900/90 backdrop-blur-md border border-red-500/50 rounded-2xl p-4 shadow-2xl flex flex-col gap-3 w-[320px]"
-                style={{ transform: `translate(calc(-50% + ${zonePanelOffset.x}px), ${zonePanelOffset.y}px)` }}
+                drag
+                dragControls={zoneDragControls}
+                dragListener={false}
+                dragMomentum={false}
+                dragElastic={0}
+                className="absolute bottom-24 left-1/2 -translate-x-1/2 z-[1000] bg-slate-900/90 backdrop-blur-md border border-red-500/50 rounded-2xl p-4 shadow-2xl flex flex-col gap-3 w-[320px]"
               >
                 {/* Drag handle — title row */}
                 <div
                   className="flex items-center gap-2 select-none"
-                  style={{ cursor: zonePanelDragRef.current ? 'grabbing' : 'grab' }}
-                  onMouseDown={(e) => {
-                    zonePanelDragRef.current = { startX: e.clientX, startY: e.clientY, originX: zonePanelOffset.x, originY: zonePanelOffset.y };
-                    const onMove = (ev: MouseEvent) => {
-                      if (!zonePanelDragRef.current) return;
-                      setZonePanelOffset({
-                        x: zonePanelDragRef.current.originX + ev.clientX - zonePanelDragRef.current.startX,
-                        y: zonePanelDragRef.current.originY + ev.clientY - zonePanelDragRef.current.startY,
-                      });
-                    };
-                    const onUp = () => {
-                      zonePanelDragRef.current = null;
-                      window.removeEventListener('mousemove', onMove);
-                      window.removeEventListener('mouseup', onUp);
-                    };
-                    window.addEventListener('mousemove', onMove);
-                    window.addEventListener('mouseup', onUp);
-                  }}
-                  onTouchStart={(e) => {
-                    const t = e.touches[0];
-                    zonePanelDragRef.current = { startX: t.clientX, startY: t.clientY, originX: zonePanelOffset.x, originY: zonePanelOffset.y };
-                    const onMove = (ev: TouchEvent) => {
-                      if (!zonePanelDragRef.current) return;
-                      const tt = ev.touches[0];
-                      setZonePanelOffset({
-                        x: zonePanelDragRef.current.originX + tt.clientX - zonePanelDragRef.current.startX,
-                        y: zonePanelDragRef.current.originY + tt.clientY - zonePanelDragRef.current.startY,
-                      });
-                    };
-                    const onEnd = () => {
-                      zonePanelDragRef.current = null;
-                      window.removeEventListener('touchmove', onMove);
-                      window.removeEventListener('touchend', onEnd);
-                    };
-                    window.addEventListener('touchmove', onMove, { passive: true });
-                    window.addEventListener('touchend', onEnd);
-                  }}
+                  onPointerDown={(e) => zoneDragControls.start(e)}
+                  style={{ cursor: 'grab', touchAction: 'none' }}
                 >
                   <MapPin className="w-4 h-4 text-red-400 animate-bounce" />
                   <span className="text-sm font-bold text-white">Mode Gambar Zona</span>
@@ -2472,7 +2440,6 @@ function App() {
                       setDrawingZoneDepthKm(0.2);
                       setDrawingZoneFlipSide(false);
                       setZoneLineSelfCrossing(false);
-                      setZonePanelOffset({ x: 0, y: 0 });
                     }}
                     className="flex-1 py-2 bg-slate-800 hover:bg-slate-700 text-white rounded-lg text-xs font-bold transition-colors"
                   >
@@ -2620,7 +2587,8 @@ function App() {
                     ...(quads.slice(1) as any[])
                   );
                   fillCoords = unioned; // MultiPolygon coordinates
-                } catch {
+                } catch (unionError) {
+                  console.error('[ZonePreview] polygon-clipping union gagal:', unionError, 'quads:', quads);
                   fillCoords = quads; // Fallback to raw quads if union fails
                 }
               }
