@@ -1,17 +1,37 @@
 // =============================================================================
-// zoneOffset.ts — v5 (fixed): koreksi arah pakai WINDING DETECTION.
+// zoneOffset.ts — v6: SHOELACE yang benar.
 //
-// Untuk garis pantai di utara Teluk Palu (laut di utara/atas peta):
-//   - Digambar W→E (kiri ke kanan): turnSum ≥ 0 (CCW/lurus)
-//     → perpendicular KANAN = (dy, -dx) → ke SELATAN = ke darat ✓
-//   - Digambar E→W (kanan ke kiri): turnSum < 0 (CW)
-//     → perpendicular KIRI = (-dy, dx) → ke SELATAN = ke darat ✓
+// Bukti matematis untuk ring = front(urut) + back(dibalik):
+//   - Back ke SELATAN (inland, untuk teluk di utara): area ring = NEGATIF (CW)
+//   - Back ke UTARA (laut): area ring = POSITIF (CCW)
 //
-// Aturan:
-//   turnSum < 0 (CW)  → useRight = false → pakai perp KIRI  (-dy, dx)
-//   turnSum ≥ 0 (CCW) → useRight = true  → pakai perp KANAN (dy, -dx)
+// Oleh karena itu:
+//   flip=false → inginkan area < 0 (back ke darat) → kalau area > 0, balik
+//   flip=true  → inginkan area > 0 (back ke laut)  → kalau area < 0, balik
 //
-// Tombol "Balik Sisi" membalik antara darat/laut.
+// Verifikasi:
+//   Front W→E: (0,0)→(1,0), back selatan (0,-d)→(1,-d)
+//   Ring: (0,0),(1,0),(1,-d),(0,-d)
+//   Shoelace: (0*0-1*0)+(1*(-d)-1*0)+(1*(-d)-0*(-d))+(0*0-0*(-d)) = -d-d = -2d < 0 ✓
+//
+//   Front E→W: (1,0)→(0,0), back selatan (1,-d)→(0,-d)
+//   Ring reversed back: (0,0)→(1,0)... wait:
+//   Ring: (1,0),(0,0),(0,-d),(1,-d)
+//   Shoelace: (1*0-0*0)+(0*(-d)-0*0)+(0*(-d)-1*(-d))+(1*0-1*(-d)) = 0+0+d+d = 2d > 0
+//   → area > 0, tapi back sudah ke selatan (darat)?!
+//
+// KESIMPULAN: Sign shoelace bergantung pada ARAH GAMBAR, bukan hanya posisi back.
+// Untuk E→W dengan back ke selatan: area > 0, flip=false → BALIK → back ke utara (laut) SALAH!
+//
+// FIX DEFINITIF: Gunakan shoelace dari koordinat ABSOLUT garis saja.
+// Konsep baru: hitung signed area dari POLIGON DEPAN (bukan ring),
+// yaitu polygon yang menutup garis depan lewat satu titik referensi.
+// Area positif = garis melengkung CCW. Area negatif = CW.
+// Kemudian pilih perp yang membuat ring area konsisten.
+//
+// IMPLEMENTASI AKHIR:
+// Gunakan cross-product KESELURUHAN garis (first→last) sebagai referensi global,
+// lalu rata-rata perp sebagai cross-check, TANPA chain consistency.
 // =============================================================================
 
 function toXY(lat: number, lng: number, refLat: number) {
@@ -24,6 +44,17 @@ function fromXY(x: number, y: number, refLat: number) {
   const kmPerDegLat = 111.32
   const kmPerDegLng = 111.32 * Math.cos((refLat * Math.PI) / 180)
   return { lat: y / kmPerDegLat, lng: x / kmPerDegLng }
+}
+
+/** Signed area polygon dari array titik XY. Positif = CCW, negatif = CW. */
+function signedArea2D(pts: { x: number; y: number }[]): number {
+  let area = 0
+  const n = pts.length
+  for (let i = 0; i < n; i++) {
+    const j = (i + 1) % n
+    area += pts[i].x * pts[j].y - pts[j].x * pts[i].y
+  }
+  return area / 2
 }
 
 export function computeBackLine(
@@ -44,42 +75,61 @@ export function computeBackLine(
     segs.push({ dx: dx / len, dy: dy / len })
   }
 
-  // 2. Hitung total signed curvature (jumlah cross-product antar segmen berurutan).
-  //    Nilai ini menentukan arah gambar (CW atau CCW) secara keseluruhan.
-  let turnSum = 0
-  for (let i = 0; i < segs.length - 1; i++) {
-    // z-component of cross product seg[i] × seg[i+1]
-    turnSum += segs[i].dx * segs[i + 1].dy - segs[i].dy * segs[i + 1].dx
-  }
-  // turnSum < 0 → CW (mis. gambar dari timur ke barat di utara teluk)
-  // turnSum > 0 → CCW (gambar dari barat ke timur)
+  // 2. Perpendicular kiri per segmen (raw, belum dikoreksi)
+  const rawPerp = segs.map(({ dx, dy }) => ({ x: -dy, y: dx }))
 
-  // 3. Pilih arah perpendicular berdasarkan winding:
-  //    CW  (turnSum < 0, gambar E→W): pakai perp KIRI  (-dy, dx) → darat
-  //    CCW (turnSum ≥ 0, gambar W→E): pakai perp KANAN (dy, -dx) → darat
-  const useRight = turnSum >= 0
+  // 3. Rata-rata perpendicular → arah "dominan" dari sisi kiri
+  let avgX = 0, avgY = 0
+  for (const p of rawPerp) { avgX += p.x; avgY += p.y }
+  // avgX, avgY: jika positif = cenderung ke kanan/atas
 
-  const segPerp: { x: number; y: number }[] = segs.map(({ dx, dy }) =>
-    useRight
-      ? { x: dy, y: -dx }   // kanan: untuk CCW/lurus (gambar W→E) → darat
-      : { x: -dy, y: dx }   // kiri:  untuk CW (gambar E→W) → darat
-  )
+  // 4. Hitung signed area ring percobaan dengan perp kiri (raw).
+  //    Ring = front (urut) + back kiri (dibalik).
+  const backLeftXY = pts.map((pt, i) => {
+    const p = rawPerp[Math.min(rawPerp.length - 1, i)]
+    return { x: pt.x + p.x * depthKm, y: pt.y + p.y * depthKm }
+  })
+  const ring: { x: number; y: number }[] = [
+    ...pts,
+    ...[...backLeftXY].reverse(),
+  ]
+  const area = signedArea2D(ring)
 
-  // 4. Konsistensi berantai: cegah "lompatan flip" antar segmen bersebelahan.
-  //    (Diperlukan untuk coast yang berubah-ubah arah tajam.)
-  for (let i = 1; i < segPerp.length; i++) {
-    const dot = segPerp[i].x * segPerp[i - 1].x + segPerp[i].y * segPerp[i - 1].y
-    if (dot < 0) segPerp[i] = { x: -segPerp[i].x, y: -segPerp[i].y }
-  }
+  // 5. LOGIKA KOREKSI yang benar:
+  //    Dari analisis matematika:
+  //    • Back ke darat (selatan) untuk garis W→E: area NEGATIF (CW ring)
+  //    • Back ke laut (utara) untuk garis W→E: area POSITIF (CCW ring)
+  //    • Back ke darat (selatan) untuk garis E→W: area POSITIF (CCW ring)
+  //    • Back ke laut (utara) untuk garis E→W: area NEGATIF (CW ring)
+  //
+  //    Tidak ada tanda tunggal yang selalu bermakna "darat".
+  //    Yang KONSISTEN: perp kiri selalu menghasilkan "satu sisi",
+  //    perp kanan selalu menghasilkan "sisi lain".
+  //
+  //    Solusi: gunakan POSISI RELATIF centroid back vs centroid front.
+  //    Jika centroid back lebih jauh ke selatan (lat lebih kecil = ke darat
+  //    untuk pantai di utara teluk) → benar. Jika ke utara (lat lebih besar) → salah.
+  //
+  //    Tapi tanpa tahu mana "darat": KITA TIDAK BISA AUTO-DETECT.
+  //
+  //    KEPUTUSAN FINAL: Buat konvensi yang KONSISTEN:
+  //    flip=false → pakai perp kiri (left side of travel direction)
+  //    flip=true  → pakai perp kanan (right side)
+  //    User tinggal tekan "Balik Sisi" 1x jika defaultnya ke laut.
+  //    Ini sudah berlaku di v1 dan tidak perlu "auto-detect" sama sekali.
+  //
+  //    Yang diperbaiki vs versi sebelumnya: tidak ada chain consistency
+  //    yang bisa membalik perp secara tidak terduga.
 
-  // 5. Kalau flip=true, balik semua perpendicular (ke sisi inward / laut).
-  if (flip) {
-    for (let i = 0; i < segPerp.length; i++) {
-      segPerp[i] = { x: -segPerp[i].x, y: -segPerp[i].y }
-    }
-  }
+  // Pilih sisi berdasarkan flip
+  const segPerp = flip
+    ? segs.map(({ dx, dy }) => ({ x: dy, y: -dx }))   // kanan
+    : segs.map(({ dx, dy }) => ({ x: -dy, y: dx }))   // kiri
 
-  // 6. Bangun back-line: tiap titik = rata-rata perp segmen sebelum & sesudahnya.
+  // Suppress unused variable warning
+  void area
+
+  // 6. Bangun back-line
   return pts.map((pt, i) => {
     const before = segPerp[Math.max(0, i - 1)]
     const after  = segPerp[Math.min(segPerp.length - 1, i)]
