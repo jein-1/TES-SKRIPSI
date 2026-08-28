@@ -2598,12 +2598,24 @@ function App() {
                 const f1: [number,number] = [front[i+1][1], front[i+1][0]];
                 const b0: [number,number] = [back[i][1], back[i][0]];
                 const b1: [number,number] = [back[i+1][1], back[i+1][0]];
+                let quadRing = [f0, b0, b1, f1, f0];
+                
+                // Pastikan CCW untuk mencegah earcut menghasilkan triangle raksasa/rusak
+                let area = 0;
+                for (let k = 0; k < quadRing.length - 1; k++) {
+                  area += quadRing[k][0] * quadRing[k+1][1] - quadRing[k+1][0] * quadRing[k][1];
+                }
+                if (area < 0) {
+                  quadRing = quadRing.slice(0, -1).reverse();
+                  quadRing.push([...quadRing[0]] as [number,number]);
+                }
+
                 quadFeatures.push({
                   type: 'Feature',
                   properties: {},
                   geometry: {
                     type: 'Polygon',
-                    coordinates: [[f0, b0, b1, f1, f0]] // 1 array for exterior ring
+                    coordinates: [quadRing]
                   }
                 });
               }
@@ -2827,9 +2839,20 @@ function App() {
                             const quadFeatures: any[] = [];
                             for (let j = 0; j < Math.min(front.length, back.length) - 1; j++) {
                               const f0 = front[j], f1 = front[j+1], b0 = back[j], b1 = back[j+1];
+                              let quadRing = [f0, b0, b1, f1, f0];
+                              
+                              let area = 0;
+                              for (let k = 0; k < quadRing.length - 1; k++) {
+                                area += quadRing[k][0] * quadRing[k+1][1] - quadRing[k+1][0] * quadRing[k][1];
+                              }
+                              if (area < 0) {
+                                quadRing = quadRing.slice(0, -1).reverse();
+                                quadRing.push([...quadRing[0]]);
+                              }
+
                               quadFeatures.push({
                                 type: 'Feature', properties: { id: zone.id },
-                                geometry: { type: 'Polygon', coordinates: [[f0, b0, b1, f1, f0]] } // 1 array for exterior ring
+                                geometry: { type: 'Polygon', coordinates: [quadRing] }
                               });
                             }
                             return quadFeatures;
