@@ -1,18 +1,17 @@
 // =============================================================================
-// zoneOffset.ts — v5: koreksi arah pakai WINDING DETECTION (signed curvature).
+// zoneOffset.ts — v5 (fixed): koreksi arah pakai WINDING DETECTION.
 //
-// Akar masalah v4 (shoelace): untuk arc CW (garis pantai digambar T→B),
-// ring area bernilai positif BAIK saat back ke laut MAUPUN ke darat →
-// shoelace tidak bisa membedakan keduanya → koreksi tidak bekerja.
+// Untuk garis pantai di utara Teluk Palu (laut di utara/atas peta):
+//   - Digambar W→E (kiri ke kanan): turnSum ≥ 0 (CCW/lurus)
+//     → perpendicular KANAN = (dy, -dx) → ke SELATAN = ke darat ✓
+//   - Digambar E→W (kanan ke kiri): turnSum < 0 (CW)
+//     → perpendicular KIRI = (-dy, dx) → ke SELATAN = ke darat ✓
 //
-// v5 menggunakan total signed curvature dari garis depan:
-//   turnSum = Σ cross(seg[i], seg[i+1])  (cross product arah antar segmen)
-//   turnSum < 0  → garis digambar CW  → "keluar kurva" = perpendicular KANAN (dy, −dx)
-//   turnSum > 0  → garis digambar CCW → "keluar kurva" = perpendicular KIRI (−dy, dx)
-//   turnSum ≈ 0  → garis lurus → default ke kiri, user pakai tombol Balik
+// Aturan:
+//   turnSum < 0 (CW)  → useRight = false → pakai perp KIRI  (-dy, dx)
+//   turnSum ≥ 0 (CCW) → useRight = true  → pakai perp KANAN (dy, -dx)
 //
-// "Keluar kurva" = menjauhi pusat lengkungan = ke arah DARAT untuk teluk.
-// Tombol "Balik Sisi" membalik antara keluar/masuk kurva.
+// Tombol "Balik Sisi" membalik antara darat/laut.
 // =============================================================================
 
 function toXY(lat: number, lng: number, refLat: number) {
@@ -55,16 +54,15 @@ export function computeBackLine(
   // turnSum < 0 → CW (mis. gambar dari timur ke barat di utara teluk)
   // turnSum > 0 → CCW (gambar dari barat ke timur)
 
-  // 3. Pilih arah perpendicular "keluar kurva" berdasarkan winding:
-  //    CW  → outward = perpendicular KANAN = (dy, −dx)
-  //    CCW → outward = perpendicular KIRI  = (−dy, dx)
-  //    Lurus (≈0) → default KIRI
-  const useRight = turnSum < 0
+  // 3. Pilih arah perpendicular berdasarkan winding:
+  //    CW  (turnSum < 0, gambar E→W): pakai perp KIRI  (-dy, dx) → darat
+  //    CCW (turnSum ≥ 0, gambar W→E): pakai perp KANAN (dy, -dx) → darat
+  const useRight = turnSum >= 0
 
   const segPerp: { x: number; y: number }[] = segs.map(({ dx, dy }) =>
     useRight
-      ? { x: dy, y: -dx }   // kanan: outward untuk CW arc (→ darat)
-      : { x: -dy, y: dx }   // kiri:  outward untuk CCW arc (→ darat)
+      ? { x: dy, y: -dx }   // kanan: untuk CCW/lurus (gambar W→E) → darat
+      : { x: -dy, y: dx }   // kiri:  untuk CW (gambar E→W) → darat
   )
 
   // 4. Konsistensi berantai: cegah "lompatan flip" antar segmen bersebelahan.
