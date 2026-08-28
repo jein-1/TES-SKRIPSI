@@ -2589,16 +2589,23 @@ function App() {
               const back  = drawingZoneBackCoords.slice(0, safeLen);
               const color = ZRB_REFERENCE[newHazardZone.zrbLevel].color;
 
-              // Render fill sebagai MultiPolygon dari quad-strips kecil.
-              // Urutan titik CCW (f0→b0→b1→f1) agar MapLibre mengisi warnanya — bukan menganggap sebagai lubang.
-              const quads: [number,number][][][] = [];
-              for (let i = 0; i < safeLen - 1; i++) {
-                const f0: [number,number] = [front[i][1], front[i][0]];
-                const f1: [number,number] = [front[i+1][1], front[i+1][0]];
-                const b0: [number,number] = [back[i][1], back[i][0]];
-                const b1: [number,number] = [back[i+1][1], back[i+1][0]];
-                // CCW winding: f0 → b0 → b1 → f1 → f0
-                quads.push([[f0, b0, b1, f1, f0]]);
+              // Render fill sebagai SATU Polygon tunggal: front(urut) + back(dibalik) + tutup ring.
+              // Satu polygon → tidak ada artefak abu-abu zoom-out dari banyak edge quad kecil.
+              // Winding dikoreksi ke CCW (shoelace) agar MapLibre mengisi warna dengan benar.
+              const fwdPts = front.map(c => [c[1], c[0]] as [number,number]);
+              const revPts = [...back].reverse().map(c => [c[1], c[0]] as [number,number]);
+              let previewRing: [number,number][] = [...fwdPts, ...revPts];
+              // Tutup ring
+              if (previewRing.length > 0) previewRing.push([...previewRing[0]]);
+              // Hitung signed area (shoelace) — positif = CCW = benar untuk GeoJSON exterior ring
+              let previewArea = 0;
+              for (let i = 0; i < previewRing.length - 1; i++) {
+                previewArea += previewRing[i][0] * previewRing[i+1][1] - previewRing[i+1][0] * previewRing[i][1];
+              }
+              // Jika CW (area negatif), balik ke CCW
+              if (previewArea < 0) {
+                previewRing = previewRing.slice(0, -1).reverse();
+                previewRing.push([...previewRing[0]]);
               }
 
               return (
@@ -2606,7 +2613,7 @@ function App() {
                   <MapGeoJSON
                     key="zone-preview-fill"
                     id="zone-preview-fill"
-                    data={{ type: 'Feature', properties: {}, geometry: { type: 'MultiPolygon', coordinates: quads } } as any}
+                    data={{ type: 'Feature', properties: {}, geometry: { type: 'Polygon', coordinates: [previewRing] } } as any}
                     fillPaint={{ 'fill-color': color, 'fill-opacity': 0.45 }}
                   />
                   <MapGeoJSON
@@ -2797,15 +2804,19 @@ function App() {
                         type: 'Feature',
                         properties: { id: zone.id },
                         geometry: (() => {
-                          // Pastikan ring tertutup untuk Polygon standar
-                          let ring = [...zone.coords.map(c => [c[1], c[0]])];
+                          // Bangun ring dari zone.coords (buildZonePolygon = front + back_reversed)
+                          let ring: number[][] = zone.coords.map(c => [c[1], c[0]]);
+                          // Tutup ring jika belum
                           if (ring.length > 0) {
-                            const first = ring[0];
-                            const last = ring[ring.length - 1];
-                            if (first[0] !== last[0] || first[1] !== last[1]) {
-                              ring.push([...first]);
-                            }
+                            const first = ring[0], last = ring[ring.length - 1];
+                            if (first[0] !== last[0] || first[1] !== last[1]) ring.push([...first]);
                           }
+                          // Pastikan CCW (shoelace) agar MapLibre mengisi fill dengan benar
+                          let area2 = 0;
+                          for (let i = 0; i < ring.length - 1; i++) {
+                            area2 += ring[i][0] * ring[i+1][1] - ring[i+1][0] * ring[i][1];
+                          }
+                          if (area2 < 0) ring = ring.slice(0, -1).reverse().concat([[...ring[ring.length-1]]]);
                           return { type: 'Polygon', coordinates: [ring] };
                         })() as any
                       }}
