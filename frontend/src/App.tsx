@@ -2819,28 +2819,12 @@ function App() {
                         }
                       }}
                     />
-                    {/* Front line */}
-                    {zone.coords.length >= 2 && (() => {
-                      const nF = Math.floor(zone.coords.length / 2);
-                      return (
-                        <MapGeoJSON
-                          key={`hazard-front-${i}-${hazardZoneVersion}`}
-                          data={{ type: 'Feature', properties: {}, geometry: { type: 'LineString', coordinates: zone.coords.slice(0, nF).map(c => [c[1], c[0]]) } } as any}
-                          linePaint={{ 'line-color': tsunamiAlert ? '#ff0000' : color, 'line-width': tsunamiAlert ? 3 : (isSelected ? 2.5 : 1.5), 'line-opacity': 0.9 }}
-                        />
-                      );
-                    })()}
-                    {/* Back line */}
-                    {zone.coords.length >= 4 && (() => {
-                      const nF = Math.floor(zone.coords.length / 2);
-                      return (
-                        <MapGeoJSON
-                          key={`hazard-back-${i}-${hazardZoneVersion}`}
-                          data={{ type: 'Feature', properties: {}, geometry: { type: 'LineString', coordinates: zone.coords.slice(nF).map(c => [c[1], c[0]]) } } as any}
-                          linePaint={{ 'line-color': tsunamiAlert ? '#ff0000' : color, 'line-width': tsunamiAlert ? 2 : 1, 'line-opacity': 0.7, 'line-dasharray': [5, 4] }}
-                        />
-                      );
-                    })()}
+                    {/* Outline — satu garis penuh mengelilingi zona */}
+                    <MapGeoJSON
+                      key={`hazard-outline-${i}-${hazardZoneVersion}`}
+                      data={{ type: 'Feature', properties: {}, geometry: { type: 'LineString', coordinates: zone.coords.map(c => [c[1], c[0]]) } } as any}
+                      linePaint={{ 'line-color': tsunamiAlert ? '#ff0000' : color, 'line-width': tsunamiAlert ? 3 : (isSelected ? 2.5 : 2), 'line-opacity': 1 }}
+                    />
                     <MapMarker latitude={polygonCentroid(zone.coords)[0]} longitude={polygonCentroid(zone.coords)[1]}>
                       <MarkerContent>
                         <div style={{ pointerEvents: 'none' }} className="bg-black/50 text-white text-[10px] px-2 py-0.5 rounded-full whitespace-nowrap font-bold shadow-sm">
@@ -2851,6 +2835,7 @@ function App() {
                   </Fragment>
                 );
               })}
+
 
             {/* Temporary Marker for Add Shelter Mode */}
             {((showAddShelter || pickingLocationMode) && newShelter.lat && newShelter.lng) && !isNaN(parseFloat(newShelter.lat)) && (
