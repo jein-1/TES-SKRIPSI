@@ -2790,29 +2790,23 @@ function App() {
                 const color = ZRB_REFERENCE[zone.zrbLevel]?.color || '#ef4444';
                 return (
                   <Fragment key={`hazard-group-${i}-${hazardZoneVersion}`}>
-                    {/* Fill layer — quads unioned via polygon-clipping to fix dark overlap on sharp bends */}
+                    {/* Fill layer */}
                     <MapGeoJSON 
                       key={`hazard-fill-${i}-${hazardZoneVersion}`}
                       data={{
                         type: 'Feature',
                         properties: { id: zone.id },
                         geometry: (() => {
-                          const nF = Math.floor(zone.coords.length / 2);
-                          if (nF < 2) return { type: 'Polygon' as const, coordinates: [zone.coords.map(c => [c[1], c[0]])] };
-                          const front = zone.coords.slice(0, nF);
-                          const back  = [...zone.coords.slice(nF)].reverse();
-                          const quads = front.slice(0, -1).map((p1, qi) => {
-                            const p2 = front[qi+1], b1 = back[qi], b2 = back[qi+1];
-                            if (!p2 || !b1 || !b2) return null;
-                            return [[ [p1[1],p1[0]], [p2[1],p2[0]], [b2[1],b2[0]], [b1[1],b1[0]], [p1[1],p1[0]] ]];
-                          }).filter((q): q is NonNullable<typeof q> => q !== null);
-                          if (quads.length === 0) return { type: 'Polygon' as const, coordinates: [zone.coords.map(c => [c[1], c[0]])] };
-                          try {
-                            const unioned = polygonClipping.union(quads[0] as any, ...(quads.slice(1) as any[]));
-                            return { type: 'MultiPolygon' as const, coordinates: unioned };
-                          } catch {
-                            return { type: 'MultiPolygon' as const, coordinates: quads };
+                          // Pastikan ring tertutup untuk Polygon standar
+                          let ring = [...zone.coords.map(c => [c[1], c[0]])];
+                          if (ring.length > 0) {
+                            const first = ring[0];
+                            const last = ring[ring.length - 1];
+                            if (first[0] !== last[0] || first[1] !== last[1]) {
+                              ring.push([...first]);
+                            }
                           }
+                          return { type: 'Polygon', coordinates: [ring] };
                         })() as any
                       }}
                       fillPaint={{ 'fill-color': tsunamiAlert ? '#ff0000' : color, 'fill-opacity': tsunamiAlert ? 0.35 : (isSelected ? 0.5 : 0.35) }}
