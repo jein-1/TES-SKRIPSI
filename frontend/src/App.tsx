@@ -2603,7 +2603,7 @@ function App() {
                   properties: {},
                   geometry: {
                     type: 'Polygon',
-                    coordinates: [[[f0, b0, b1, f1, f0]]] // CCW winding
+                    coordinates: [[f0, b0, b1, f1, f0]] // 1 array for exterior ring
                   }
                 });
               }
@@ -2829,7 +2829,7 @@ function App() {
                               const f0 = front[j], f1 = front[j+1], b0 = back[j], b1 = back[j+1];
                               quadFeatures.push({
                                 type: 'Feature', properties: { id: zone.id },
-                                geometry: { type: 'Polygon', coordinates: [[[f0, b0, b1, f1, f0]]] } // CCW
+                                geometry: { type: 'Polygon', coordinates: [[f0, b0, b1, f1, f0]] } // 1 array for exterior ring
                               });
                             }
                             return quadFeatures;
