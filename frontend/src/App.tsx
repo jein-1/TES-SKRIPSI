@@ -2589,23 +2589,23 @@ function App() {
               const back  = drawingZoneBackCoords.slice(0, safeLen);
               const color = ZRB_REFERENCE[newHazardZone.zrbLevel].color;
 
-              // Render fill sebagai SATU Polygon tunggal: front(urut) + back(dibalik) + tutup ring.
-              // Satu polygon → tidak ada artefak abu-abu zoom-out dari banyak edge quad kecil.
-              // Winding dikoreksi ke CCW (shoelace) agar MapLibre mengisi warna dengan benar.
-              const fwdPts = front.map(c => [c[1], c[0]] as [number,number]);
-              const revPts = [...back].reverse().map(c => [c[1], c[0]] as [number,number]);
-              let previewRing: [number,number][] = [...fwdPts, ...revPts];
-              // Tutup ring
-              if (previewRing.length > 0) previewRing.push([...previewRing[0]]);
-              // Hitung signed area (shoelace) — positif = CCW = benar untuk GeoJSON exterior ring
-              let previewArea = 0;
-              for (let i = 0; i < previewRing.length - 1; i++) {
-                previewArea += previewRing[i][0] * previewRing[i+1][1] - previewRing[i+1][0] * previewRing[i][1];
-              }
-              // Jika CW (area negatif), balik ke CCW
-              if (previewArea < 0) {
-                previewRing = previewRing.slice(0, -1).reverse();
-                previewRing.push([...previewRing[0]]);
+              // Render fill sebagai FeatureCollection dari quad-strips kecil.
+              // Menggunakan FeatureCollection dengan Feature terpisah (bukan MultiPolygon)
+              // mencegah MapLibre melakukan XOR pada area yang overlap (yang menyebabkan lubang abu-abu).
+              const quadFeatures: any[] = [];
+              for (let i = 0; i < safeLen - 1; i++) {
+                const f0: [number,number] = [front[i][1], front[i][0]];
+                const f1: [number,number] = [front[i+1][1], front[i+1][0]];
+                const b0: [number,number] = [back[i][1], back[i][0]];
+                const b1: [number,number] = [back[i+1][1], back[i+1][0]];
+                quadFeatures.push({
+                  type: 'Feature',
+                  properties: {},
+                  geometry: {
+                    type: 'Polygon',
+                    coordinates: [[[f0, b0, b1, f1, f0]]] // CCW winding
+                  }
+                });
               }
 
               return (
@@ -2613,7 +2613,7 @@ function App() {
                   <MapGeoJSON
                     key="zone-preview-fill"
                     id="zone-preview-fill"
-                    data={{ type: 'Feature', properties: {}, geometry: { type: 'Polygon', coordinates: [previewRing] } } as any}
+                    data={{ type: 'FeatureCollection', features: quadFeatures } as any}
                     fillPaint={{ 'fill-color': color, 'fill-opacity': 0.45 }}
                   />
                   <MapGeoJSON
@@ -2801,25 +2801,41 @@ function App() {
                     <MapGeoJSON 
                       key={`hazard-fill-${i}-${hazardZoneVersion}`}
                       data={{
-                        type: 'Feature',
-                        properties: { id: zone.id },
-                        geometry: (() => {
-                          // Bangun ring dari zone.coords (buildZonePolygon = front + back_reversed)
-                          let ring: number[][] = zone.coords.map(c => [c[1], c[0]]);
-                          // Tutup ring jika belum
-                          if (ring.length > 0) {
-                            const first = ring[0], last = ring[ring.length - 1];
-                            if (first[0] !== last[0] || first[1] !== last[1]) ring.push([...first]);
+                        type: 'FeatureCollection',
+                        features: (() => {
+                          const pts = zone.coords.map(c => [c[1], c[0]]);
+                          const isClosed = pts.length > 3 && pts[0][0] === pts[pts.length-1][0] && pts[0][1] === pts[pts.length-1][1];
+                          
+                          if (isClosed) {
+                            // Jika Polygon biasa (tertutup), render sebagai satu Polygon
+                            let ring = [...pts];
+                            let area2 = 0;
+                            for (let i = 0; i < ring.length - 1; i++) {
+                              area2 += ring[i][0] * ring[i+1][1] - ring[i+1][0] * ring[i][1];
+                            }
+                            if (area2 < 0) ring = ring.slice(0, -1).reverse().concat([[...ring[ring.length-1]]]);
+                            return [{
+                              type: 'Feature', properties: { id: zone.id },
+                              geometry: { type: 'Polygon', coordinates: [ring] }
+                            }];
+                          } else {
+                            // Jika digambar pakai tool (front + back_reversed), render sebagai kumpulan quad
+                            // untuk menghindari lubang abu-abu akibat earcut error atau XOR.
+                            const nF = Math.floor(pts.length / 2);
+                            const front = pts.slice(0, nF);
+                            const back = [...pts.slice(nF)].reverse();
+                            const quadFeatures: any[] = [];
+                            for (let j = 0; j < Math.min(front.length, back.length) - 1; j++) {
+                              const f0 = front[j], f1 = front[j+1], b0 = back[j], b1 = back[j+1];
+                              quadFeatures.push({
+                                type: 'Feature', properties: { id: zone.id },
+                                geometry: { type: 'Polygon', coordinates: [[[f0, b0, b1, f1, f0]]] } // CCW
+                              });
+                            }
+                            return quadFeatures;
                           }
-                          // Pastikan CCW (shoelace) agar MapLibre mengisi fill dengan benar
-                          let area2 = 0;
-                          for (let i = 0; i < ring.length - 1; i++) {
-                            area2 += ring[i][0] * ring[i+1][1] - ring[i+1][0] * ring[i][1];
-                          }
-                          if (area2 < 0) ring = ring.slice(0, -1).reverse().concat([[...ring[ring.length-1]]]);
-                          return { type: 'Polygon', coordinates: [ring] };
-                        })() as any
-                      }}
+                        })()
+                      } as any}
                       fillPaint={{ 'fill-color': tsunamiAlert ? '#ff0000' : color, 'fill-opacity': tsunamiAlert ? 0.5 : (isSelected ? 0.6 : 0.45) }}
                       fillHoverPaint={{ 'fill-opacity': 0.3 }}
                       interactive={!drawingZoneMode}
