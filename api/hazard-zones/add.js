@@ -59,8 +59,8 @@ export default async function handler(req, res) {
   }).select().single();
 
   if (error) {
-    console.error('Supabase insert error:', error.message);
-    return res.status(500).json({ error: 'Database insert failed' });
+    console.error('Supabase insert error:', error.message, error.details, error.hint);
+    return res.status(500).json({ error: `Database error: ${error.message}` });
   }
 
   return res.status(200).json({ success: true, hazardZone: data });
