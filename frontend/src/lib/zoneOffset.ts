@@ -44,6 +44,21 @@ export function computeBackLine(
     segPerp.push({ x: px, y: py })
   }
 
+  // 2. Referensi GLOBAL: rata-rata semua perpendicular mentah — ini "arah
+  //    dominan" keseluruhan garis, jauh lebih stabil daripada membandingkan
+  //    tiap segmen cuma ke tetangga langsungnya.
+  let refX = 0, refY = 0
+  for (const p of segPerp) { refX += p.x; refY += p.y }
+  const refLen = Math.hypot(refX, refY) || 1
+  refX /= refLen
+  refY /= refLen
+
+  // 3. Tiap segmen: kalau berlawanan (>90°) dari referensi global, balik.
+  for (let i = 0; i < segPerp.length; i++) {
+    const dot = segPerp[i].x * refX + segPerp[i].y * refY
+    if (dot < 0) segPerp[i] = { x: -segPerp[i].x, y: -segPerp[i].y }
+  }
+
   // 4. Per titik: rata-rata perpendicular segmen sebelum & sesudahnya
   return front.map((_, i) => {
     const before = segPerp[Math.max(0, i - 1)]
