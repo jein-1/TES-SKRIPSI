@@ -2809,8 +2809,8 @@ function App() {
                           return { type: 'Polygon', coordinates: [ring] };
                         })() as any
                       }}
-                      fillPaint={{ 'fill-color': tsunamiAlert ? '#ff0000' : color, 'fill-opacity': tsunamiAlert ? 0.35 : (isSelected ? 0.5 : 0.35) }}
-                      fillHoverPaint={{ 'fill-opacity': 0.25 }}
+                      fillPaint={{ 'fill-color': tsunamiAlert ? '#ff0000' : color, 'fill-opacity': tsunamiAlert ? 0.5 : (isSelected ? 0.6 : 0.45) }}
+                      fillHoverPaint={{ 'fill-opacity': 0.3 }}
                       interactive={!drawingZoneMode}
                       onClick={() => {
                         if (!drawingZoneMode) {
@@ -2822,8 +2822,15 @@ function App() {
                     {/* Outline — satu garis penuh mengelilingi zona */}
                     <MapGeoJSON
                       key={`hazard-outline-${i}-${hazardZoneVersion}`}
-                      data={{ type: 'Feature', properties: {}, geometry: { type: 'LineString', coordinates: zone.coords.map(c => [c[1], c[0]]) } } as any}
-                      linePaint={{ 'line-color': tsunamiAlert ? '#ff0000' : color, 'line-width': tsunamiAlert ? 3 : (isSelected ? 2.5 : 2), 'line-opacity': 1 }}
+                      data={{ type: 'Feature', properties: {}, geometry: { type: 'LineString', coordinates: (() => {
+                        const pts = zone.coords.map(c => [c[1], c[0]]);
+                        // tutup garis supaya outline tertutup sempurna
+                        if (pts.length > 0 && (pts[0][0] !== pts[pts.length-1][0] || pts[0][1] !== pts[pts.length-1][1])) {
+                          pts.push([...pts[0]]);
+                        }
+                        return pts;
+                      })() } } as any}
+                      linePaint={{ 'line-color': tsunamiAlert ? '#ff0000' : color, 'line-width': tsunamiAlert ? 3 : (isSelected ? 3 : 2.5), 'line-opacity': 1 }}
                     />
                     <MapMarker latitude={polygonCentroid(zone.coords)[0]} longitude={polygonCentroid(zone.coords)[1]}>
                       <MarkerContent>
