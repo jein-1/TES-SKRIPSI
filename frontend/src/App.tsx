@@ -2590,15 +2590,15 @@ function App() {
               const color = ZRB_REFERENCE[newHazardZone.zrbLevel].color;
 
               // Render fill sebagai MultiPolygon dari quad-strips kecil.
-              // Setiap quad = 2 titik front + 2 titik back berurutan → tidak pernah self-intersect
-              // meskipun pantai melengkung >180°. Ini menghilangkan artefak "fill hitam".
+              // Urutan titik CCW (f0→b0→b1→f1) agar MapLibre mengisi warnanya — bukan menganggap sebagai lubang.
               const quads: [number,number][][][] = [];
               for (let i = 0; i < safeLen - 1; i++) {
                 const f0: [number,number] = [front[i][1], front[i][0]];
                 const f1: [number,number] = [front[i+1][1], front[i+1][0]];
                 const b0: [number,number] = [back[i][1], back[i][0]];
                 const b1: [number,number] = [back[i+1][1], back[i+1][0]];
-                quads.push([[f0, f1, b1, b0, f0]]);
+                // CCW winding: f0 → b0 → b1 → f1 → f0
+                quads.push([[f0, b0, b1, f1, f0]]);
               }
 
               return (
@@ -2607,7 +2607,7 @@ function App() {
                     key="zone-preview-fill"
                     id="zone-preview-fill"
                     data={{ type: 'Feature', properties: {}, geometry: { type: 'MultiPolygon', coordinates: quads } } as any}
-                    fillPaint={{ 'fill-color': color, 'fill-opacity': 0.3 }}
+                    fillPaint={{ 'fill-color': color, 'fill-opacity': 0.45 }}
                   />
                   <MapGeoJSON
                     key="zone-preview-front-line"
