@@ -36,32 +36,76 @@ function ensureGraphInitialized() {
 const USER_NODE_ID = '__USER_START__'
 const MIN_STUB_DISTANCE = 0.001 // km, hindari edge berbobot 0 di Dijkstra
 
-/** Ambil potongan geometry dari awal sampai jarak `keepKm` sepanjang edge. */
-function trimGeometryFromStart(geom: [number, number][], edgeDistance: number, keepKm: number, endPoint: [number, number]): [number, number][] {
-  if (geom.length < 2 || edgeDistance <= 0) return [endPoint]
-  const out: [number, number][] = [geom[0]]
-  let cumulative = 0
-  for (let i = 1; i < geom.length; i++) {
-    const segLen = calculateHaversine(geom[i - 1][0], geom[i - 1][1], geom[i][0], geom[i][1])
-    if (cumulative + segLen > keepKm) break
-    out.push(geom[i])
-    cumulative += segLen
+/**
+ * Ambil irisan geometry jalan dari titik snap (titik proyeksi) menuju target node (edge.from atau edge.to)
+ * Hasilnya terurut: mulai dari [snapLat, snapLng] menuju ke target node.
+ */
+function getEdgeGeometryFromSnapToNode(
+  edge: (typeof roadEdges)[number],
+  snapLat: number,
+  snapLng: number,
+  targetNodeId: string
+): [number, number][] {
+  const geom = edge.geometry
+  if (!geom || geom.length < 2) return [[snapLat, snapLng]]
+
+  let bestIdx = 0
+  let bestDist = Infinity
+  for (let i = 0; i < geom.length; i++) {
+    const d = calculateHaversine(snapLat, snapLng, geom[i][0], geom[i][1])
+    if (d < bestDist) {
+      bestDist = d
+      bestIdx = i
+    }
   }
-  out.push(endPoint)
+
+  const out: [number, number][] = [[snapLat, snapLng]]
+  if (targetNodeId === edge.to) {
+    for (let i = bestIdx + 1; i < geom.length; i++) {
+      out.push(geom[i])
+    }
+  } else {
+    for (let i = bestIdx - 1; i >= 0; i--) {
+      out.push(geom[i])
+    }
+  }
   return out
 }
 
-/** Ambil potongan geometry dari jarak `fromEndKm` (dihitung dari ujung akhir) sampai akhir. */
-function trimGeometryFromEnd(geom: [number, number][], edgeDistance: number, fromEndKm: number, startPoint: [number, number]): [number, number][] {
-  if (geom.length < 2 || edgeDistance <= 0) return [startPoint]
-  const out: [number, number][] = [startPoint]
-  let cumulative = 0
-  for (let i = geom.length - 2; i >= 0; i--) {
-    const segLen = calculateHaversine(geom[i + 1][0], geom[i + 1][1], geom[i][0], geom[i][1])
-    if (cumulative + segLen > fromEndKm) break
-    out.push(geom[i])
-    cumulative += segLen
+/**
+ * Ambil irisan geometry jalan dari start node (edge.from atau edge.to) menuju titik snap
+ * Hasilnya terurut: mulai dari start node menuju ke [snapLat, snapLng].
+ */
+function getEdgeGeometryFromNodeToSnap(
+  edge: (typeof roadEdges)[number],
+  startNodeId: string,
+  snapLat: number,
+  snapLng: number
+): [number, number][] {
+  const geom = edge.geometry
+  if (!geom || geom.length < 2) return [[snapLat, snapLng]]
+
+  let bestIdx = 0
+  let bestDist = Infinity
+  for (let i = 0; i < geom.length; i++) {
+    const d = calculateHaversine(snapLat, snapLng, geom[i][0], geom[i][1])
+    if (d < bestDist) {
+      bestDist = d
+      bestIdx = i
+    }
   }
+
+  const out: [number, number][] = []
+  if (startNodeId === edge.from) {
+    for (let i = 0; i <= bestIdx; i++) {
+      out.push(geom[i])
+    }
+  } else {
+    for (let i = geom.length - 1; i >= bestIdx; i--) {
+      out.push(geom[i])
+    }
+  }
+  out.push([snapLat, snapLng])
   return out
 }
 
@@ -156,23 +200,43 @@ export function findOptimalEvacuationRoutes(
         }
 
         // Potongan awal: dari titik user (di jalan) sampai node pertama graf
-        const userStub = trimGeometryFromStart(
-          userSnap.edge.geometry ?? [],
-          userSnap.edge.distance,
-          Math.min(userSnap.distFromStart, userSnap.distToEnd),
-          [userSnap.lat, userSnap.lng],
+        const firstGraphNode = pathNodeIds[0]
+        const userStub = getEdgeGeometryFromSnapToNode(
+          userSnap.edge,
+          userSnap.lat,
+          userSnap.lng,
+          firstGraphNode
         )
 
         // Potongan akhir: dari node terakhir graf sampai titik shelter (di jalan)
-        const shelterStub = viaFrom
-          ? trimGeometryFromStart(shelterSnap.edge.geometry ?? [], shelterSnap.edge.distance, shelterSnap.distFromStart, [shelterSnap.lat, shelterSnap.lng])
-          : trimGeometryFromEnd(shelterSnap.edge.geometry ?? [], shelterSnap.edge.distance, shelterSnap.distToEnd, [shelterSnap.lat, shelterSnap.lng])
+        const lastGraphNode = pathNodeIds[pathNodeIds.length - 1]
+        const shelterStub = getEdgeGeometryFromNodeToSnap(
+          shelterSnap.edge,
+          lastGraphNode,
+          shelterSnap.lat,
+          shelterSnap.lng
+        )
+
+        // Sambungkan posisi user jika berada dalam toleransi akses jalan terdekat (< 25 meter).
+        // Jika user berada di dalam bangunan atau gang tak berujung, rute mulai dari jalan terdekat tanpa lompatan liar.
+        const startPoint: [number, number][] = userSnap.perpendicularDistKm <= 0.025
+          ? [[userLat, userLng]]
+          : []
+
+        // Hindari duplikasi titik sambungan antara userStub, roadCoords, dan shelterStub
+        const cleanRoadCoords = (roadCoords.length > 0 && userStub.length > 0)
+          ? roadCoords.slice(1)
+          : roadCoords
+
+        const cleanShelterStub = (cleanRoadCoords.length > 0 && shelterStub.length > 0)
+          ? shelterStub.slice(1)
+          : shelterStub
 
         coordinates = [
-          [userLat, userLng],
+          ...startPoint,
           ...userStub,
-          ...roadCoords,
-          ...shelterStub,
+          ...cleanRoadCoords,
+          ...cleanShelterStub,
           [shelter.lat, shelter.lng],
         ]
       }

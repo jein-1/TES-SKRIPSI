@@ -643,31 +643,44 @@ export default function NavigatePage({ routes, selectedRoute, tsunamiAlert, user
           })}
 
           {/* Routes (OSRM or Dijkstra road graph or straight line) - HANYA MUNCUL SAAT DARURAT */}
-          {emergency && (osrmRoutes.length > 0 && osrmRoutes[0].coordinates.length > 1 ? (
-            <MapRoute 
-              coordinates={osrmRoutes[0].coordinates} 
-              color={emergency ? "#ef4444" : "#6366f1"}
-              width={6}
-              opacity={0.9}
-            />
-          ) : (route?.coordinates && route.coordinates.length > 1 ? (
-            <MapRoute 
-              coordinates={route.coordinates.map(c => [c[1], c[0]])} 
-              color={emergency ? "#ef4444" : "#6366f1"}
-              width={6}
-              opacity={0.9}
-            />
-          ) : (
-            effectivePos && shelterPos && (
-              <MapRoute 
-                coordinates={[effectivePos, shelterPos]} 
-                color={emergency ? "#ef4444" : "#6366f1"}
-                width={4}
-                opacity={0.9}
-                dashArray={[2, 2]}
-              />
-            )
-          )))}
+          {emergency && (() => {
+            const osrmValid = osrmRoutes.length > 0 && osrmRoutes[0].coordinates.length > 1;
+            const osrmSnapDist = osrmRoutes[0]?.startSnapDistMeters ?? 0;
+            const preferDijkstra = !!(route?.coordinates && route.coordinates.length > 1 && (osrmSnapDist > 35 || !osrmValid));
+
+            if (!preferDijkstra && osrmValid) {
+              return (
+                <MapRoute 
+                  coordinates={osrmRoutes[0].coordinates} 
+                  color={emergency ? "#ef4444" : "#6366f1"}
+                  width={6}
+                  opacity={0.9}
+                />
+              );
+            }
+            if (route?.coordinates && route.coordinates.length > 1) {
+              return (
+                <MapRoute 
+                  coordinates={route.coordinates.map(c => [c[1], c[0]])} 
+                  color={emergency ? "#ef4444" : "#6366f1"}
+                  width={6}
+                  opacity={0.9}
+                />
+              );
+            }
+            if (effectivePos && shelterPos) {
+              return (
+                <MapRoute 
+                  coordinates={[effectivePos, shelterPos]} 
+                  color={emergency ? "#ef4444" : "#6366f1"}
+                  width={4}
+                  opacity={0.9}
+                  dashArray={[2, 2]}
+                />
+              );
+            }
+            return null;
+          })()}
 
           {/* User Location Marker with Flashlight */}
           {effectivePos && (

@@ -13,6 +13,7 @@ export interface OsrmRouteData {
   duration: number; // seconds
   distance: number; // meters
   steps?: OsrmStep[];
+  startSnapDistMeters?: number;
 }
 
 /** Fetch route from primary OSRM public server (foot profile) */
@@ -117,21 +118,31 @@ export async function fetchOsrmRoute(
   if (routes.length > 0) {
     return routes.map(r => {
       const coords = [...r.coordinates];
+      let startSnapDistMeters = 0;
       if (coords.length > 0) {
         const first = coords[0];
-        // Connect start position to road entrance if not exactly identical
-        if (Math.hypot(first[0] - startLng, first[1] - startLat) > 0.00002) {
+        // Jarak dalam meter (1 deg lat/lng di ekuator ~ 111,320m)
+        const dLngMeters = (first[0] - startLng) * 111320 * Math.cos((startLat * Math.PI) / 180);
+        const dLatMeters = (first[1] - startLat) * 111320;
+        startSnapDistMeters = Math.hypot(dLngMeters, dLatMeters);
+
+        // Hanya sambungkan garis jika titik awal berada tepat di tepi/akses jalan (< 20 meter).
+        // JANGAN menarik garis diagonal lurus jika snap > 20 meter, karena akan menembus bangunan perumahan & sungai.
+        if (startSnapDistMeters > 2 && startSnapDistMeters <= 20) {
           coords.unshift([startLng, startLat]);
         }
+
         const last = coords[coords.length - 1];
-        // Connect road exit directly into shelter position
-        if (Math.hypot(last[0] - endLng, last[1] - endLat) > 0.00002) {
+        const endLngM = (last[0] - endLng) * 111320 * Math.cos((endLat * Math.PI) / 180);
+        const endLatM = (last[1] - endLat) * 111320;
+        const endSnapMeters = Math.hypot(endLngM, endLatM);
+        if (endSnapMeters > 2 && endSnapMeters <= 35) {
           coords.push([endLng, endLat]);
         }
       } else {
         coords.push([startLng, startLat], [endLng, endLat]);
       }
-      return { ...r, coordinates: coords };
+      return { ...r, coordinates: coords, startSnapDistMeters };
     });
   }
 
