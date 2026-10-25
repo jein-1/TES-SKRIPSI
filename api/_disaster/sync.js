@@ -1,4 +1,4 @@
-import { syncDisasterEvents } from '../services/disasterSync.js';
+import { syncDisasterEvents } from '../_services/disasterSync.js';
 
 export default async function handler(req, res) {
   // CORS Headers
@@ -26,3 +26,4 @@ export default async function handler(req, res) {
     });
   }
 }
+

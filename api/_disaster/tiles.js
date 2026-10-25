@@ -1,5 +1,5 @@
-import { generateRainTiles } from '../services/tileRenderer.js';
-import { getOrCache } from '../services/cache.js';
+import { generateRainTiles } from '../_services/tileRenderer.js';
+import { getOrCache } from '../_services/cache.js';
 
 export default async function handler(req, res) {
   // CORS Headers
@@ -44,3 +44,4 @@ export default async function handler(req, res) {
     return res.status(500).json({ error: 'Failed to generate rain tiles' });
   }
 }
+

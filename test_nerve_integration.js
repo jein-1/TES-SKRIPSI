@@ -1,8 +1,8 @@
-import { fetchBmkgEvents } from './api/services/bmkg.js';
-import { fetchUsgsEarthquakes } from './api/services/usgs.js';
-import { fetchJmaTyphoons } from './api/services/jma.js';
-import { generateRainTiles } from './api/services/tileRenderer.js';
-import { syncDisasterEvents } from './api/services/disasterSync.js';
+import { fetchBmkgEvents } from './api/_services/bmkg.js';
+import { fetchUsgsEarthquakes } from './api/_services/usgs.js';
+import { fetchJmaTyphoons } from './api/_services/jma.js';
+import { generateRainTiles } from './api/_services/tileRenderer.js';
+import { syncDisasterEvents } from './api/_services/disasterSync.js';
 
 async function runTests() {
   console.log('--- Testing BMKG TEWS Service ---');
@@ -64,3 +64,4 @@ async function runTests() {
 }
 
 runTests();
+

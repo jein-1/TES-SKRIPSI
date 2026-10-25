@@ -3,24 +3,40 @@
   "outputDirectory": "frontend/dist",
   "rewrites": [
     {
+      "source": "/api/shelters/(.*)",
+      "destination": "/api/shelters?action=$1"
+    },
+    {
+      "source": "/api/hazard-zones/(.*)",
+      "destination": "/api/hazard-zones?action=$1"
+    },
+    {
+      "source": "/api/push/(.*)",
+      "destination": "/api/push?action=$1"
+    },
+    {
+      "source": "/api/disaster/(.*)",
+      "destination": "/api/disaster?route=$1"
+    },
+    {
       "source": "/api/v2/home(.*)",
-      "destination": "/api/disaster/home"
+      "destination": "/api/disaster?route=home"
     },
     {
       "source": "/v2/home(.*)",
-      "destination": "/api/disaster/home"
+      "destination": "/api/disaster?route=home"
     },
     {
       "source": "/api/v2/timeline(.*)",
-      "destination": "/api/disaster/timeline"
+      "destination": "/api/disaster?route=timeline"
     },
     {
       "source": "/v2/timeline(.*)",
-      "destination": "/api/disaster/timeline"
+      "destination": "/api/disaster?route=timeline"
     },
     {
       "source": "/api/rain/(.*)",
-      "destination": "/api/disaster/tiles"
+      "destination": "/api/disaster?route=tiles"
     },
     {
       "source": "/api/(.*)",

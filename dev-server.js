@@ -41,13 +41,26 @@ const server = http.createServer(async (req, res) => {
     pathname = '/api/disaster/tiles';
   }
 
-  // Map /api/<route> to ./api/<route>.js
-  let relativePath = pathname.replace(/^\/api\//, '');
-  let filePath = path.join(process.cwd(), 'api', `${relativePath}.js`);
-
-  // Check if directory index exists (e.g., api/disaster/home/index.js)
-  if (!fs.existsSync(filePath)) {
-    filePath = path.join(process.cwd(), 'api', relativePath, 'index.js');
+  // Route to consolidated handlers
+  let filePath;
+  if (pathname.startsWith('/api/disaster')) {
+    filePath = path.join(process.cwd(), 'api', 'disaster.js');
+    parsedUrl.query.route = pathname.replace(/^\/api\/disaster\/?/, '') || 'home';
+  } else if (pathname.startsWith('/api/shelters')) {
+    filePath = path.join(process.cwd(), 'api', 'shelters.js');
+    parsedUrl.query.action = pathname.replace(/^\/api\/shelters\/?/, '');
+  } else if (pathname.startsWith('/api/hazard-zones')) {
+    filePath = path.join(process.cwd(), 'api', 'hazard-zones.js');
+    parsedUrl.query.action = pathname.replace(/^\/api\/hazard-zones\/?/, '');
+  } else if (pathname.startsWith('/api/push')) {
+    filePath = path.join(process.cwd(), 'api', 'push.js');
+    parsedUrl.query.action = pathname.replace(/^\/api\/push\/?/, '');
+  } else {
+    let relativePath = pathname.replace(/^\/api\//, '');
+    filePath = path.join(process.cwd(), 'api', `${relativePath}.js`);
+    if (!fs.existsSync(filePath)) {
+      filePath = path.join(process.cwd(), 'api', relativePath, 'index.js');
+    }
   }
 
   if (!fs.existsSync(filePath)) {

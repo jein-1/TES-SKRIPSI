@@ -1,8 +1,8 @@
-import { supabase } from '../services/supabase.js';
-import { getOrCache } from '../services/cache.js';
-import { fetchBmkgEvents } from '../services/bmkg.js';
-import { fetchUsgsEarthquakes } from '../services/usgs.js';
-import { fetchJmaTyphoons } from '../services/jma.js';
+import { supabase } from '../_services/supabase.js';
+import { getOrCache } from '../_services/cache.js';
+import { fetchBmkgEvents } from '../_services/bmkg.js';
+import { fetchUsgsEarthquakes } from '../_services/usgs.js';
+import { fetchJmaTyphoons } from '../_services/jma.js';
 
 const TIMELINE_CACHE_TTL = 10 * 1000; // 10 detik
 
@@ -103,3 +103,4 @@ export default async function handler(req, res) {
     return res.status(500).json({ error: 'Internal Server Error', histories: [] });
   }
 }
+

@@ -1,5 +1,5 @@
-import { fetchUsgsEarthquakes } from '../services/usgs.js';
-import { getOrCache } from '../services/cache.js';
+import { fetchBmkgEvents } from '../_services/bmkg.js';
+import { getOrCache } from '../_services/cache.js';
 
 export default async function handler(req, res) {
   // CORS Headers
@@ -16,24 +16,21 @@ export default async function handler(req, res) {
     return res.status(405).json({ error: 'Method Not Allowed' });
   }
 
-  const minMagnitude = parseFloat(req.query.minMag) || 4.0;
-  const limit = Math.min(parseInt(req.query.limit, 10) || 30, 100);
-
   try {
-    const data = await getOrCache(`usgs_events_${minMagnitude}_${limit}`, async () => {
-      const quakes = await fetchUsgsEarthquakes({ minMagnitude, limit });
+    const data = await getOrCache('bmkg_events_feed', async () => {
+      const events = await fetchBmkgEvents();
       return {
-        source: 'USGS Global Seismic Feed',
-        minMagnitude,
-        count: quakes.length,
-        earthquakes: quakes
+        source: 'BMKG Indonesia (TEWS)',
+        count: events.length,
+        events
       };
-    }, 15000);
+    }, 10000);
 
-    res.setHeader('Cache-Control', 'public, max-age=15');
+    res.setHeader('Cache-Control', 'public, max-age=10');
     return res.status(200).json(data);
   } catch (error) {
-    console.error('Failed to get /api/disaster/usgs:', error);
+    console.error('Failed to get /api/disaster/bmkg:', error);
     return res.status(500).json({ error: 'Internal Server Error' });
   }
 }
+
