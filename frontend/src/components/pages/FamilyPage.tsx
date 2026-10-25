@@ -15,11 +15,14 @@ import type { FamilyMember } from '../../types'
 
 // ── Storage helpers ────────────────────────────────────────────
 export function getMyAegisId(): string {
-  let id = localStorage.getItem('aegisId')
-  if (!id) {
-    id = `ATLAS-${Date.now().toString(36).toUpperCase()}`
-    localStorage.setItem('aegisId', id)
+  let id = localStorage.getItem('atlasId') || localStorage.getItem('aegisId')
+  if (id) {
+    id = id.replace(/^(AEGIS|ATLAS)-?/i, 'A.T.L.A.S-')
+  } else {
+    id = `A.T.L.A.S-${Date.now().toString(36).toUpperCase()}`
   }
+  localStorage.setItem('atlasId', id)
+  localStorage.setItem('aegisId', id)
   return id
 }
 
@@ -490,6 +493,18 @@ export default function FamilyPage({ onBack, onPingClear }: Props) {
     let watchId: string | null = null
     const startWatch = async () => {
       try {
+        if (typeof navigator !== 'undefined' && navigator.geolocation) {
+          navigator.geolocation.getCurrentPosition(
+            (pos) => {
+              const { latitude: lat, longitude: lng } = pos.coords
+              saveMemberLoc(myId, lat, lng)
+              const deviceInfo = (window as any).__DEVICE_MODEL__ || navigator.userAgent
+              aegisApi.broadcastLocation(myId, getMyName(), deviceInfo, lat, lng, 100).catch(() => {})
+            },
+            () => {},
+            { enableHighAccuracy: false, timeout: 6000 }
+          )
+        }
         watchId = await Geolocation.watchPosition({ enableHighAccuracy: true }, (pos, err) => {
           if (err || !pos) return
           const { latitude: lat, longitude: lng } = pos.coords

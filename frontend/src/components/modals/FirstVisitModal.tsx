@@ -1,200 +1,198 @@
 // ═══════════════════════════════════════════════════════════════
-// FIRST VISIT MODAL — Name prompt on first open (User mode)
-// Rules:
-//   • 1 device = 1 registration (aegisRegistered flag in localStorage)
-//   • Name: 5–30 chars, letters & spaces only, no numbers/symbols
-//   • Cancel only shown when re-editing profile (not first time)
+// FIRST VISIT MODAL — A.T.L.A.S Device Identification & Welcome
 // ═══════════════════════════════════════════════════════════════
 import { useState, useEffect } from 'react'
-import { Shield, Smartphone, Monitor, User, CheckCircle } from 'lucide-react'
 import { motion, AnimatePresence } from 'motion/react'
+import { Shield, Smartphone, Monitor, User, ArrowRight, Check, Globe } from 'lucide-react'
+import { useLanguage } from '../../lib/i18n'
 
 interface Props {
   onComplete: (name: string) => void
-  onCancel?: () => void          // supplied when editing profile (not first visit)
-  isEditing?: boolean            // true = profile edit mode
+  isEditing?: boolean
+  initialName?: string
+  onClose?: () => void
+  onCancel?: () => void
 }
 
-function detectDevice(): string {
+function detectDevice(): { device: string; mobile: boolean } {
   const ua = navigator.userAgent
-  if (/Android/i.test(ua)) return 'Android'
-  if (/iPhone|iPad|iPod/i.test(ua)) return 'iOS'
-  if (/Windows/i.test(ua)) return 'Windows'
-  if (/Mac/i.test(ua)) return 'macOS'
-  return 'Unknown'
-}
-function isMobileDevice(): boolean {
-  return /Android|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent)
-}
-
-/** Validate name: 5–30 chars, letters & spaces only */
-function validateName(raw: string): string {
-  const v = raw.trim()
-  if (!v) return 'Nama tidak boleh kosong'
-  if (!/^[a-zA-ZÀ-ÖØ-öø-ÿ\s]+$/.test(v)) return 'Nama hanya boleh berisi huruf dan spasi'
-  if (v.length < 5) return `Nama minimal 5 huruf (sekarang ${v.length})`
-  if (v.length > 30) return 'Nama maksimal 30 huruf'
-  return ''
+  let device = 'Desktop'
+  const mobile = /Android|iPhone|iPad|iPod/i.test(ua)
+  if (/Android/i.test(ua)) device = 'Android'
+  else if (/iPhone/i.test(ua)) device = 'iPhone'
+  else if (/iPad/i.test(ua)) device = 'iPad'
+  else if (/Windows/i.test(ua)) device = 'Windows'
+  else if (/Macintosh/i.test(ua)) device = 'Mac'
+  else if (/Linux/i.test(ua)) device = 'Linux'
+  return { device, mobile }
 }
 
-export default function FirstVisitModal({ onComplete, onCancel, isEditing = false }: Props) {
-  const [name, setName] = useState(() => isEditing ? (localStorage.getItem('aegisUserName') ?? '') : '')
+export default function FirstVisitModal({ onComplete, isEditing = false, initialName = '', onClose, onCancel }: Props) {
+  const { lang, setLanguage, t } = useLanguage()
+  const [name, setName] = useState(initialName || localStorage.getItem('aegisUserName') || '')
   const [error, setError] = useState('')
-  const [done, setDone] = useState(false)
-  const device = detectDevice()
-  const mobile = isMobileDevice()
-  const charLeft = 30 - name.trim().length
-
-  // If device already registered (not editing), show lock screen instead
-  const isLocked = !isEditing && !!localStorage.getItem('aegisRegistered')
+  const [{ device, mobile }] = useState(detectDevice)
+  const [submitting, setSubmitting] = useState(false)
 
   useEffect(() => {
-    if (isLocked) {
-      // Auto-complete with existing name — shouldn't reach here normally
-      const existing = localStorage.getItem('aegisUserName')
-      if (existing) setTimeout(() => onComplete(existing), 100)
-    }
-  }, [isLocked, onComplete])
+    if (initialName) setName(initialName)
+  }, [initialName])
+
+  const validate = (val: string): string => {
+    const trimmed = val.trim()
+    if (trimmed.length < 3) return lang === 'id' ? 'Nama minimal 3 karakter' : 'Name must be at least 3 characters'
+    if (trimmed.length > 30) return lang === 'id' ? 'Nama maksimal 30 karakter' : 'Name cannot exceed 30 characters'
+    if (!/^[a-zA-Z\s]+$/.test(trimmed)) return lang === 'id' ? 'Hanya huruf dan spasi diperbolehkan' : 'Only letters and spaces allowed'
+    return ''
+  }
 
   const handleSubmit = () => {
-    const err = validateName(name)
+    const err = validate(name)
     if (err) { setError(err); return }
-    setDone(true)
+    setSubmitting(true)
     setTimeout(() => {
-      // Mark device as registered (1-device-1-registration)
-      localStorage.setItem('aegisRegistered', '1')
       onComplete(name.trim())
-    }, 700)
+    }, 400)
   }
+
+  const charLeft = name.trim().length
 
   return (
     <motion.div
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       exit={{ opacity: 0 }}
-      className="fixed inset-0 z-[9000] flex flex-col items-center justify-center p-6"
-      style={{ background: 'rgba(5,8,20,0.97)' }}
+      className="fixed inset-0 z-[9000] flex flex-col items-center justify-center p-6 bg-[#07090E]/98 backdrop-blur-xl"
     >
       {/* Background glow */}
       <div className="absolute inset-0 pointer-events-none overflow-hidden">
-        <div className="absolute top-1/4 left-1/2 -translate-x-1/2 w-96 h-96 rounded-full opacity-10"
-          style={{ background: 'radial-gradient(circle, #6366f1, transparent 70%)' }} />
+        <div
+          className="absolute top-1/4 left-1/2 -translate-x-1/2 w-96 h-96 rounded-full opacity-10"
+          style={{ background: 'radial-gradient(circle, #FF5722, transparent 70%)' }}
+        />
       </div>
 
       <motion.div
-        initial={{ y: 30, opacity: 0 }} animate={{ y: 0, opacity: 1 }}
-        transition={{ delay: 0.15 }}
+        initial={{ y: 25, opacity: 0 }}
+        animate={{ y: 0, opacity: 1 }}
+        transition={{ delay: 0.1 }}
         className="w-full max-w-sm relative z-10"
       >
+        {/* Language switch button */}
+        <div className="flex justify-end mb-4">
+          <button
+            onClick={() => setLanguage(lang === 'id' ? 'en' : 'id')}
+            className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-black/60 border border-nerv-border hover:border-nerv-orange text-xs font-mono font-bold text-slate-300 transition-colors"
+          >
+            <Globe className="w-3.5 h-3.5 text-nerv-cyan" />
+            <span className={lang === 'id' ? 'text-nerv-orange' : 'text-slate-500'}>ID</span>
+            <span className="text-slate-600">/</span>
+            <span className={lang === 'en' ? 'text-nerv-orange' : 'text-slate-500'}>EN</span>
+          </button>
+        </div>
+
         {/* Logo */}
-        <div className="flex flex-col items-center mb-8">
-          <div className="w-16 h-16 rounded-2xl bg-indigo-500/20 border border-indigo-500/40 flex items-center justify-center mb-4"
-            style={{ boxShadow: '0 0 30px rgba(99,102,241,0.3)' }}>
-            <Shield className="w-8 h-8 text-indigo-400" />
+        <div className="flex flex-col items-center mb-6 text-center">
+          <div
+            className="w-14 h-14 rounded-xl bg-nerv-card border border-nerv-orange/40 flex items-center justify-center mb-3 shadow-[0_0_20px_rgba(255,87,34,0.3)]"
+          >
+            <Shield className="w-7 h-7 text-nerv-orange" />
           </div>
-          <h1 className="text-2xl font-black text-white tracking-widest font-mono">A.T.L.A.S</h1>
-          <p className="text-[11px] text-nerv-orange mt-1 tracking-wider font-mono">Sistem Evakuasi Darurat · Kota Palu</p>
+          <h1 className="text-2xl font-black text-nerv-orange tracking-widest font-mono drop-shadow-[0_0_10px_rgba(255,87,34,0.5)]">
+            A.T.L.A.S
+          </h1>
+          <p className="text-[11px] text-slate-300 mt-1 tracking-wider font-mono uppercase font-bold">
+            Autonomous Threat Location & Alert System
+          </p>
         </div>
 
         {/* Device info */}
-        <div className="flex items-center justify-center gap-2 mb-6 px-4 py-2 rounded-xl bg-slate-800/60 border border-slate-700/40">
-          {mobile
-            ? <Smartphone className="w-4 h-4 text-indigo-400" />
-            : <Monitor className="w-4 h-4 text-indigo-400" />
-          }
-          <span className="text-[11px] text-slate-400">
-            Perangkat: <span className="text-white font-bold">{device} · {mobile ? 'Mobile' : 'Desktop'}</span>
+        <div className="flex items-center justify-center gap-2 mb-5 px-3 py-1.5 rounded bg-black/60 border border-nerv-border text-slate-400 font-mono text-[10px]">
+          {mobile ? <Smartphone className="w-3.5 h-3.5 text-nerv-cyan" /> : <Monitor className="w-3.5 h-3.5 text-nerv-cyan" />}
+          <span>
+            {t('device')}: <span className="text-white font-bold">{device} · {mobile ? 'Mobile' : 'Desktop'}</span>
           </span>
         </div>
 
-        {/* Form */}
-        <div className="p-6 rounded-3xl border border-slate-700/40" style={{ background: '#0f1a2e' }}>
-          <h2 className="text-lg font-black text-white mb-1">
-            {isEditing ? 'Edit Profil' : 'Selamat Datang!'}
+        {/* Form Container */}
+        <div className="p-5 rounded-lg border border-nerv-border bg-nerv-card shadow-2xl">
+          <h2 className="text-base font-mono font-bold text-white mb-1 uppercase">
+            {isEditing ? t('editProfile') : t('welcome')}
           </h2>
-          <p className="text-[12px] text-slate-400 mb-5">
-            {isEditing
-              ? 'Ubah nama tampilan Anda. Nama ini digunakan di Family grup.'
-              : 'Masukkan nama Anda agar keluarga dapat mengidentifikasi Anda.'}
+          <p className="text-[11px] text-slate-400 mb-4 font-sans leading-relaxed">
+            {isEditing ? t('editSubtitle') : t('welcomeSubtitle')}
           </p>
 
           {!isEditing && (
-            <div className="mb-4 px-3 py-2 rounded-xl bg-amber-900/20 border border-amber-700/30">
-              <p className="text-[10px] text-amber-400 font-bold">⚠ 1 Perangkat = 1 Registrasi</p>
-              <p className="text-[10px] text-amber-500/70">Nama yang dimasukkan tidak dapat diubah kecuali melalui menu Profil.</p>
+            <div className="mb-4 p-2.5 rounded bg-black/40 border border-nerv-orange/30 font-mono">
+              <p className="text-[10px] text-nerv-orange font-bold uppercase">⚠ {t('oneDeviceOneReg')}</p>
+              <p className="text-[9px] text-slate-400 mt-0.5 font-sans leading-relaxed">
+                {t('oneDeviceDesc')}
+              </p>
             </div>
           )}
 
           <label className="block mb-1.5">
-            <span className="text-[10px] text-slate-500 uppercase tracking-widest font-bold">Nama</span>
-            <span className="text-[10px] text-slate-600 ml-2">(min 5 huruf, hanya huruf & spasi)</span>
+            <span className="text-[10px] text-slate-400 font-mono uppercase tracking-widest font-bold">
+              {t('nameLabel')}
+            </span>
+            <span className="text-[9px] text-slate-500 font-mono ml-2">{t('nameHint')}</span>
           </label>
           <div className="relative">
-            <User className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-600" />
-            {!!localStorage.getItem('aegisUserName') ? (
-              <div className="w-full pl-9 pr-4 py-3 rounded-xl bg-slate-800/40 border border-slate-700/30 text-slate-400 font-medium">
-                {name || localStorage.getItem('aegisUserName')}
-              </div>
-            ) : (
-              <input
-                type="text"
-                value={name}
-                maxLength={30}
-                onChange={e => { setName(e.target.value); setError('') }}
-                onKeyDown={e => e.key === 'Enter' && handleSubmit()}
-                placeholder="Contoh: Ahmad"
-                autoFocus
-                className="w-full pl-9 pr-12 py-3 rounded-xl bg-slate-800/60 border border-slate-700/50 text-white placeholder-slate-600 font-medium focus:outline-none focus:border-indigo-500/70 transition-colors"
-              />
-            )}
-            {!localStorage.getItem('aegisUserName') && (
-              <span className={`absolute right-3 top-1/2 -translate-y-1/2 text-[10px] font-mono ${charLeft < 5 ? 'text-amber-400' : 'text-slate-600'}`}>
-                {name.trim().length}/30
-              </span>
-            )}
+            <User className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500" />
+            <input
+              type="text"
+              value={name}
+              maxLength={30}
+              onChange={e => { setName(e.target.value); setError('') }}
+              onKeyDown={e => e.key === 'Enter' && handleSubmit()}
+              placeholder={t('namePlaceholder')}
+              autoFocus
+              className="w-full pl-9 pr-12 py-2.5 rounded bg-black/60 border border-nerv-border text-white placeholder-slate-600 font-mono text-sm focus:outline-none focus:border-nerv-orange transition-colors"
+            />
+            <span className={`absolute right-3 top-1/2 -translate-y-1/2 text-[10px] font-mono ${charLeft < 3 ? 'text-nerv-red' : 'text-slate-500'}`}>
+              {name.trim().length}/30
+            </span>
           </div>
-
-          {!!localStorage.getItem('aegisUserName') && (
-            <p className="text-[10px] text-amber-500/80 mt-2 text-center font-medium">
-              Nama terkunci — hapus & install ulang aplikasi untuk mengubah nama
-            </p>
-          )}
 
           <AnimatePresence>
             {error && (
-              <motion.p initial={{ opacity: 0, y: -4 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}
-                className="text-red-400 text-[11px] mt-2">
+              <motion.p
+                initial={{ opacity: 0, y: -4 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0 }}
+                className="text-nerv-red font-mono text-[10px] mt-2"
+              >
                 ⚠ {error}
               </motion.p>
             )}
           </AnimatePresence>
 
-          <div className={`flex gap-3 mt-4 ${isEditing ? 'flex-row' : 'flex-col'}`}>
-            {isEditing && onCancel && (
-              <button onClick={onCancel}
-                className="flex-1 py-3 rounded-xl bg-slate-700/60 border border-slate-600/40 text-slate-300 font-bold text-sm transition-colors hover:bg-slate-700">
+          <div className="flex gap-2 mt-5">
+            {isEditing && (onClose || onCancel) && (
+              <button
+                onClick={() => (onClose || onCancel)?.()}
+                className="flex-1 py-2.5 rounded bg-black/60 border border-nerv-border hover:border-slate-500 text-slate-400 font-mono text-xs font-bold uppercase tracking-wider transition-colors"
+              >
                 Batal
               </button>
             )}
             <button
               onClick={handleSubmit}
-              disabled={done || (isEditing && !!localStorage.getItem('aegisUserName'))}
-              className={`${isEditing ? 'flex-1' : 'w-full'} py-3.5 rounded-xl font-black text-sm tracking-wide transition-all flex items-center justify-center gap-2 disabled:opacity-50`}
-              style={{ background: done ? '#10b981' : (isEditing && !!localStorage.getItem('aegisUserName') ? '#334155' : 'linear-gradient(135deg, #6366f1, #4f46e5)'), boxShadow: done || (isEditing && !!localStorage.getItem('aegisUserName')) ? 'none' : '0 4px 20px rgba(99,102,241,0.4)' }}
+              disabled={submitting}
+              className="flex-1 py-3 rounded bg-nerv-orange hover:bg-orange-600 text-black font-mono font-bold text-xs uppercase tracking-widest flex items-center justify-center gap-2 shadow-[0_0_15px_rgba(255,87,34,0.4)] transition-all"
             >
-              {done
-                ? <><CheckCircle className="w-4 h-4" /> Tersimpan!</>
-                : isEditing ? (!!localStorage.getItem('aegisUserName') ? 'Terkunci' : 'SIMPAN PERUBAHAN') : 'MULAI A.T.L.A.S'
-              }
+              {submitting ? (
+                <div className="w-4 h-4 border-2 border-black border-t-transparent rounded-full animate-spin" />
+              ) : (
+                <>
+                  <span>{isEditing ? t('saveProfile') : t('continue')}</span>
+                  <ArrowRight className="w-3.5 h-3.5" />
+                </>
+              )}
             </button>
           </div>
         </div>
-
-        {!isEditing && (
-          <p className="text-center text-[10px] text-slate-600 mt-4">
-            Data tersimpan di perangkat Anda · Tidak dikirim ke server
-          </p>
-        )}
       </motion.div>
     </motion.div>
   )

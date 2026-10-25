@@ -3,9 +3,10 @@
 // ═══════════════════════════════════════════════════════════════
 import { useState, useEffect } from 'react'
 import { Map, MapMarker, MarkerContent } from '@/components/ui/map'
-import { MapPin, Users, BookOpen, ChevronRight, CheckCircle, Heart, Activity, ChevronLeft, Radio, AlertTriangle } from 'lucide-react'
+import { MapPin, Users, BookOpen, ChevronRight, CheckCircle, Heart, Activity, ChevronLeft, Radio, AlertTriangle, Globe } from 'lucide-react'
 import { motion, AnimatePresence } from 'motion/react'
 import { loadFamily } from './FamilyPage'
+import { useLanguage } from '../../lib/i18n'
 
 const PALU_CENTER: [number, number] = [-0.8917, 119.8577]
 
@@ -14,6 +15,11 @@ function MiniMap() {
 
   useEffect(() => {
     if (!navigator.geolocation) return
+    navigator.geolocation.getCurrentPosition(
+      p => setPos([p.coords.longitude, p.coords.latitude]),
+      () => {},
+      { enableHighAccuracy: false, timeout: 6000 }
+    )
     const w = navigator.geolocation.watchPosition(
       p => setPos([p.coords.longitude, p.coords.latitude]),
       () => {},
@@ -82,6 +88,7 @@ interface DisasterEvent {
 }
 
 export default function StatusPage({ onNavigate, userLocation, onBack, userName, onRequestGps, gpsTracking }: Props) {
+  const { lang, setLanguage, t } = useLanguage()
   const [safePressed, setSafePressed] = useState(false)
   const [lastUpdated, setLastUpdated] = useState<string | null>(null)
   const [pulseKey, setPulseKey] = useState(0)
@@ -130,20 +137,30 @@ export default function StatusPage({ onNavigate, userLocation, onBack, userName,
           <div className="min-w-0">
             <div className="flex items-center gap-2 mb-0.5">
               <div className="w-2 h-2 rounded-full bg-nerv-orange animate-ping" />
-              <p className="text-[10px] font-mono font-bold tracking-widest text-nerv-orange uppercase">
-                A.T.L.A.S // SYSTEM TELEMETRY
+              <p className="text-[8px] sm:text-[9px] font-mono font-bold tracking-wider text-nerv-orange uppercase truncate">
+                A.T.L.A.S // AUTONOMOUS THREAT LOCATION & ALERT SYSTEM
               </p>
             </div>
             <div className="flex items-center gap-1.5">
               <MapPin className="w-3.5 h-3.5 text-nerv-cyan shrink-0" />
-              <h2 className="text-sm font-mono font-bold text-white truncate">
-                {userLocation || 'PALU // CENTRAL SULAWESI'}
+              <h2 className="text-xs sm:text-sm font-mono font-bold text-white truncate">
+                {userLocation || 'MENDETEKSI LOKASI...'}
               </h2>
             </div>
           </div>
         </div>
 
         <div className="flex items-center gap-2 shrink-0">
+          <button
+            onClick={() => setLanguage(lang === 'id' ? 'en' : 'id')}
+            className="flex items-center gap-1 px-2 py-1 rounded bg-black/60 border border-nerv-border hover:border-nerv-orange text-[10px] font-mono font-bold text-slate-300 transition-colors"
+            title="Switch Language (ID/EN)"
+          >
+            <Globe className="w-3 h-3 text-nerv-cyan" />
+            <span className={lang === 'id' ? 'text-nerv-orange' : 'text-slate-500'}>ID</span>
+            <span className="text-slate-600">/</span>
+            <span className={lang === 'en' ? 'text-nerv-orange' : 'text-slate-500'}>EN</span>
+          </button>
           <div className="px-2 py-1 rounded bg-black/60 border border-nerv-border text-right font-mono">
             <span className="text-[8px] text-slate-500 block uppercase leading-none">NODE</span>
             <span className="text-xs font-bold text-nerv-cyan">#{userName ? userName.slice(0, 4).toUpperCase() : 'CIV-01'}</span>

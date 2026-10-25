@@ -69,20 +69,24 @@ export default async function handler(req, res) {
 
     const data = await response.json();
 
-    // Simplify the payload for the client
     let road = '';
     let suburb = '';
+    let city = '';
+    let state = '';
 
     if (data.address) {
       road = data.address.road || '';
-      // Fallback chain for suburb/village representation
-      suburb = data.address.suburb || data.address.village || data.address.city || data.address.town || data.address.county || '';
+      suburb = data.address.suburb || data.address.village || data.address.neighbourhood || '';
+      city = data.address.city || data.address.town || data.address.municipality || data.address.county || data.address.city_district || '';
+      state = data.address.state || '';
     }
 
     const simplified = {
       displayName: data.display_name || 'Alamat tidak diketahui',
       road,
-      suburb
+      suburb,
+      city,
+      state
     };
 
     return res.status(200).json(simplified);

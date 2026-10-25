@@ -41,6 +41,7 @@ import StatusPage from "./components/pages/StatusPage";
 import NavigatePage from "./components/pages/NavigatePage";
 import FamilyPage from "./components/pages/FamilyPage";
 import GuidesPage from "./components/pages/GuidesPage";
+import { fetchLocationName } from "./lib/geocode";
 import { useAegisSync, aegisApi } from "./lib/useAegisSync";
 import { useBMKG, createCirclePolygon } from "./lib/useBMKG";
 import {
@@ -282,7 +283,7 @@ function App() {
   const [arrivedShelterId, setArrivedShelterId] = useState<string | null>(null);
   // Arrival modal: only shown ONCE per session to prevent re-appearing on page nav
   const arrivalShownRef = useRef(sessionStorage.getItem('aegisArrivalShown') === 'true');
-  // Arrival modal state â€” stores snapshot at time of arrival
+  // Arrival modal state — stores snapshot at time of arrival
 
   const [arrivalSummary, setArrivalSummary] = useState<{
     shelter: (typeof shelters)[0];
@@ -290,9 +291,27 @@ function App() {
     walkingMin: number;
   } | null>(null);
 
-  // â”€â”€ GPS & Alert state â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // ── GPS & Alert state ──────────────────────────────────────────
   const [gpsTracking, setGpsTracking] = useState(false);
   const [gpsError, setGpsError] = useState<string | null>(null);
+  const [userLocationName, setUserLocationName] = useState<string>("Mendeteksi lokasi...");
+
+  // Reverse-geocode userPosition to real city/region name
+  useEffect(() => {
+    if (!userPosition) {
+      setUserLocationName(gpsError ? "Izin Lokasi Diperlukan" : "Mendeteksi lokasi...");
+      return;
+    }
+    let isCancelled = false;
+    fetchLocationName(userPosition[0], userPosition[1]).then((locName) => {
+      if (!isCancelled && locName) {
+        setUserLocationName(locName);
+      }
+    });
+    return () => {
+      isCancelled = true;
+    };
+  }, [userPosition, gpsError]);
   const [tsunamiAlert, setTsunamiAlert] = useState(() => {
     if (typeof window !== "undefined") {
       return sessionStorage.getItem("aegisSimulating") === "true" || localStorage.getItem("aegisRealTsunami") === "true";
@@ -663,20 +682,39 @@ function App() {
 
   // â”€â”€ Persistent Terminal ID â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   const [terminalId, setTerminalId] = useState<string>(() => {
-    const s = localStorage.getItem("aegisTerminalId");
-    if (s) return s;
-    const fallbackId = `AEGIS-${Math.floor(Math.random() * 900 + 100)}`;
+    let s = localStorage.getItem("atlasTerminalId") || localStorage.getItem("aegisTerminalId");
+    if (s) {
+      s = s.replace(/^(AEGIS|ATLAS)-?/i, "A.T.L.A.S-");
+      localStorage.setItem("atlasTerminalId", s);
+      localStorage.setItem("aegisTerminalId", s);
+      return s;
+    }
+    const fallbackId = `A.T.L.A.S-${Math.floor(Math.random() * 900 + 100)}`;
+    localStorage.setItem("atlasTerminalId", fallbackId);
     localStorage.setItem("aegisTerminalId", fallbackId);
     return fallbackId;
   });
 
   useEffect(() => {
+    // Migrate any legacy AEGIS IDs across localStorage on startup
+    try {
+      ["aegisTerminalId", "aegisId"].forEach((key) => {
+        const val = localStorage.getItem(key);
+        if (val) {
+          const migrated = val.replace(/^(AEGIS|ATLAS)-?/i, "A.T.L.A.S-");
+          localStorage.setItem(key, migrated);
+          localStorage.setItem(key.replace("aegis", "atlas"), migrated);
+        }
+      });
+    } catch (_) {}
+
     import("@capacitor/core").then(({ Capacitor }) => {
       if (Capacitor.isNativePlatform()) {
         import("@capacitor/device").then(({ Device }) => {
           Device.getId().then((info) => {
             if (info.identifier) {
               setTerminalId(info.identifier);
+              localStorage.setItem("atlasTerminalId", info.identifier);
               localStorage.setItem("aegisTerminalId", info.identifier);
             }
           });
@@ -849,27 +887,40 @@ function App() {
     setGpsError(null);
     setIsCalculating(true);
 
-    // Fallback timer: if after 3.5s no GPS fix arrived (desktop without GPS or slow permission), fallback to Palu center
-    const fallbackTimeout = setTimeout(() => {
-      if (!hasFirstGPSFixRef.current) {
-        console.info("Using Palu standby coordinates for evacuation routing");
-        const standbyPos: [number, number] = [-0.8917, 119.8577];
-        setUserPosition(standbyPos);
-        setGpsAccuracy(null);
-        hasFirstGPSFixRef.current = true;
-        setFlyToPos(standbyPos);
-        const routeResults = findOptimalEvacuationRoutes(
-          standbyPos[0],
-          standbyPos[1],
-          99,
-          settings.algorithm as 'dijkstra' | 'haversine',
-        );
-        lastRouteCalcResultsRef.current = routeResults;
-        setRoutes(routeResults);
-        setSelectedRoute(0);
-        setIsCalculating(false);
-      }
-    }, 3500);
+    // Fast initial position fix (especially on PC/laptop browsers via network/WiFi positioning)
+    if (typeof window !== "undefined" && "geolocation" in navigator) {
+      navigator.geolocation.getCurrentPosition(
+        (pos) => {
+          if (!hasFirstGPSFixRef.current) {
+            hasFirstGPSFixRef.current = true;
+            const newPos: [number, number] = [
+              pos.coords.latitude,
+              pos.coords.longitude,
+            ];
+            setGpsAccuracy(pos.coords.accuracy);
+            setUserPosition(newPos);
+            setFlyToPos(newPos);
+            const routeResults = findOptimalEvacuationRoutes(
+              newPos[0],
+              newPos[1],
+              99,
+              settings.algorithm as 'dijkstra' | 'haversine',
+            );
+            lastRouteCalcResultsRef.current = routeResults;
+            setRoutes(routeResults);
+            setSelectedRoute(0);
+            setIsCalculating(false);
+          }
+        },
+        (err) => {
+          console.warn("Initial GPS acquisition failed:", err);
+          if (err.code === 1) {
+            setGpsError("Izin lokasi ditolak oleh browser.");
+          }
+        },
+        { enableHighAccuracy: false, timeout: 8000, maximumAge: 60000 }
+      );
+    }
 
     try {
       const watchId = await Geolocation.watchPosition(
@@ -883,7 +934,6 @@ function App() {
             return;
           }
           if (!pos) return;
-          clearTimeout(fallbackTimeout);
 
           // Show accuracy badge but don't filter â€” let all positions through
           setGpsAccuracy(pos.coords.accuracy);
@@ -1472,11 +1522,7 @@ function App() {
             <StatusPage
               key="status"
               onNavigate={(p) => setActivePage(p)}
-              userLocation={
-                userPosition
-                  ? (gpsAccuracy ? `Palu [${userPosition[0].toFixed(3)}, ${userPosition[1].toFixed(3)}]` : "Palu // Standby Sector")
-                  : "Mendeteksi sinyal GPS..."
-              }
+              userLocation={userLocationName}
               userName={userName}
               onRequestGps={!gpsTracking ? startGpsTracking : undefined}
               gpsTracking={gpsTracking}
@@ -1568,13 +1614,13 @@ function App() {
                           </span>
                         </p>
                       ) : (
-                        <p className="text-xl font-black text-slate-600">
-                          â€” m
+                        <p className="text-xl font-mono font-bold text-slate-500">
+                          0 m
                         </p>
                       )}
                     </div>
-                    <div className="w-12 h-12 rounded-xl bg-indigo-500/20 border border-indigo-500/20 flex items-center justify-center">
-                      <Activity className="w-6 h-6 text-indigo-400" />
+                    <div className="w-12 h-12 rounded-xl bg-nerv-orange/20 border border-nerv-orange/40 flex items-center justify-center">
+                      <Activity className="w-6 h-6 text-nerv-orange" />
                     </div>
                   </div>
                   {/* Visual Gauge - KPI performance bar */}
@@ -1597,31 +1643,30 @@ function App() {
                             : "NEEDS IMPROVEMENT";
                       return (
                         <div>
-                          <div className="flex justify-between text-[9px] font-bold uppercase tracking-widest mb-1.5">
-                            <span className="text-slate-600">
+                          <div className="flex justify-between text-[9px] font-bold uppercase tracking-widest mb-1.5 font-mono">
+                            <span className="text-slate-500">
                               Performance KPI
                             </span>
                             <span style={{ color }}>{label}</span>
                           </div>
-                          <div className="w-full h-2 rounded-full bg-slate-800 overflow-hidden">
+                          <div className="w-full h-2 rounded-full bg-black/60 overflow-hidden border border-nerv-border">
                             <div
                               className="h-full rounded-full transition-all duration-700"
                               style={{ width: `${pct}%`, background: color }}
                             />
                           </div>
-                          <div className="flex justify-between text-[8px] text-slate-600 mt-1">
+                          <div className="flex justify-between text-[8px] text-slate-500 font-mono mt-1">
                             <span>0m</span>
-                            <span className="text-slate-500">
-                              Target â‰¤ {target}m
+                            <span className="text-slate-400">
+                              Target &le; {target}m
                             </span>
                             <span>{target}m+</span>
                           </div>
-                          {/* Trend bars â€” last 5 logs */}
+                          {/* Trend bars */}
                           {evacuationHistory.length > 1 && (
-                            <div className="mt-3 pt-3 border-t border-slate-800/60">
-                              <p className="text-[8px] text-slate-600 uppercase tracking-widest mb-1.5 font-bold">
-                                Last {Math.min(evacuationHistory.length, 6)}{" "}
-                                Sessions
+                            <div className="mt-3 pt-3 border-t border-nerv-border/60">
+                              <p className="text-[8px] text-slate-400 uppercase tracking-widest mb-1.5 font-mono font-bold">
+                                Sesi Terakhir ({Math.min(evacuationHistory.length, 6)})
                               </p>
                               <div className="flex items-end gap-1 h-8">
                                 {evacuationHistory
@@ -1646,7 +1691,7 @@ function App() {
                                         style={{
                                           height: `${h}%`,
                                           background: c,
-                                          opacity: 0.7,
+                                          opacity: 0.8,
                                         }}
                                       />
                                     );
@@ -1658,7 +1703,7 @@ function App() {
                       );
                     })()}
                   {!avgResponse && (
-                    <p className="text-[10px] text-slate-600">
+                    <p className="text-[10px] text-slate-500 font-mono">
                       Jalankan simulasi untuk melihat statistik performa.
                     </p>
                   )}
@@ -1666,22 +1711,25 @@ function App() {
               </div>
 
               {/* Filter tabs */}
-              <div className="px-5 pb-3 flex gap-2 shrink-0 overflow-x-auto">
+              <div className="px-5 pb-3 flex gap-2 shrink-0 overflow-x-auto font-mono">
                 {[
-                  { id: "all" as HistoryFilter, label: "âˆž ALL LOGS" },
-                  { id: "real" as HistoryFilter, label: "â–² REAL ALERTS" },
+                  { id: "all" as HistoryFilter, label: "ALL LOGS" },
+                  { id: "real" as HistoryFilter, label: "REAL ALERTS" },
                   {
                     id: "simulation" as HistoryFilter,
-                    label: "â—ˆ SIMULATION",
+                    label: "SIMULATION",
                   },
                 ].map((tab) => (
                   <button
                     key={tab.id}
                     onClick={() => setHistoryFilter(tab.id)}
-                    className={`px-3 py-1.5 rounded-full text-xs font-bold whitespace-nowrap transition-all
-                    ${historyFilter === tab.id ? "bg-indigo-600 text-white" : "bg-slate-800/60 text-slate-500 hover:text-slate-300"}`}
+                    className={`px-3 py-1 rounded text-xs font-bold whitespace-nowrap transition-all border ${
+                      historyFilter === tab.id
+                        ? "bg-nerv-orange text-black border-nerv-orange shadow-[0_0_10px_rgba(255,87,34,0.35)]"
+                        : "bg-black/60 text-slate-400 border-nerv-border hover:border-slate-500"
+                    }`}
                   >
-                    {tab.label}
+                    [{tab.label}]
                   </button>
                 ))}
               </div>
@@ -1763,22 +1811,22 @@ function App() {
                           </span>
                           <div className="flex items-center gap-5">
                             <div className="text-right">
-                              <p className="text-xs font-black text-white">
+                              <p className="text-xs font-black text-white font-mono">
                                 {record.walkingTime != null
                                   ? `${record.walkingTime}m`
-                                  : "â€”"}
+                                  : "-"}
                               </p>
-                              <p className="text-[9px] text-slate-600 uppercase tracking-wider">
+                              <p className="text-[9px] text-slate-500 uppercase tracking-wider font-mono">
                                 TIME
                               </p>
                             </div>
                             <div className="text-right">
-                              <p className="text-xs font-black text-white">
+                              <p className="text-xs font-black text-white font-mono">
                                 {record.distance != null
                                   ? `${record.distance.toFixed(1)}km`
-                                  : "â€”"}
+                                  : "-"}
                               </p>
-                              <p className="text-[9px] text-slate-600 uppercase tracking-wider">
+                              <p className="text-[9px] text-slate-500 uppercase tracking-wider font-mono">
                                 DIST
                               </p>
                             </div>
@@ -2195,7 +2243,7 @@ function App() {
               A.T.L.A.S
             </h1>
             <p className="text-[9px] text-nerv-orange font-mono">
-              DISASTER WATCH · Kota Palu
+              DISASTER WATCH · {userLocationName ? userLocationName.split(' // ')[0] : 'INDONESIA'}
             </p>
           </div>
         </div>

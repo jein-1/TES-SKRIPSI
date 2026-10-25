@@ -90,6 +90,13 @@ export default function NavigatePage({ routes, selectedRoute, tsunamiAlert, user
   useEffect(() => {
     if (userPosition) { setLocalPos(userPosition); return }
     let watchId: string | null = null;
+    if (typeof window !== "undefined" && "geolocation" in navigator) {
+      navigator.geolocation.getCurrentPosition(
+        (p) => setLocalPos([p.coords.latitude, p.coords.longitude]),
+        () => {},
+        { enableHighAccuracy: false, timeout: 8000, maximumAge: 60000 }
+      );
+    }
     const startWatch = async () => {
       try {
         watchId = await Geolocation.watchPosition({ enableHighAccuracy: true, maximumAge: 5000 }, (p, err) => {
@@ -99,12 +106,7 @@ export default function NavigatePage({ routes, selectedRoute, tsunamiAlert, user
       } catch (e) {}
     };
     startWatch();
-    // Fallback timer: if after 2.5s no GPS fix on desktop, set Palu center
-    const fallbackTimer = setTimeout(() => {
-      setLocalPos((prev) => prev ?? [-0.8917, 119.8577]);
-    }, 2500);
     return () => {
-      clearTimeout(fallbackTimer);
       if (watchId) Geolocation.clearWatch({ id: watchId }).catch(() => {});
     };
   }, [userPosition])
