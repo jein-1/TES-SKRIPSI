@@ -52,3 +52,12 @@ android-admin/app/build/
 # APK di-sync lokal saja, codenya ada di frontend/src/ (web unified)
 android/
 android-admin/
+
+# ── Private Documentation & Architecture Intel (JANGAN PUSH KE GITHUB) ──
+AGENTS.md
+DOKUMENTASI_FITUR.md
+ROADMAP_ARSITEKTUR.md
+CHANGELOG_AEGIS.md
+implementation_plan.md
+SETUP-SUPABASE.md
+*.doc.md
