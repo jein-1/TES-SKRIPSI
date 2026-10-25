@@ -995,7 +995,7 @@ function App() {
 
     try {
       const watchId = await Geolocation.watchPosition(
-        { enableHighAccuracy: true, maximumAge: 5000, timeout: 20000 },
+        { enableHighAccuracy: true, maximumAge: 0, timeout: 20000 },
         (pos, err) => {
           if (err) {
             console.warn("GPS Error:", err);
@@ -1008,13 +1008,21 @@ function App() {
             pos.coords.latitude,
             pos.coords.longitude,
           ];
-          setUserPosition(newPos);
-          fetchLocationName(newPos[0], newPos[1]).then((name) => {
-            if (name) setUserLocationName(name);
-          });
+
+          // If the user calibrated their position manually, don't overwrite it with coarse laptop GPS
+          const hasManualPin = !!localStorage.getItem('atlas_user_position');
+          if (!hasManualPin) {
+            setUserPosition(newPos);
+            fetchLocationName(newPos[0], newPos[1]).then((name) => {
+              if (name) setUserLocationName(name);
+            });
+          }
+
           if (!hasFirstGPSFixRef.current) {
             hasFirstGPSFixRef.current = true;
-            setFlyToPos(newPos);
+            if (!hasManualPin) {
+              setFlyToPos(newPos);
+            }
           }
           
           // ── THROTTLE ROUTE CALCULATION ──

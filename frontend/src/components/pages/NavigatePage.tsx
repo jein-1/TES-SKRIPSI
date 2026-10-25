@@ -129,40 +129,100 @@ export default function NavigatePage({ routes, selectedRoute, tsunamiAlert, user
     setSearchingLocation(false)
   }
 
+  const handleNudge = (dLatMeters: number, dLngMeters: number) => {
+    const cur = effectivePosRaw || userPosition || localPos || [-0.8917, 119.8577]
+    const lat = cur[0]
+    const lng = cur[1]
+    const deltaLat = dLatMeters / 111320
+    const deltaLng = dLngMeters / (111320 * Math.cos(lat * (Math.PI / 180)))
+    const newPos: [number, number] = [lat + deltaLat, lng + deltaLng]
+    const dir = dLatMeters > 0 ? 'Utara' : dLatMeters < 0 ? 'Selatan' : dLngMeters > 0 ? 'Timur' : 'Barat'
+    handleApplyNewPosition(newPos, `✓ Geser mikro (${dir} ${Math.abs(dLatMeters || dLngMeters)}m): [${newPos[0].toFixed(5)}, ${newPos[1].toFixed(5)}]`)
+  }
+
   const handleForceGpsRefresh = () => {
     if (typeof window === "undefined" || !("geolocation" in navigator)) {
       setCalibrationFeedback("Sensor Geolocation tidak didukung di browser ini.")
       return
     }
     setGpsRefreshing(true)
-    setCalibrationFeedback("Menghubungi satelit GPS / WiFi...")
+    setCalibrationFeedback("Mengumpulkan sampel GPS satelit presisi tinggi...")
 
-    // 1. Try High Accuracy with 6s timeout
-    navigator.geolocation.getCurrentPosition(
-      (p) => {
-        setGpsRefreshing(false)
-        handleApplyNewPosition([p.coords.latitude, p.coords.longitude], "✓ Sinyal GPS presisi berhasil disinkronkan!")
-        setTimeout(() => setIsCalibrating(false), 1200)
-      },
-      (err) => {
-        console.warn("High accuracy GPS failed, falling back to standard network positioning...", err)
-        // 2. Immediate fallback to coarse network positioning (WiFi/cellular)
-        navigator.geolocation.getCurrentPosition(
-          (p) => {
-            setGpsRefreshing(false)
-            handleApplyNewPosition([p.coords.latitude, p.coords.longitude], "✓ Lokasi jaringan berhasil diperoleh!")
-            setTimeout(() => setIsCalibrating(false), 1200)
-          },
-          (err2) => {
-            setGpsRefreshing(false)
-            console.warn("Coarse geolocation failed:", err2)
-            setCalibrationFeedback("Perangkat PC tidak memiliki sensor satelit GPS. Klik langsung pada peta atau ketik nama lokasi di kotak pencarian.")
-          },
-          { enableHighAccuracy: false, timeout: 6000, maximumAge: 60000 }
-        )
-      },
-      { enableHighAccuracy: true, timeout: 6000, maximumAge: 0 }
-    )
+    const samples: Array<{ lat: number; lng: number; acc: number }> = []
+    let sampleCount = 0
+    let watchId: number | null = null
+
+    const finishSampling = () => {
+      if (watchId !== null) {
+        navigator.geolocation.clearWatch(watchId)
+        watchId = null
+      }
+      setGpsRefreshing(false)
+      if (samples.length === 0) {
+        setCalibrationFeedback("Sinyal satelit tidak merespons. Gunakan tombol geser mikro atau klik langsung pada peta.")
+        return
+      }
+
+      // Sort by accuracy (lower acc number is tighter and better)
+      samples.sort((a, b) => a.acc - b.acc)
+
+      // Inverse-variance weighted centroid
+      let totalW = 0
+      let wLat = 0
+      let wLng = 0
+      for (const s of samples) {
+        const w = 1 / Math.max(s.acc * s.acc, 1)
+        wLat += s.lat * w
+        wLng += s.lng * w
+        totalW += w
+      }
+
+      const bestLat = wLat / totalW
+      const bestLng = wLng / totalW
+      const bestAcc = Math.round(samples[0].acc)
+
+      handleApplyNewPosition([bestLat, bestLng], `✓ Akurasi optimal: ±${bestAcc}m (${samples.length} sampel terkalibrasi)`)
+    }
+
+    try {
+      watchId = navigator.geolocation.watchPosition(
+        (p) => {
+          sampleCount++
+          samples.push({
+            lat: p.coords.latitude,
+            lng: p.coords.longitude,
+            acc: p.coords.accuracy,
+          })
+          setCalibrationFeedback(`Mengunci satelit... Sampel ${sampleCount}/3 (Akurasi: ±${Math.round(p.coords.accuracy)}m)`)
+          if (sampleCount >= 3) {
+            finishSampling()
+          }
+        },
+        (err) => {
+          console.warn("Watch position sampling warning:", err)
+          if (samples.length === 0) {
+            navigator.geolocation.getCurrentPosition(
+              (p) => {
+                samples.push({ lat: p.coords.latitude, lng: p.coords.longitude, acc: p.coords.accuracy })
+                finishSampling()
+              },
+              () => finishSampling(),
+              { enableHighAccuracy: false, timeout: 5000, maximumAge: 60000 }
+            )
+          } else {
+            finishSampling()
+          }
+        },
+        { enableHighAccuracy: true, timeout: 8000, maximumAge: 0 }
+      )
+    } catch {
+      finishSampling()
+    }
+
+    setTimeout(() => {
+      if (samples.length > 0) finishSampling()
+      else setGpsRefreshing(false)
+    }, 8000)
   }
 
   useEffect(() => {
@@ -609,6 +669,54 @@ export default function NavigatePage({ routes, selectedRoute, tsunamiAlert, user
                 {calibrationFeedback}
               </p>
             )}
+
+            {/* Micro-Nudge Controls */}
+            <div className="flex items-center justify-between px-3 py-1.5 rounded bg-black/60 border border-nerv-border">
+              <div className="text-left">
+                <span className="text-[9px] font-bold text-slate-400 uppercase tracking-wider block">
+                  GESER MIKRO (2 METER)
+                </span>
+                <span className="text-[8px] text-slate-500 font-sans block">
+                  Geser pin dengan presisi meter
+                </span>
+              </div>
+              <div className="flex items-center gap-1.5">
+                <button
+                  type="button"
+                  onClick={() => handleNudge(0, -2)}
+                  className="w-7 h-7 rounded bg-black/80 border border-nerv-border hover:border-nerv-cyan text-white text-xs font-black flex items-center justify-center active:scale-95 transition-colors"
+                  title="Geser Barat 2m"
+                >
+                  ◄
+                </button>
+                <div className="flex flex-col gap-1">
+                  <button
+                    type="button"
+                    onClick={() => handleNudge(2, 0)}
+                    className="w-7 h-3.5 rounded bg-black/80 border border-nerv-border hover:border-nerv-cyan text-white text-[8px] font-black flex items-center justify-center active:scale-95 transition-colors"
+                    title="Geser Utara 2m"
+                  >
+                    ▲
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleNudge(-2, 0)}
+                    className="w-7 h-3.5 rounded bg-black/80 border border-nerv-border hover:border-nerv-cyan text-white text-[8px] font-black flex items-center justify-center active:scale-95 transition-colors"
+                    title="Geser Selatan 2m"
+                  >
+                    ▼
+                  </button>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => handleNudge(0, 2)}
+                  className="w-7 h-7 rounded bg-black/80 border border-nerv-border hover:border-nerv-cyan text-white text-xs font-black flex items-center justify-center active:scale-95 transition-colors"
+                  title="Geser Timur 2m"
+                >
+                  ►
+                </button>
+              </div>
+            </div>
 
             <div className="flex gap-2 justify-center pt-1">
               <button
