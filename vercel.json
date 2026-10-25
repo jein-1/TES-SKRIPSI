@@ -3,6 +3,26 @@
   "outputDirectory": "frontend/dist",
   "rewrites": [
     {
+      "source": "/api/v2/home(.*)",
+      "destination": "/api/disaster/home"
+    },
+    {
+      "source": "/v2/home(.*)",
+      "destination": "/api/disaster/home"
+    },
+    {
+      "source": "/api/v2/timeline(.*)",
+      "destination": "/api/disaster/timeline"
+    },
+    {
+      "source": "/v2/timeline(.*)",
+      "destination": "/api/disaster/timeline"
+    },
+    {
+      "source": "/api/rain/(.*)",
+      "destination": "/api/disaster/tiles"
+    },
+    {
       "source": "/api/(.*)",
       "destination": "/api/$1"
     },

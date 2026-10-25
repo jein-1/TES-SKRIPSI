@@ -87,6 +87,21 @@ Backend kecil berbasis NodeJS Serverless yang bertugas:
 ### D. Integrasi BMKG (`useBMKG.ts`)
 Mengunduh XML terbaru dari BMKG (`autogempa.xml`). Mem-parsing *(DOMParser)* elemen `DateTime`, `Coordinates`, dll. Ada logika notifikasi browser lokal (`new Notification()`) jika terjadi gempa yang melewati batas ambang (Magnitude >= 4.0).
 
+### E. Integrasi Backend Pemantau Bencana Multi-Sumber (Adopsi Project NERVE)
+Backend A.T.L.A.S telah diperkuat dengan mesin agregasi data bencana terpadu di direktori `/api/disaster/`:
+- **Sumber Data Terintegrasi**:
+  1. **BMKG TEWS**: Autogempa real-time dan daftar gempa M ≥ 5.0 terbaru beserta status potensi tsunami.
+  2. **USGS Seismik Global**: Feed gempa bumi global M ≥ 4.0 real-time via GeoJSON.
+  3. **JMA Bosai**: Peringatan siklon tropis / badai topan.
+  4. **Radar Hujan (Rain Tile)**: Metadata raster meshmap visualisasi curah hujan/radar cuaca.
+- **Daftar Endpoint Baru**:
+  - `GET /api/disaster/home` (atau `/api/v2/home/all`): Feed ringkasan gabungan seluruh bencana aktif dengan cache 5 detik.
+  - `GET /api/disaster/timeline` (atau `/api/v2/timeline/all`): Riwayat urutan kronologis bencana yang tersimpan di Supabase `disaster_events`.
+  - `GET /api/disaster/bmkg`: Feed data gempa resmi BMKG TEWS.
+  - `GET /api/disaster/usgs`: Feed data seismik global USGS.
+  - `GET /api/disaster/tiles`: Metadata layer peta radar cuaca/curah hujan.
+  - `POST /api/disaster/sync`: Sinkronisasi otomatis ke Supabase serta pemicu darurat tsunami otomatis jika BMKG mendeteksi potensi tsunami.
+
 ---
 
 File ini menyajikan penjelasan terperinci mengenai sistem yang Anda buat. Aplikasi ini sudah dikonfigurasi sebagai PWA (Progressive Web App) dengan arsitektur modern sehingga bisa dibuild (melalui Capacitor) menjadi `.apk` native untuk Android sekaligus bisa diakses melalui Web URL biasa.
