@@ -51,11 +51,121 @@ export default function FirstVisitModal({ onComplete }: Props) {
     }
   }, [])
 
+  const validateRealisticName = (rawName: string): string => {
+    const trimmed = rawName.trim().replace(/\s+/g, ' ')
+
+    // 1. Karakter harus murni huruf alfabet dan spasi
+    if (!/^[a-zA-Z\s]+$/.test(trimmed)) {
+      return lang === 'id'
+        ? 'Nama hanya boleh berupa huruf alfabet dan spasi (tidak boleh angka / simbol)'
+        : 'Name must contain only alphabetic letters and spaces';
+    }
+
+    // 2. Panjang nama
+    if (trimmed.length < 3) {
+      return lang === 'id' ? 'Nama minimal 3 karakter' : 'Name must be at least 3 characters';
+    }
+    if (trimmed.length > 35) {
+      return lang === 'id' ? 'Nama maksimal 35 karakter' : 'Name cannot exceed 35 characters';
+    }
+
+    // 3. Deteksi huruf berulang 3 kali berurutan (misal: aaa, zzz, fff)
+    if (/(.)\1{2,}/i.test(trimmed)) {
+      return lang === 'id'
+        ? 'Nama tidak boleh mengandung pengulangan huruf tidak wajar (cth: aaa)'
+        : 'Name contains unnatural repeated characters';
+    }
+
+    // 4. Deteksi ketikan acak pola keyboard QWERTY
+    const keyboardSpam = [
+      'qwerty', 'wertyu', 'ertyui', 'rtyuio', 'tyuiop',
+      'asdfgh', 'sdfghj', 'dfghjk', 'fghjkl',
+      'zxcvbn', 'xcvbnm',
+      'poiuyt', 'oiuytr', 'iuytre', 'uytrew', 'ytrewq',
+      'lkjhgf', 'kjhgfd', 'jhgfds', 'hgfdsa',
+      'asdf', 'qwer', 'zxcv', 'hjkl', 'ghjk', 'yuio', 'uiop'
+    ];
+    const lower = trimmed.toLowerCase();
+    for (const seq of keyboardSpam) {
+      if (lower.includes(seq)) {
+        return lang === 'id'
+          ? 'Nama terdeteksi sebagai ketikan keyboard acak'
+          : 'Name detected as random keyboard sequence';
+      }
+    }
+
+    // 5. Cek setiap kata individual
+    const words = trimmed.split(' ').filter(Boolean);
+    for (const w of words) {
+      const word = w.toLowerCase();
+
+      if (word.length < 2) {
+        return lang === 'id'
+          ? `Bagian kata "${w}" terlalu pendek (minimal 2 huruf)`
+          : `Word "${w}" is too short`;
+      }
+      if (word.length > 18) {
+        return lang === 'id'
+          ? `Bagian kata "${w}" terlalu panjang tidak wajar`
+          : `Word "${w}" is unnaturally long`;
+      }
+
+      // Setiap kata harus memiliki minimal satu huruf vokal
+      if (!/[aeiouy]/.test(word)) {
+        return lang === 'id'
+          ? `Bagian kata "${w}" tidak memiliki huruf vokal (a, i, u, e, o)`
+          : `Word "${w}" has no vowels`;
+      }
+
+      // Konsonan berurutan >= 4 yang tidak wajar
+      const consonants4 = word.match(/[bcdfghjklmnpqrstvwxz]{4,}/g);
+      if (consonants4) {
+        for (const cluster of consonants4) {
+          if (!/(str|skr|ndr|mpr|nkr|ngk|ngs|rch|sch)/.test(cluster)) {
+            return lang === 'id'
+              ? `Kombinasi huruf "${cluster}" pada "${w}" tidak wajar`
+              : `Consonant cluster "${cluster}" in "${w}" is invalid`;
+          }
+        }
+      }
+
+      // Pola kombinasi huruf acak (impossible bigrams/trigrams pada nama resmi)
+      if (/(gfy|yfr|rhf|urhf|rfh|q[^u]|[^a-z]q$|zx|xj|jx|vj|jv|fv|vf|wq|qw|qx)/.test(word)) {
+        return lang === 'id'
+          ? `Kombinasi huruf pada "${w}" tidak sesuai format nama asli`
+          : `Letter combination in "${w}" is not a valid name`;
+      }
+
+      // Pola pengulangan suku kata acak (misal: urfurf, asdasd, lalala)
+      if (/^([a-z]{2,4})\1+$/.test(word)) {
+        return lang === 'id'
+          ? `Kata "${w}" terdeteksi sebagai pengulangan acak`
+          : `Word "${w}" detected as repeated syllable spam`;
+      }
+    }
+
+    // 6. Rasio huruf vokal
+    const lettersOnly = trimmed.replace(/\s+/g, '').toLowerCase();
+    const vowelsCount = (lettersOnly.match(/[aeiou]/g) || []).length;
+    const vowelRatio = vowelsCount / lettersOnly.length;
+
+    if (vowelRatio < 0.20) {
+      return lang === 'id'
+        ? 'Susunan nama tidak wajar (huruf vokal terlalu sedikit)'
+        : 'Name has too few vowels (detected as random typing)';
+    }
+    if (vowelRatio > 0.85 && lettersOnly.length >= 4) {
+      return lang === 'id'
+        ? 'Susunan nama tidak wajar (terlalu banyak vokal)'
+        : 'Name has too many vowels';
+    }
+
+    return '';
+  }
+
   const validate = (): string => {
-    const trimmedName = name.trim()
-    if (trimmedName.length < 3) return lang === 'id' ? 'Nama minimal 3 karakter' : 'Name must be at least 3 characters'
-    if (trimmedName.length > 35) return lang === 'id' ? 'Nama maksimal 35 karakter' : 'Name cannot exceed 35 characters'
-    if (!/^[a-zA-Z\s]+$/.test(trimmedName)) return lang === 'id' ? 'Nama hanya boleh huruf dan spasi (sesuai KTP)' : 'Name must contain only letters and spaces'
+    const nameError = validateRealisticName(name)
+    if (nameError) return nameError
 
     const cleanNik = nik.trim()
     if (cleanNik.length !== 16 || !/^\d{16}$/.test(cleanNik)) {
@@ -64,12 +174,20 @@ export default function FirstVisitModal({ onComplete }: Props) {
     return ''
   }
 
+  const toTitleCase = (str: string) => {
+    return str
+      .trim()
+      .split(/\s+/)
+      .map(w => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase())
+      .join(' ')
+  }
+
   const handleSubmit = () => {
     const err = validate()
     if (err) { setError(err); return }
     setSubmitting(true)
     setTimeout(() => {
-      onComplete(name.trim(), nik.trim())
+      onComplete(toTitleCase(name), nik.trim())
     }, 400)
   }
 
@@ -176,7 +294,11 @@ export default function FirstVisitModal({ onComplete }: Props) {
                 type="text"
                 value={name}
                 maxLength={35}
-                onChange={e => { setName(e.target.value); setError('') }}
+                onChange={e => {
+                  const cleaned = e.target.value.replace(/[^a-zA-Z\s]/g, '').replace(/\s+/g, ' ');
+                  setName(cleaned);
+                  setError('');
+                }}
                 onKeyDown={e => e.key === 'Enter' && handleSubmit()}
                 placeholder={t('namePlaceholder')}
                 autoFocus
