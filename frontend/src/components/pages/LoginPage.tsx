@@ -86,8 +86,8 @@ export default function LoginPage({ onLogin }: Props) {
           >
             <Shield className="w-10 h-10 text-indigo-400" />
           </motion.div>
-          <h1 className="text-2xl font-black text-white tracking-tight">AEGIS RESPONSE</h1>
-          <p className="text-[11px] text-slate-500 mt-1 font-medium tracking-widest uppercase">
+          <h1 className="text-2xl font-black text-white tracking-widest font-mono">A.T.L.A.S</h1>
+          <p className="text-[11px] text-nerv-orange mt-1 font-mono tracking-widest uppercase">
             Admin · Tactical Dashboard
           </p>
           <div className="inline-flex items-center gap-1.5 mt-2 px-3 py-1 rounded-full bg-indigo-500/10 border border-indigo-500/20">
@@ -182,8 +182,8 @@ export default function LoginPage({ onLogin }: Props) {
 
         </div>
 
-        <p className="text-center text-[10px] text-slate-700 mt-5 font-medium">
-          AEGIS RESPONSE · Admin Portal · Akses Terbatas
+        <p className="text-center text-[10px] text-slate-600 mt-5 font-mono">
+          A.T.L.A.S · Admin Portal · Akses Terbatas
         </p>
       </motion.div>
     </div>

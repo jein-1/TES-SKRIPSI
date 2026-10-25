@@ -92,8 +92,8 @@ export default function FirstVisitModal({ onComplete, onCancel, isEditing = fals
             style={{ boxShadow: '0 0 30px rgba(99,102,241,0.3)' }}>
             <Shield className="w-8 h-8 text-indigo-400" />
           </div>
-          <h1 className="text-2xl font-black text-white tracking-widest">AEGIS RESPONSE</h1>
-          <p className="text-[11px] text-slate-500 mt-1 tracking-wider">Sistem Evakuasi Darurat · Kota Palu</p>
+          <h1 className="text-2xl font-black text-white tracking-widest font-mono">A.T.L.A.S</h1>
+          <p className="text-[11px] text-nerv-orange mt-1 tracking-wider font-mono">Sistem Evakuasi Darurat · Kota Palu</p>
         </div>
 
         {/* Device info */}
@@ -184,7 +184,7 @@ export default function FirstVisitModal({ onComplete, onCancel, isEditing = fals
             >
               {done
                 ? <><CheckCircle className="w-4 h-4" /> Tersimpan!</>
-                : isEditing ? (!!localStorage.getItem('aegisUserName') ? 'Terkunci' : 'SIMPAN PERUBAHAN') : 'MULAI AEGIS RESPONSE'
+                : isEditing ? (!!localStorage.getItem('aegisUserName') ? 'Terkunci' : 'SIMPAN PERUBAHAN') : 'MULAI A.T.L.A.S'
               }
             </button>
           </div>

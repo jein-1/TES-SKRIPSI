@@ -2076,11 +2076,11 @@ function App() {
               />
             </div>
             <div className="min-w-0">
-              <h1 className="text-white font-black text-sm tracking-widest leading-none">
-                AEGIS RESPONSE
+              <h1 className="text-white font-black text-sm tracking-widest leading-none font-mono">
+                A.T.L.A.S
               </h1>
-              <p className="text-[9px] text-slate-600 font-mono mt-0.5 truncate">
-                Sistem Evakuasi Â· {terminalId}
+              <p className="text-[9px] text-nerv-orange font-mono mt-0.5 truncate">
+                DISASTER WATCH · {terminalId}
               </p>
             </div>
           </div>
@@ -2161,11 +2161,11 @@ function App() {
             />
           </div>
           <div>
-            <h1 className="text-white font-black text-sm tracking-widest leading-none">
-              AEGIS RESPONSE
+            <h1 className="text-white font-black text-sm tracking-widest leading-none font-mono">
+              A.T.L.A.S
             </h1>
-            <p className="text-[9px] text-slate-600 font-mono">
-              TES SKRIPSI Â· Kota Palu
+            <p className="text-[9px] text-nerv-orange font-mono">
+              DISASTER WATCH · Kota Palu
             </p>
           </div>
         </div>
