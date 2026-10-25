@@ -4,7 +4,9 @@
   "type": "module",
   "scripts": {
     "dev:frontend": "cd frontend && npm run dev",
-    "dev": "npm run dev:frontend",
+    "dev:api": "node dev-server.js",
+    "dev:all": "concurrently -n \"API,VITE\" -c \"blue,green\" \"node dev-server.js\" \"npm run dev:frontend\"",
+    "dev": "npm run dev:all",
     "build": "cd frontend && npm run build",
     "build:admin": "cd frontend && npm run build:admin",
     "bump": "node tools/bump-version.js",
