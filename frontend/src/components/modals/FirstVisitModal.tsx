@@ -239,7 +239,7 @@ export default function FirstVisitModal({ onComplete }: Props) {
             A.T.L.A.S
           </h1>
           <p className="text-[11px] text-slate-300 mt-1 tracking-wider font-mono uppercase font-bold">
-            Autonomous Threat Location & Alert System
+            Adaptive Tracking, Location & Alert System
           </p>
         </div>
 

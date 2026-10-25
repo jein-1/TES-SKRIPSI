@@ -852,6 +852,15 @@ function App() {
     return () => window.removeEventListener("resize", check);
   }, []);
 
+  // ── Update Credentials Modal State ─────────────────────────────────────
+  const [showUpdateCredentials, setShowUpdateCredentials] = useState(false);
+  const [credTerminalId, setCredTerminalId] = useState(terminalId);
+  const [credOperatorName, setCredOperatorName] = useState(userName || "Operator Admin");
+  const [credNewPin, setCredNewPin] = useState("");
+  const [credConfirmPin, setCredConfirmPin] = useState("");
+  const [credSuccessMsg, setCredSuccessMsg] = useState("");
+  const [credErrorMsg, setCredErrorMsg] = useState("");
+
   // ── Auth handlers ──────────────────────────────────────────────────────────
   // Admin login (only called when isAdminURL)
   const [adminRole, setAdminRole] = useState<string>("Admin");
@@ -1330,9 +1339,83 @@ function App() {
         ? TILE_DARK
         : TILE_NORMAL;
 
-  const mapTileKey = tsunamiAlert
-    ? "tsunami-normal"
-    : settings.cartographyTheme;
+  const standardMapStyle = useMemo(() => ({
+    version: 8 as const,
+    sources: {
+      "google-maps": {
+        type: "raster" as const,
+        tiles: ["https://mt1.google.com/vt/lyrs=m&x={x}&y={y}&z={z}"],
+        tileSize: 256,
+        attribution: "© Google Maps",
+      },
+    },
+    layers: [
+      {
+        id: "google-maps-layer",
+        type: "raster" as const,
+        source: "google-maps",
+        minzoom: 0,
+        maxzoom: 22,
+      },
+    ],
+  }), []);
+
+  const tacticalDarkMapStyle = useMemo(() => ({
+    version: 8 as const,
+    sources: {
+      "carto-dark": {
+        type: "raster" as const,
+        tiles: [
+          "https://a.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}.png",
+          "https://b.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}.png",
+          "https://c.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}.png",
+          "https://d.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}.png",
+        ],
+        tileSize: 256,
+        attribution: "© CARTO, © OpenStreetMap",
+      },
+    },
+    layers: [
+      {
+        id: "carto-dark-layer",
+        type: "raster" as const,
+        source: "carto-dark",
+        minzoom: 0,
+        maxzoom: 22,
+      },
+    ],
+  }), []);
+
+  const satelliteMapStyle = useMemo(() => ({
+    version: 8 as const,
+    sources: {
+      "google-satellite": {
+        type: "raster" as const,
+        tiles: ["https://mt1.google.com/vt/lyrs=y&x={x}&y={y}&z={z}"],
+        tileSize: 256,
+        attribution: "© Google Maps Satellite",
+      },
+    },
+    layers: [
+      {
+        id: "google-satellite-layer",
+        type: "raster" as const,
+        source: "google-satellite",
+        minzoom: 0,
+        maxzoom: 22,
+      },
+    ],
+  }), []);
+
+  const activeMapStyles = useMemo(() => {
+    const chosen =
+      settings.cartographyTheme === "satellite-hud"
+        ? satelliteMapStyle
+        : settings.cartographyTheme === "tactical-dark"
+          ? tacticalDarkMapStyle
+          : standardMapStyle;
+    return { light: chosen, dark: chosen };
+  }, [settings.cartographyTheme, standardMapStyle, tacticalDarkMapStyle, satelliteMapStyle]);
 
   // FIX: maxNativeZoom prevents blank tiles when zoomed past the tile provider's max zoom
   // Tiles will stretch instead of going blank
@@ -2308,7 +2391,7 @@ function App() {
                 A.T.L.A.S
               </h1>
               <p className="text-[9px] text-nerv-orange font-mono mt-0.5 truncate">
-                DISASTER WATCH · {terminalId}
+                ADAPTIVE TRACKING, LOCATION & ALERT SYSTEM · {userLocationName ? userLocationName.split(' // ')[0] : 'PALU'}
               </p>
             </div>
           </div>
@@ -2389,11 +2472,16 @@ function App() {
             />
           </div>
           <div>
-            <h1 className="text-white font-black text-sm tracking-widest leading-none font-mono">
-              A.T.L.A.S
-            </h1>
-            <p className="text-[9px] text-nerv-orange font-mono">
-              DISASTER WATCH · {userLocationName ? userLocationName.split(' // ')[0] : 'INDONESIA'}
+            <div className="flex items-center gap-2">
+              <h1 className="text-white font-black text-sm tracking-widest leading-none font-mono">
+                A.T.L.A.S
+              </h1>
+              <span className="text-[10px] text-slate-400 font-mono hidden xl:inline">
+                (Adaptive Tracking, Location & Alert System)
+              </span>
+            </div>
+            <p className="text-[9px] text-nerv-orange font-mono mt-0.5">
+              ADAPTIVE TRACKING, LOCATION & ALERT SYSTEM · {userLocationName ? userLocationName.split(' // ')[0] : 'PALU'}
             </p>
           </div>
         </div>
@@ -2495,11 +2583,11 @@ function App() {
             >
               <div className="w-[220px]">
                 <div className="p-6 pb-2">
-                  <h3 className="text-[10px] font-bold text-indigo-400 tracking-widest uppercase mb-1">
-                    Navigation
+                  <h3 className="text-[10px] font-bold text-nerv-orange tracking-widest uppercase mb-1">
+                    A.T.L.A.S
                   </h3>
-                  <p className="text-[9px] text-slate-600 uppercase tracking-widest">
-                    System Active
+                  <p className="text-[9px] text-slate-400 font-mono tracking-tight leading-tight whitespace-normal">
+                    Adaptive Tracking, Location & Alert System
                   </p>
                 </div>
                 <nav className="flex-1 mt-4">
@@ -2849,6 +2937,7 @@ function App() {
           <Map
             ref={adminMapRef}
             viewport={viewport}
+            styles={activeMapStyles}
             onViewportChange={(v) => {
               setViewport(v);
               setAdminMapBearing(v.bearing);
@@ -3240,11 +3329,22 @@ function App() {
               }
               if (!isNaN(lat) && !isNaN(lng)) {
                 return (
-                  <MapGeoJSON
-                    data={createCirclePolygon(lat, lng, radius / 1000) as any}
-                    fillPaint={{ 'fill-color': '#6366f1', 'fill-opacity': 0.15 }}
-                    linePaint={{ 'line-color': '#6366f1', 'line-width': 2, 'line-dasharray': [2, 2] }}
-                  />
+                  <Fragment key={`shelter-overlay-${selectedShelterId || 'edit'}`}>
+                    {/* Safe Zone Proximity Threshold Perimeter (settings.safeZoneRadius) */}
+                    <MapGeoJSON
+                      id={`safe-zone-perimeter-${selectedShelterId || 'edit'}`}
+                      data={createCirclePolygon(lat, lng, settings.safeZoneRadius) as any}
+                      fillPaint={{ 'fill-color': '#10b981', 'fill-opacity': 0.05 }}
+                      linePaint={{ 'line-color': '#10b981', 'line-width': 1.5, 'line-dasharray': [4, 4] }}
+                    />
+                    {/* Exact Shelter Arrival Zone (radiusMeters) */}
+                    <MapGeoJSON
+                      id={`shelter-arrival-zone-${selectedShelterId || 'edit'}`}
+                      data={createCirclePolygon(lat, lng, radius / 1000) as any}
+                      fillPaint={{ 'fill-color': '#6366f1', 'fill-opacity': 0.18 }}
+                      linePaint={{ 'line-color': '#6366f1', 'line-width': 2, 'line-dasharray': [2, 2] }}
+                    />
+                  </Fragment>
                 );
               }
               return null;
@@ -3381,18 +3481,27 @@ function App() {
                   </button>
                 </div>
                 <div className="flex-1 overflow-y-auto px-4 pb-4 space-y-2.5 custom-scrollbar">
-                  {routes.map((route, i) => (
-                    <button
-                      key={i}
-                      onClick={() => {
-                        setSelectedRoute(i);
-                        if (route.coordinates.length > 0) {
-                          const ep =
-                            route.coordinates[route.coordinates.length - 1];
-                          setFlyToPos([ep[0], ep[1]]);
-                        }
-                      }}
-                      className={`w-full text-left p-4 rounded-xl border transition-all duration-200 flex items-center gap-3
+                  {routes.map((route, i) => {
+                    const targetShelter = shelters.find(
+                      (s) => s.id === route.shelterId || s.name.toLowerCase().trim() === route.shelterName.toLowerCase().trim()
+                    );
+                    const handleMobileFocus = () => {
+                      setSelectedRoute(i);
+                      if (targetShelter) {
+                        setViewport((v) => ({ ...v, center: [targetShelter.lng, targetShelter.lat], zoom: 17 }));
+                        setSelectedShelterId(targetShelter.id);
+                        setShowPanel(false);
+                      } else if (route.coordinates.length > 0) {
+                        const ep = route.coordinates[route.coordinates.length - 1];
+                        setViewport((v) => ({ ...v, center: [ep[0], ep[1]], zoom: 17 }));
+                        setShowPanel(false);
+                      }
+                    };
+                    return (
+                      <button
+                        key={i}
+                        onClick={handleMobileFocus}
+                        className={`w-full text-left p-4 rounded-xl border transition-all duration-200 flex items-center gap-3
                         ${
                           selectedRoute === i
                             ? "bg-indigo-600 border-indigo-400 shadow-[0_0_20px_rgba(99,102,241,0.6)]"
@@ -3427,7 +3536,8 @@ function App() {
                         className={`w-5 h-5 shrink-0 ${selectedRoute === i ? "text-indigo-400" : "text-slate-600"}`}
                       />
                     </button>
-                  ))}
+                    );
+                  })}
                   <div className="p-3.5 bg-indigo-950/40 border border-indigo-500/20 rounded-xl flex gap-3">
                     <Info className="w-4 h-4 text-indigo-400 shrink-0 mt-0.5" />
                     <p className="text-[11px] text-slate-400 leading-relaxed">
@@ -3579,61 +3689,74 @@ function App() {
                 </p>
               </div>
               <div className="flex-1 overflow-y-auto custom-scrollbar p-4 pt-0 flex flex-col gap-3">
-                {routes.map((route, i) => (
-                  <button
-                    key={i}
-                    onClick={() => {
-                      setSelectedRoute(i);
-                      if (route.coordinates.length > 0) {
-                        const ep =
-                          route.coordinates[route.coordinates.length - 1];
-                        setFlyToPos([ep[0], ep[1]]);
-                      }
-                    }}
-                    className={`w-full text-left p-4 rounded-xl border transition-all duration-300 relative group
-                      ${
-                        selectedRoute === i
-                          ? "bg-indigo-600 border-indigo-400 shadow-[0_0_20px_rgba(99,102,241,0.6)]"
-                          : "bg-slate-800 border-slate-700 hover:bg-slate-700 hover:border-slate-600 opacity-60"
-                      }`}
-                  >
-                    <div className="flex justify-between items-center mb-2">
-                      <span
-                        className={`text-[10px] font-bold tracking-wider px-2 py-1 rounded
-                        ${selectedRoute === i ? (i === 0 ? "bg-indigo-500/20 text-indigo-300" : "bg-slate-700/50 text-slate-300") : "text-slate-500"}`}
-                      >
-                        {i === 0 ? "FASTEST" : "ALTERNATIVE"}
-                      </span>
-                      <div className="w-7 h-7 rounded-full bg-slate-800 flex items-center justify-center text-xs font-bold text-slate-400">
-                        {i + 1}
-                      </div>
-                    </div>
-                    <h3 className="text-sm font-semibold text-white mb-3">
-                      {route.shelterName}
-                    </h3>
-                    <div className="flex items-center gap-4 text-xs text-slate-400">
-                      <span className="flex items-center gap-1">
-                        <MapPin className="w-3.5 h-3.5" />
-                        {route.totalDistance === Infinity
-                          ? "N/A"
-                          : `${route.totalDistance.toFixed(2)} km`}
-                      </span>
-                      <span className="flex items-center gap-1">
-                        <Clock className="w-3.5 h-3.5" />
-                        {route.totalDistance === Infinity
-                          ? "N/A"
-                          : `~${route.walkingTime} min`}
-                      </span>
-                    </div>
-                    {selectedRoute === i && (
-                      <div className="mt-4 pt-4 border-t border-slate-700/50">
-                        <div className="w-full py-2 bg-indigo-500 text-white rounded-lg flex items-center justify-center gap-2 text-xs font-bold">
-                          Go to Point <ChevronRight className="w-4 h-4" />
+                {routes.map((route, i) => {
+                  const targetShelter = shelters.find(
+                    (s) => s.id === route.shelterId || s.name.toLowerCase().trim() === route.shelterName.toLowerCase().trim()
+                  );
+                  const handleFocusShelter = (e?: React.MouseEvent) => {
+                    if (e) e.stopPropagation();
+                    setSelectedRoute(i);
+                    if (targetShelter) {
+                      setViewport((v) => ({ ...v, center: [targetShelter.lng, targetShelter.lat], zoom: 17 }));
+                      setSelectedShelterId(targetShelter.id);
+                    } else if (route.coordinates.length > 0) {
+                      const ep = route.coordinates[route.coordinates.length - 1];
+                      setViewport((v) => ({ ...v, center: [ep[0], ep[1]], zoom: 17 }));
+                    }
+                  };
+                  return (
+                    <div
+                      key={i}
+                      onClick={() => handleFocusShelter()}
+                      className={`w-full text-left p-4 rounded-xl border transition-all duration-300 relative group cursor-pointer
+                        ${
+                          selectedRoute === i
+                            ? "bg-indigo-600 border-indigo-400 shadow-[0_0_20px_rgba(99,102,241,0.6)]"
+                            : "bg-slate-800 border-slate-700 hover:bg-slate-700 hover:border-slate-600 opacity-60"
+                        }`}
+                    >
+                      <div className="flex justify-between items-center mb-2">
+                        <span
+                          className={`text-[10px] font-bold tracking-wider px-2 py-1 rounded
+                          ${selectedRoute === i ? (i === 0 ? "bg-indigo-500/20 text-indigo-300" : "bg-slate-700/50 text-slate-300") : "text-slate-500"}`}
+                        >
+                          {i === 0 ? "FASTEST" : "ALTERNATIVE"}
+                        </span>
+                        <div className="w-7 h-7 rounded-full bg-slate-800 flex items-center justify-center text-xs font-bold text-slate-400">
+                          {i + 1}
                         </div>
                       </div>
-                    )}
-                  </button>
-                ))}
+                      <h3 className="text-sm font-semibold text-white mb-3">
+                        {route.shelterName}
+                      </h3>
+                      <div className="flex items-center gap-4 text-xs text-slate-400">
+                        <span className="flex items-center gap-1">
+                          <MapPin className="w-3.5 h-3.5" />
+                          {route.totalDistance === Infinity
+                            ? "N/A"
+                            : `${route.totalDistance.toFixed(2)} km`}
+                        </span>
+                        <span className="flex items-center gap-1">
+                          <Clock className="w-3.5 h-3.5" />
+                          {route.totalDistance === Infinity
+                            ? "N/A"
+                            : `~${route.walkingTime} min`}
+                        </span>
+                      </div>
+                      {selectedRoute === i && (
+                        <div className="mt-4 pt-4 border-t border-slate-700/50">
+                          <button
+                            type="button"
+                            onClick={(e) => handleFocusShelter(e)}
+                            className="w-full py-2 bg-indigo-500 hover:bg-indigo-400 active:scale-98 transition-all text-white rounded-lg flex items-center justify-center gap-2 text-xs font-bold shadow-md cursor-pointer"
+                          >
+                            Go to Point <ChevronRight className="w-4 h-4" />
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
               </div>
               <div className="p-4 border-t border-slate-800 bg-[#0b1120]/50">
                 <h4 className="text-[10px] font-bold text-slate-500 tracking-widest uppercase mb-3 flex items-center gap-2">
@@ -3975,7 +4098,10 @@ function App() {
                 <br />
                 CONFIGURATION
               </h2>
-              <p className="text-[11px] text-slate-500 mt-1.5 font-mono">
+              <p className="text-[11px] text-nerv-orange font-mono mt-1 font-bold">
+                A.T.L.A.S (Adaptive Tracking, Location & Alert System)
+              </p>
+              <p className="text-[11px] text-slate-500 mt-0.5 font-mono">
                 Operational Unit: {terminalId} | STATUS:{" "}
                 <span className="text-emerald-400 font-bold">ONLINE</span>
               </p>
@@ -4034,37 +4160,9 @@ function App() {
                     </button>
                   ))}
                 </div>
-
-                {/* Sensor Sensitivity */}
-                <div className="flex items-center justify-between mb-2">
-                  <p className="text-[9px] text-slate-600 uppercase tracking-widest font-bold">
-                    Sensor Sensitivity
-                  </p>
-                  <p className="text-xs font-black text-white">
-                    {settings.sensorSensitivity}%
-                  </p>
-                </div>
-                <input
-                  type="range"
-                  min="0"
-                  max="100"
-                  value={settings.sensorSensitivity}
-                  onChange={(e) =>
-                    setSettings((s) => ({
-                      ...s,
-                      sensorSensitivity: +e.target.value,
-                    }))
-                  }
-                  className="w-full accent-indigo-500 mb-1.5"
-                />
-                <div className="flex justify-between text-[9px] text-slate-600 font-bold uppercase tracking-wider">
-                  <span>Low Precision</span>
-                  <span>Tactical Grid</span>
-                  <span>High Fidelity</span>
-                </div>
               </section>
 
-              {/* â”€â”€â”€ DEVICE IDENTITY â”€â”€â”€ */}
+              {/* ─── DEVICE IDENTITY ─── */}
               <section
                 className="rounded-2xl border border-slate-800/50 p-4"
                 style={{ background: "#0c1525" }}
@@ -4096,7 +4194,19 @@ function App() {
                   </div>
                 </div>
 
-                <button className="w-full py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-xs font-black tracking-widest flex items-center justify-center gap-2 transition-colors">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setCredTerminalId(terminalId);
+                    setCredOperatorName(userName || "Operator Admin");
+                    setCredNewPin("");
+                    setCredConfirmPin("");
+                    setCredSuccessMsg("");
+                    setCredErrorMsg("");
+                    setShowUpdateCredentials(true);
+                  }}
+                  className="w-full py-2.5 bg-indigo-600 hover:bg-indigo-500 active:scale-98 text-white rounded-xl text-xs font-black tracking-widest flex items-center justify-center gap-2 transition-all shadow-md cursor-pointer"
+                >
                   <RefreshCw className="w-3.5 h-3.5" /> UPDATE CREDENTIALS
                 </button>
               </section>
@@ -5479,6 +5589,208 @@ function App() {
           ) : (
             <p className="text-xs text-slate-500 italic">Tidak ada deskripsi tambahan.</p>
           )}
+        </motion.div>
+      )}
+    </AnimatePresence>
+
+    {/* ─── UPDATE CREDENTIALS MODAL (Admin Terminal) ─── */}
+    <AnimatePresence>
+      {showUpdateCredentials && (
+        <motion.div
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          exit={{ opacity: 0 }}
+          className="fixed inset-0 z-[3500] bg-black/80 backdrop-blur-md flex items-center justify-center p-4"
+        >
+          <motion.div
+            initial={{ scale: 0.95, opacity: 0, y: 16 }}
+            animate={{ scale: 1, opacity: 1, y: 0 }}
+            exit={{ scale: 0.95, opacity: 0, y: 16 }}
+            transition={{ type: "spring", damping: 25, stiffness: 300 }}
+            className="w-full max-w-md bg-[#0a1120] border border-indigo-500/30 rounded-3xl p-6 shadow-[0_16px_60px_rgba(0,0,0,0.8)] relative overflow-hidden"
+          >
+            {/* Top Tactical Accent */}
+            <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-indigo-500 via-nerv-cyan to-indigo-500" />
+
+            <div className="flex items-center justify-between mb-5">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-2xl bg-indigo-500/20 border border-indigo-500/30 flex items-center justify-center text-indigo-400">
+                  <Lock className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-base font-black text-white tracking-wide">
+                    UPDATE CREDENTIALS
+                  </h3>
+                  <p className="text-[10px] text-nerv-cyan font-mono uppercase font-bold tracking-wider">
+                    Terminal Identity & Access Protocol
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowUpdateCredentials(false)}
+                className="w-8 h-8 rounded-xl bg-slate-800/80 hover:bg-slate-700 flex items-center justify-center text-slate-400 hover:text-white transition-colors"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <form
+              onSubmit={(e) => {
+                e.preventDefault();
+                setCredErrorMsg("");
+                setCredSuccessMsg("");
+
+                const trimmedTerminalId = credTerminalId.trim().toUpperCase();
+                const trimmedOpName = credOperatorName.trim();
+
+                if (!trimmedTerminalId) {
+                  setCredErrorMsg("Terminal ID tidak boleh kosong.");
+                  return;
+                }
+
+                if (!trimmedOpName) {
+                  setCredErrorMsg("Nama Operator / Akun tidak boleh kosong.");
+                  return;
+                }
+
+                if (credNewPin || credConfirmPin) {
+                  if (credNewPin !== credConfirmPin) {
+                    setCredErrorMsg("Konfirmasi Password / PIN tidak cocok.");
+                    return;
+                  }
+                  if (credNewPin.length < 4) {
+                    setCredErrorMsg("Password / PIN minimal 4 karakter.");
+                    return;
+                  }
+                  localStorage.setItem("atlas_admin_pin", credNewPin);
+                  sessionStorage.setItem("aegisPin", credNewPin);
+                }
+
+                // Save terminal ID
+                setTerminalId(trimmedTerminalId);
+                localStorage.setItem("atlasTerminalId", trimmedTerminalId);
+                localStorage.setItem("aegisTerminalId", trimmedTerminalId);
+
+                // Save operator name
+                setUserName(trimmedOpName);
+                localStorage.setItem("atlasUserName", trimmedOpName);
+                localStorage.setItem("aegisUserName", trimmedOpName);
+
+                setCredSuccessMsg("Kredensial terminal berhasil disimpan dan disinkronkan.");
+                setTimeout(() => {
+                  setShowUpdateCredentials(false);
+                }, 1200);
+              }}
+              className="space-y-4"
+            >
+              {/* Terminal ID field */}
+              <div>
+                <div className="flex items-center justify-between mb-1.5">
+                  <label className="text-[10px] text-slate-400 font-bold uppercase tracking-wider font-mono">
+                    TERMINAL ID (PERANGKAT AKTIF)
+                  </label>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const newId = `A.T.L.A.S-${Math.floor(Math.random() * 900 + 100)}`;
+                      setCredTerminalId(newId);
+                    }}
+                    className="text-[9px] text-indigo-400 hover:text-indigo-300 font-mono font-bold flex items-center gap-1 transition-colors"
+                  >
+                    <RefreshCw className="w-2.5 h-2.5" /> Acak Baru
+                  </button>
+                </div>
+                <input
+                  type="text"
+                  value={credTerminalId}
+                  onChange={(e) => setCredTerminalId(e.target.value.toUpperCase())}
+                  placeholder="A.T.L.A.S-617"
+                  className="w-full bg-[#070d1a] border border-slate-700 focus:border-indigo-500 rounded-xl px-3.5 py-2.5 text-sm font-mono text-white font-bold tracking-widest outline-none transition-colors"
+                />
+              </div>
+
+              {/* Operator Name field */}
+              <div>
+                <label className="block text-[10px] text-slate-400 font-bold uppercase tracking-wider font-mono mb-1.5">
+                  NAMA OPERATOR / CALL-SIGN
+                </label>
+                <input
+                  type="text"
+                  value={credOperatorName}
+                  onChange={(e) => setCredOperatorName(e.target.value)}
+                  placeholder="Komandan Operasi / Admin"
+                  className="w-full bg-[#070d1a] border border-slate-700 focus:border-indigo-500 rounded-xl px-3.5 py-2.5 text-sm text-white font-bold outline-none transition-colors"
+                />
+              </div>
+
+              {/* PIN / Password fields */}
+              <div className="pt-2 border-t border-slate-800/80">
+                <p className="text-[10px] text-nerv-cyan font-bold uppercase tracking-wider font-mono mb-2 flex items-center gap-1.5">
+                  <Shield className="w-3 h-3 text-nerv-cyan" />
+                  PERBARUI SANDI / PIN AKSES TERMINAL
+                </p>
+                <div className="grid grid-cols-2 gap-2.5">
+                  <div>
+                    <label className="block text-[9px] text-slate-500 font-bold uppercase tracking-wider mb-1">
+                      Sandi Baru (opsional)
+                    </label>
+                    <input
+                      type="password"
+                      value={credNewPin}
+                      onChange={(e) => setCredNewPin(e.target.value)}
+                      placeholder="••••"
+                      className="w-full bg-[#070d1a] border border-slate-700 focus:border-indigo-500 rounded-xl px-3 py-2 text-xs text-white font-mono outline-none transition-colors"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[9px] text-slate-500 font-bold uppercase tracking-wider mb-1">
+                      Konfirmasi Sandi
+                    </label>
+                    <input
+                      type="password"
+                      value={credConfirmPin}
+                      onChange={(e) => setCredConfirmPin(e.target.value)}
+                      placeholder="••••"
+                      className="w-full bg-[#070d1a] border border-slate-700 focus:border-indigo-500 rounded-xl px-3 py-2 text-xs text-white font-mono outline-none transition-colors"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* Alert Feedback Messages */}
+              {credErrorMsg && (
+                <div className="p-2.5 rounded-xl bg-red-950/60 border border-red-500/40 text-red-300 text-xs font-bold flex items-center gap-2">
+                  <AlertTriangle className="w-4 h-4 text-red-400 shrink-0" />
+                  <span>{credErrorMsg}</span>
+                </div>
+              )}
+              {credSuccessMsg && (
+                <div className="p-2.5 rounded-xl bg-emerald-950/60 border border-emerald-500/40 text-emerald-300 text-xs font-bold flex items-center gap-2">
+                  <Check className="w-4 h-4 text-emerald-400 shrink-0" />
+                  <span>{credSuccessMsg}</span>
+                </div>
+              )}
+
+              {/* Action Buttons */}
+              <div className="flex gap-2.5 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setShowUpdateCredentials(false)}
+                  className="flex-1 py-2.5 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-xl text-xs font-bold transition-colors"
+                >
+                  Batal
+                </button>
+                <button
+                  type="submit"
+                  className="flex-[2] py-2.5 bg-indigo-600 hover:bg-indigo-500 active:scale-98 text-white rounded-xl text-xs font-black tracking-wider uppercase flex items-center justify-center gap-1.5 transition-all shadow-[0_0_20px_rgba(99,102,241,0.4)] cursor-pointer"
+                >
+                  <Check className="w-3.5 h-3.5" />
+                  Simpan Perubahan
+                </button>
+              </div>
+            </form>
+          </motion.div>
         </motion.div>
       )}
     </AnimatePresence>

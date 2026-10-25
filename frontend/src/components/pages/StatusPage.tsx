@@ -141,7 +141,7 @@ export default function StatusPage({ onNavigate, userLocation, onBack, userName,
             <div className="flex items-center gap-2 mb-0.5">
               <div className="w-2 h-2 rounded-full bg-nerv-orange animate-ping" />
               <p className="text-[8px] sm:text-[9px] font-mono font-bold tracking-wider text-nerv-orange uppercase truncate">
-                A.T.L.A.S // AUTONOMOUS THREAT LOCATION & ALERT SYSTEM
+                A.T.L.A.S // ADAPTIVE TRACKING, LOCATION & ALERT SYSTEM
               </p>
             </div>
             <div className="flex items-center gap-1.5">

@@ -49,7 +49,7 @@ export function useLanguage() {
 
 export const translations = {
   id: {
-    fullName: 'Autonomous Threat Location & Alert System',
+    fullName: 'Adaptive Tracking, Location & Alert System',
     systemTelemetry: 'A.T.L.A.S // SISTEM TELEMETRI OTOMONOM',
     detectingLocation: 'Mendeteksi lokasi Anda...',
     locationPermissionRequired: 'Izin Lokasi Diperlukan (Aktifkan GPS)',
@@ -111,7 +111,7 @@ export const translations = {
     ipAddress: 'Alamat IP'
   },
   en: {
-    fullName: 'Autonomous Threat Location & Alert System',
+    fullName: 'Adaptive Tracking, Location & Alert System',
     systemTelemetry: 'A.T.L.A.S // SYSTEM TELEMETRY',
     detectingLocation: 'Detecting your location...',
     locationPermissionRequired: 'Location Permission Required (Enable GPS)',
