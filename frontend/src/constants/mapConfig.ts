@@ -2,10 +2,9 @@
 // MAP CONFIGURATION — URL tile, warna rute, dan konstanta peta
 // ═══════════════════════════════════════════════════════════════
 
-// ── Tile Provider URLs ──────────────────────────────────────────
-export const TILE_NORMAL    = 'https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png'
-export const TILE_DARK      = 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png'
-export const TILE_SATELLITE = 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}'
+export const TILE_NORMAL    = 'https://mt1.google.com/vt/lyrs=m&x={x}&y={y}&z={z}'
+export const TILE_DARK      = 'https://services.arcgisonline.com/arcgis/rest/services/Canvas/World_Dark_Gray_Base/MapServer/tile/{z}/{y}/{x}'
+export const TILE_SATELLITE = 'https://mt1.google.com/vt/lyrs=y&x={x}&y={y}&z={z}'
 
 // ── Default Map Center (Kota Palu) ──────────────────────────────
 export const MAP_CENTER: [number, number] = [-0.8917, 119.8577]

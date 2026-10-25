@@ -6,7 +6,6 @@ import { Map, MapMarker, MarkerContent } from '@/components/ui/map'
 import { Wifi, WifiOff, Activity, AlertTriangle, CheckCircle, RefreshCw, Radio, ChevronLeft } from 'lucide-react'
 import { motion } from 'motion/react'
 import type { SensorNode, SensorStatus } from '../../types'
-import { TILE_DARK } from '../../constants/mapConfig'
 
 // ── Static sensor data (Kota Palu) ────────────────────────────
 const SENSOR_NODES: SensorNode[] = [

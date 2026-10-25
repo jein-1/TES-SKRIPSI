@@ -1375,23 +1375,35 @@ function App() {
   const tacticalDarkMapStyle = useMemo(() => ({
     version: 8 as const,
     sources: {
-      "carto-dark": {
+      "esri-dark-base": {
         type: "raster" as const,
         tiles: [
-          "https://a.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}.png",
-          "https://b.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}.png",
-          "https://c.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}.png",
-          "https://d.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}.png",
+          "https://services.arcgisonline.com/arcgis/rest/services/Canvas/World_Dark_Gray_Base/MapServer/tile/{z}/{y}/{x}",
         ],
         tileSize: 256,
-        attribution: "© CARTO, © OpenStreetMap",
+        attribution: "© Esri, HERE, Garmin, © OpenStreetMap",
+      },
+      "esri-dark-reference": {
+        type: "raster" as const,
+        tiles: [
+          "https://services.arcgisonline.com/arcgis/rest/services/Canvas/World_Dark_Gray_Reference/MapServer/tile/{z}/{y}/{x}",
+        ],
+        tileSize: 256,
+        attribution: "© Esri",
       },
     },
     layers: [
       {
-        id: "carto-dark-layer",
+        id: "esri-dark-base-layer",
         type: "raster" as const,
-        source: "carto-dark",
+        source: "esri-dark-base",
+        minzoom: 0,
+        maxzoom: 22,
+      },
+      {
+        id: "esri-dark-reference-layer",
+        type: "raster" as const,
+        source: "esri-dark-reference",
         minzoom: 0,
         maxzoom: 22,
       },

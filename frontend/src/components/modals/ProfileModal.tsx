@@ -105,7 +105,7 @@ export default function ProfileModal({ isOpen, onClose, userName, userNik, termi
               <div>
                 <span className="text-[9px] text-slate-500 uppercase block">NODE IDENTITY</span>
                 <span className="text-xs font-bold text-nerv-cyan tracking-wider">
-                  #{terminalId ? terminalId.slice(0, 8).toUpperCase() : 'CIV-01-NODE'}
+                  #{terminalId ? terminalId.toUpperCase() : 'CIV-01-NODE'}
                 </span>
               </div>
               <div className="text-right">

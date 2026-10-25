@@ -188,7 +188,10 @@ function MyQRModal({ onClose }: { onClose: () => void }) {
     setVerifyCode(gen)
   }
 
-  const inviteUrl = `${window.location.origin}${window.location.pathname}?joinFamily=${encodeURIComponent(atlasId)}&inviteName=${encodeURIComponent(myName)}&code=${verifyCode}`
+  const baseOrigin = (typeof window !== 'undefined' && !window.location.origin.includes('localhost') && !window.location.origin.includes('127.0.0.1'))
+    ? window.location.origin
+    : (import.meta.env.VITE_PUBLIC_URL || 'https://tsunami-dimss.vercel.app');
+  const inviteUrl = `${baseOrigin}/?joinFamily=${encodeURIComponent(atlasId)}&inviteName=${encodeURIComponent(myName)}&code=${verifyCode}`
 
   useEffect(() => {
     QRCode.toDataURL(inviteUrl, {
