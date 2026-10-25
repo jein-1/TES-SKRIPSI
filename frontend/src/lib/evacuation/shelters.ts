@@ -1,35 +1,46 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// DATA SHELTER EVAKUASI
-// Titik-titik evakuasi tsunami di Kota Palu berdasarkan lokasi resmi
+// DATA SHELTER EVAKUASI RESMI (ADMIN A.T.L.A.S)
+// Titik evakuasi disinkronkan langsung dari tabel custom_shelters Supabase.
+// Tidak ada shelter buatan sendiri atau penarikan acak dari OpenStreetMap.
 // ─────────────────────────────────────────────────────────────────────────────
 import type { Shelter } from "./types";
 import { supabase } from "../supabaseClient";
 
-const defaultShelters: Shelter[] = [];
-
 export const shelters: Shelter[] = [];
 
+/**
+ * Reset array shelters in-memory.
+ */
 export function loadShelters() {
   shelters.length = 0;
-  shelters.push(...defaultShelters);
 }
 
 /**
- * Tambah shelter ke array in-memory (immediate, tanpa perlu refetch).
- * Penyimpanan ke Supabase dilakukan via aegisApi.addCustomShelter() di App.tsx.
+ * Tambah / update shelter ke array in-memory (immediate sync).
  */
 export function addCustomShelter(shelter: Shelter) {
-  // Cegah duplikat jika sudah ada (misal dari Postgres realtime + broadcast)
-  if (!shelters.find((s) => s.id === shelter.id)) {
+  const idx = shelters.findIndex((s) => s.id === shelter.id);
+  if (idx !== -1) {
+    shelters[idx] = shelter;
+  } else {
     shelters.push(shelter);
   }
 }
 
 /**
- * Load custom shelters dari Supabase saat aplikasi pertama kali dibuka.
- * Dipanggil sekali di App.tsx useEffect, hasilnya di-push ke array shelters.
+ * Hapus shelter dari array in-memory.
  */
-export async function loadCustomSheltersFromSupabase(): Promise<void> {
+export function removeCustomShelter(id: string) {
+  const idx = shelters.findIndex((s) => s.id === id);
+  if (idx !== -1) {
+    shelters.splice(idx, 1);
+  }
+}
+
+/**
+ * Load custom shelters dari Supabase (sumber kebenaran tunggal dari Admin).
+ */
+export async function loadCustomSheltersFromSupabase(): Promise<Shelter[]> {
   try {
     const { data, error } = await supabase
       .from("custom_shelters")
@@ -37,90 +48,43 @@ export async function loadCustomSheltersFromSupabase(): Promise<void> {
         "id, name, lat, lng, capacity, radius_meters, address, custom_message",
       )
       .order("created_at", { ascending: true });
-    if (error || !data) return;
-    data.forEach((row: any) => {
-      const s: Shelter = {
-        id: row.id,
-        name: row.name,
-        lat: row.lat,
-        lng: row.lng,
-        capacity: row.capacity,
-        radiusMeters: row.radius_meters,
-        address: row.address ?? undefined,
-        customMessage: row.custom_message ?? undefined,
-      };
-      if (!shelters.find((existing) => existing.id === s.id)) {
-        shelters.push(s);
-      }
-    });
-  } catch (e) {
-    console.error("[Shelters] loadCustomSheltersFromSupabase failed:", e);
-  }
-}
 
-export async function fetchOsmShelters() {
-  const CACHE_KEY = "aegisOsmShelters";
-  const CACHE_TIME_KEY = "aegisOsmSheltersTime";
-  const ONE_DAY = 24 * 60 * 60 * 1000;
-
-  try {
-    const cachedTime = localStorage.getItem(CACHE_TIME_KEY);
-    const cachedData = localStorage.getItem(CACHE_KEY);
-
-    if (
-      cachedTime &&
-      cachedData &&
-      Date.now() - parseInt(cachedTime) < ONE_DAY
-    ) {
-      const parsed = JSON.parse(cachedData);
-      // add them if not already added
-      const existingIds = new Set(shelters.map((s) => s.id));
-      parsed.forEach((s: Shelter) => {
-        if (!existingIds.has(s.id)) shelters.push(s);
-      });
-      return;
+    if (error || !data) {
+      console.warn("[Shelters] Gagal mengambil shelter dari Supabase:", error);
+      return [...shelters];
     }
 
-    // Fetch from Overpass API (Bounding Box around Palu)
-    const query = `[out:json];(node["amenity"="hospital"](-0.98,119.80,-0.82,119.95);node["amenity"="school"](-0.98,119.80,-0.82,119.95);node["amenity"="place_of_worship"](-0.98,119.80,-0.82,119.95););out body;`;
-    const res = await fetch("https://overpass-api.de/api/interpreter", {
-      method: "POST",
-      body: query,
-    });
-    const data = await res.json();
-
-    const newShelters: Shelter[] = [];
-    data.elements.forEach((el: any) => {
-      if (el.lat && el.lon) {
-        newShelters.push({
-          id: "OSM_" + el.id,
-          name:
-            el.tags.name ||
-            (el.tags.amenity === "hospital"
-              ? "Rumah Sakit"
-              : el.tags.amenity === "school"
-                ? "Sekolah"
-                : "Tempat Ibadah"),
-          lat: el.lat,
-          lng: el.lon,
-          capacity: el.tags.amenity === "hospital" ? 1000 : 500,
-          radiusMeters: 50,
-        });
-      }
+    // Bersihkan semua data shelter lama agar tidak ada shelter liar tersisa
+    shelters.length = 0;
+    data.forEach((row: any) => {
+      shelters.push({
+        id: row.id,
+        name: row.name,
+        lat: Number(row.lat),
+        lng: Number(row.lng),
+        capacity: Number(row.capacity) || 500,
+        radiusMeters: Number(row.radius_meters) || 50,
+        address: row.address ?? undefined,
+        customMessage: row.custom_message ?? undefined,
+      });
     });
 
-    localStorage.setItem(CACHE_KEY, JSON.stringify(newShelters));
-    localStorage.setItem(CACHE_TIME_KEY, Date.now().toString());
-
-    const existingIds = new Set(shelters.map((s) => s.id));
-    newShelters.forEach((s) => {
-      if (!existingIds.has(s.id)) shelters.push(s);
-    });
+    return [...shelters];
   } catch (e) {
-    console.error("Failed to fetch OSM shelters:", e);
+    console.error("[Shelters] loadCustomSheltersFromSupabase failed:", e);
+    return [...shelters];
   }
 }
 
-// Load on initialization (default shelters only; custom shelters loaded async via Supabase in App.tsx)
+// Bersihkan cache usang OpenStreetMap dari localStorage agar tidak mengotori sesi pengguna
+if (typeof window !== "undefined") {
+  try {
+    localStorage.removeItem("aegisOsmShelters");
+    localStorage.removeItem("aegisOsmSheltersTime");
+  } catch {}
+}
+
+// Load shelter resmi dari Supabase saat module diinisialisasi
 loadShelters();
-fetchOsmShelters();
+loadCustomSheltersFromSupabase().catch(() => {});
+

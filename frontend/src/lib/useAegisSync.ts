@@ -549,6 +549,13 @@ const customSheltersChannel = supabase
       listeners.forEach((fn) => fn({ type: "SHELTER_UPDATED", shelter }));
     }
   )
+  .on(
+    "postgres_changes",
+    { event: "DELETE", schema: "public", table: "custom_shelters" },
+    (payload) => {
+      listeners.forEach((fn) => fn({ type: "SHELTER_DELETED", id: payload.old?.id }));
+    }
+  )
   .subscribe();
 
 // Realtime listener untuk INSERT & UPDATE ke hazard_zones

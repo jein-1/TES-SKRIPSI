@@ -3,7 +3,8 @@
 // ═══════════════════════════════════════════════════════════════
 import { useState, useEffect, useRef, useCallback, useMemo, Fragment } from 'react'
 import { Map, MapMarker, MarkerContent, MapRoute, MapGeoJSON, type MapViewport, type MapRef } from '@/components/ui/map'
-import { fetchOsrmRoute, type OsrmRouteData } from '../../lib/osrm'
+import { fetchOsrmRoute, type OsrmRouteData, type OsrmStep } from '../../lib/osrm'
+import { useAegisSync, type AegisSyncEvent } from '../../lib/useAegisSync'
 import {
   AlertTriangle, Navigation2, Phone, ChevronLeft,
   MapPin, Compass, Lock, Unlock, ChevronRight, ArrowRight, Radio, X,
@@ -61,6 +62,35 @@ function bearingLabel(b: number): { label: string; icon: string } {
   if (b < 247.5) return { label: 'Kiri Jauh', icon: '↙' }
   if (b < 292.5) return { label: 'Belok Kiri', icon: '←' }
   return { label: 'Kiri Diagonal', icon: '↖' }
+}
+
+function formatManeuver(step?: OsrmStep, fallbackLabel?: string): { label: string; icon: string; detail: string } {
+  if (!step) return { label: fallbackLabel || 'Terus Lurus', icon: '↑', detail: '' }
+  const mod = step.maneuver.modifier
+  const type = step.maneuver.type
+
+  if (type === 'arrive') {
+    return { label: 'Tiba di Shelter Tujuan', icon: '🏁', detail: step.name ? `di ${step.name}` : '' }
+  }
+
+  let icon = '↑'
+  let action = 'Lurus Terus'
+  if (mod === 'left') { action = 'Belok Kiri'; icon = '←' }
+  else if (mod === 'right') { action = 'Belok Kanan'; icon = '→' }
+  else if (mod === 'slight left') { action = 'Kiri Diagonal'; icon = '↖' }
+  else if (mod === 'slight right') { action = 'Kanan Diagonal'; icon = '↗' }
+  else if (mod === 'sharp left') { action = 'Kiri Tajam'; icon = '↙' }
+  else if (mod === 'sharp right') { action = 'Kanan Tajam'; icon = '↘' }
+  else if (mod === 'uturn') { action = 'Putar Balik'; icon = '↓' }
+
+  const road = step.name ? `ke ${step.name}` : ''
+  const dist = step.distance > 0 ? (step.distance < 1000 ? `${Math.round(step.distance)}m` : `${(step.distance / 1000).toFixed(1)} km`) : ''
+
+  return {
+    label: `${action} ${road}`.trim(),
+    icon,
+    detail: dist ? `dalam ${dist}` : ''
+  }
 }
 
 // ── MAIN ──────────────────────────────────────────────────────
@@ -270,27 +300,44 @@ export default function NavigatePage({ routes, selectedRoute, tsunamiAlert, user
   }
   const emergency = tsunamiAlert
 
-  const activeRoutes = routes.length > 0 ? routes : (effectivePosRaw ? findOptimalEvacuationRoutes(effectivePosRaw[0], effectivePosRaw[1], 99, settings?.algorithm ?? 'dijkstra') : [])
-  const nearestIdx = effectivePosRaw
-    ? (() => {
-        if (activeRoutes.length === 0) return 0
-        let minDist = Infinity, idx = 0
-        activeRoutes.forEach((r, i) => {
-          const sp = r.coordinates[r.coordinates.length - 1] as [number, number]
-          if (!sp) return
-          const d = haversineM(effectivePosRaw, sp)
-          if (d < minDist) { minDist = d; idx = i }
-        })
-        return idx
-      })()
-    : selectedRoute
+  const [shelterVersion, setShelterVersion] = useState(0)
+
+  useAegisSync((event: AegisSyncEvent) => {
+    if (
+      event.type === 'SHELTER_ADDED' ||
+      event.type === 'SHELTER_UPDATED' ||
+      event.type === 'SHELTER_DELETED'
+    ) {
+      setShelterVersion(v => v + 1)
+    }
+  })
+
+  const activeRoutes = useMemo(() => {
+    if (routes.length > 0) return routes
+    if (effectivePosRaw) {
+      return findOptimalEvacuationRoutes(
+        effectivePosRaw[0],
+        effectivePosRaw[1],
+        99,
+        settings?.algorithm ?? 'dijkstra'
+      )
+    }
+    return []
+  }, [routes, effectivePosRaw?.[0], effectivePosRaw?.[1], settings?.algorithm, shelterVersion])
 
   useEffect(() => {
-    setActiveRouteIdx(nearestIdx)
-  }, [nearestIdx])
+    if (selectedRoute !== undefined && selectedRoute >= 0) {
+      setActiveRouteIdx(selectedRoute)
+    }
+  }, [selectedRoute])
 
-  const route       = activeRoutes[activeRouteIdx]
-  const shelterPosRaw  = route ? [shelters.find(s => s.id === route.shelterId)?.lat ?? route.coordinates[route.coordinates.length-1]?.[0], shelters.find(s => s.id === route.shelterId)?.lng ?? route.coordinates[route.coordinates.length-1]?.[1]] as [number, number] : undefined
+  const route       = activeRoutes[activeRouteIdx] || activeRoutes[0]
+  const shelter     = route ? shelters.find(s => s.id === route.shelterId || s.name === route.shelterName) : undefined
+  const shelterPosRaw: [number, number] | undefined = shelter
+    ? [shelter.lat, shelter.lng]
+    : (route?.coordinates && route.coordinates.length > 0
+        ? [route.coordinates[route.coordinates.length - 1][0], route.coordinates[route.coordinates.length - 1][1]]
+        : undefined)
   const shelterPos: [number, number] | undefined = shelterPosRaw ? [shelterPosRaw[1], shelterPosRaw[0]] : undefined
 
   // Fetch OSRM Route when origin/destination changes
@@ -322,6 +369,19 @@ export default function NavigatePage({ routes, selectedRoute, tsunamiAlert, user
   const distLabel   = osrmRoutes.length > 0 ? (osrmRoutes[0].distance < 1000 ? `${Math.round(osrmRoutes[0].distance)}m` : `${(osrmRoutes[0].distance/1000).toFixed(1)} km`) : (distanceM < 1000 ? `${Math.round(distanceM)}m` : `${(distanceM/1000).toFixed(1)} km`)
   const etaMin      = osrmRoutes.length > 0 ? Math.round(osrmRoutes[0].duration / 60) : Math.max(1, Math.ceil(distanceM / 1000 / 5 * 60))
   const { label: mainDir, icon: dirIcon } = bearingLabel(heading)
+
+  // Turn-by-turn navigation data from real OSRM steps
+  const osrmSteps = osrmRoutes[0]?.steps || []
+  const currentStep = osrmSteps.find(s => s.maneuver.type !== 'depart') || osrmSteps[0]
+  const currentStepIdx = currentStep ? osrmSteps.indexOf(currentStep) : -1
+  const nextStep = currentStepIdx >= 0 && currentStepIdx + 1 < osrmSteps.length ? osrmSteps[currentStepIdx + 1] : undefined
+
+  const primaryNav = currentStep
+    ? formatManeuver(currentStep, mainDir)
+    : { label: mainDir, icon: dirIcon, detail: '' }
+  const secondaryNav = nextStep
+    ? formatManeuver(nextStep)
+    : null
 
   useEffect(() => {
     const handler = (e: any) => {
@@ -543,29 +603,52 @@ export default function NavigatePage({ routes, selectedRoute, tsunamiAlert, user
             </Fragment>
           )})}
 
-          {/* Shelters */}
-          {shelters.map((s, i) => {
-            const isNearest = routes.length > 0 && routes[activeRouteIdx]?.shelterName === s.name
+          {/* Shelters — Hanya dari pengaturan Admin */}
+          {shelters.map((s) => {
+            const isSelected = (route?.shelterId === s.id) || (route?.shelterName === s.name)
             const pos: [number, number] = [s.lng, s.lat]
-            const bg = isNearest && emergency ? '#ef4444' : isNearest ? '#22c55e' : '#334155'
-            const shadow = isNearest ? (emergency ? 'rgba(239,68,68,0.7)' : 'rgba(34,197,94,0.7)') : 'none'
+            const bg = isSelected && emergency ? '#ef4444' : isSelected ? '#22c55e' : '#1e293b'
+            const shadow = isSelected ? (emergency ? 'rgba(239,68,68,0.8)' : 'rgba(34,197,94,0.8)') : 'rgba(0,0,0,0.5)'
             return (
               <MapMarker key={s.id} longitude={pos[0]} latitude={pos[1]}>
                 <MarkerContent>
-                  <div style={{
-                    width:30, height:30, background:bg, border:'2.5px solid #fff', borderRadius:'50%',
-                    display:'flex', alignItems:'center', justifyContent:'center', boxShadow:`0 0 12px ${shadow}`,
-                    fontSize:13, lineHeight:1
-                  }}>🏠</div>
+                  <div
+                    onClick={() => {
+                      const rIdx = activeRoutes.findIndex(r => r.shelterId === s.id || r.shelterName === s.name)
+                      if (rIdx !== -1) setActiveRouteIdx(rIdx)
+                    }}
+                    className="cursor-pointer group relative flex flex-col items-center"
+                    title={`${s.name} (Kapasitas: ${s.capacity} orang)`}
+                  >
+                    <div style={{
+                      width: 32, height: 32, background: bg, border: isSelected ? '2.5px solid #fff' : '2px solid rgba(255,255,255,0.7)',
+                      borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center',
+                      boxShadow: `0 0 14px ${shadow}`, fontSize: 14, lineHeight: 1,
+                      transform: isSelected ? 'scale(1.15)' : 'scale(1)',
+                      transition: 'transform 0.2s'
+                    }}>
+                      🏠
+                    </div>
+                    <div className="mt-1 bg-black/85 text-[9px] font-mono font-bold text-white px-2 py-0.5 rounded border border-slate-700/80 whitespace-nowrap shadow-md pointer-events-none">
+                      {s.name}
+                    </div>
+                  </div>
                 </MarkerContent>
               </MapMarker>
             )
           })}
 
-          {/* Routes (OSRM or straight line) - HANYA MUNCUL SAAT DARURAT */}
-          {emergency && (osrmRoutes.length > 0 ? (
+          {/* Routes (OSRM or Dijkstra road graph or straight line) - HANYA MUNCUL SAAT DARURAT */}
+          {emergency && (osrmRoutes.length > 0 && osrmRoutes[0].coordinates.length > 1 ? (
             <MapRoute 
               coordinates={osrmRoutes[0].coordinates} 
+              color={emergency ? "#ef4444" : "#6366f1"}
+              width={6}
+              opacity={0.9}
+            />
+          ) : (route?.coordinates && route.coordinates.length > 1 ? (
+            <MapRoute 
+              coordinates={route.coordinates.map(c => [c[1], c[0]])} 
               color={emergency ? "#ef4444" : "#6366f1"}
               width={6}
               opacity={0.9}
@@ -580,7 +663,7 @@ export default function NavigatePage({ routes, selectedRoute, tsunamiAlert, user
                 dashArray={[2, 2]}
               />
             )
-          ))}
+          )))}
 
           {/* User Location Marker with Flashlight */}
           {effectivePos && (
@@ -850,11 +933,13 @@ export default function NavigatePage({ routes, selectedRoute, tsunamiAlert, user
         <div className="shrink-0 px-4 py-2 text-center border-t border-red-900/30" style={{background:'#100505'}}>
           <div className="flex items-center justify-center gap-3">
             <div className="w-12 h-12 rounded-2xl bg-red-600/20 border border-red-500/30 flex items-center justify-center shrink-0">
-              <span className="text-2xl font-black text-red-300">{dirIcon}</span>
+              <span className="text-2xl font-black text-red-300">{primaryNav.icon}</span>
             </div>
             <div className="text-left">
-              <h1 className="text-xl font-black text-white leading-none">{mainDir}</h1>
-              <p className="text-xs text-slate-400">{distLabel} → {route.shelterName}</p>
+              <h1 className="text-xl font-black text-white leading-none">{primaryNav.label}</h1>
+              <p className="text-xs text-slate-400">
+                {distLabel} → {route.shelterName} {primaryNav.detail ? `(${primaryNav.detail})` : ''}
+              </p>
             </div>
           </div>
         </div>
@@ -868,7 +953,7 @@ export default function NavigatePage({ routes, selectedRoute, tsunamiAlert, user
             <div>
               <p className="text-[9px] text-red-400 uppercase tracking-widest font-bold">Langkah Berikutnya</p>
               <p className="text-xs font-bold text-white">
-                {heading < 180 ? 'Belok Kanan di Persimpangan' : 'Belok Kiri di Persimpangan'}
+                {secondaryNav ? `${secondaryNav.label} ${secondaryNav.detail ? `(${secondaryNav.detail})` : ''}` : 'Ikuti jalur evakuasi menuju shelter'}
               </p>
             </div>
             <MapPin className="w-3.5 h-3.5 text-slate-600 ml-auto shrink-0"/>

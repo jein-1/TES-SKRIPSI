@@ -199,8 +199,12 @@ export function findOptimalEvacuationRoutes(
   })
 
   return allRoutes
-    .sort((a, b) => a.haversineDistance - b.haversineDistance)
-    .slice(0, maxRoutes)
+    .sort((a, b) => {
+      const distA = isFinite(a.totalDistance) ? a.totalDistance : a.haversineDistance;
+      const distB = isFinite(b.totalDistance) ? b.totalDistance : b.haversineDistance;
+      return distA - distB;
+    })
+    .slice(0, maxRoutes);
 }
 
 /** Fallback: cari shelter terdekat hanya berdasarkan Haversine (tanpa Dijkstra). */

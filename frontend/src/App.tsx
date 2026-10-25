@@ -1415,6 +1415,11 @@ function App() {
         setSelectedUserInfo((prev) => prev?.id === ev.id ? { ...updatedUser } : prev);
       }
     }
+    // Shelter ditambahkan oleh admin (dari device lain) — sync tanpa refresh
+    if (event.type === "SHELTER_ADDED" && event.shelter) {
+      addCustomShelter(event.shelter as any);
+      setShelterVersion((v) => v + 1);
+    }
     // Shelter diperbarui oleh admin (dari device lain) — sync tanpa refresh
     if (event.type === "SHELTER_UPDATED" && event.shelter) {
       const updated = event.shelter as any;
@@ -1538,7 +1543,20 @@ function App() {
     // 4b. Load custom shelters dari Supabase & Road Network
     loadRoadNetwork().then(success => setNetworkFailed(!success));
     aegisApi.fetchCustomShelters().then(data => {
+      shelters.length = 0;
       data.forEach(s => addCustomShelter(s as any));
+      setShelterVersion(v => v + 1);
+      const curPos = userPosition || (typeof window !== "undefined" && localStorage.getItem('atlas_user_position') ? JSON.parse(localStorage.getItem('atlas_user_position')!) : null);
+      if (curPos) {
+        const routeResults = findOptimalEvacuationRoutes(
+          curPos[0],
+          curPos[1],
+          99,
+          settings.algorithm as 'dijkstra' | 'haversine',
+        );
+        lastRouteCalcResultsRef.current = routeResults;
+        setRoutes(routeResults);
+      }
     });
     aegisApi.fetchHazardZones().then(data => {
       hazardZones.length = 0;

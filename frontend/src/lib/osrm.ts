@@ -1,12 +1,23 @@
+export interface OsrmStep {
+  maneuver: {
+    type: string;
+    modifier?: string;
+  };
+  name: string;
+  distance: number;
+  duration: number;
+}
+
 export interface OsrmRouteData {
   coordinates: [number, number][]; // [lng, lat] format for MapLibre
   duration: number; // seconds
   distance: number; // meters
+  steps?: OsrmStep[];
 }
 
 /** Fetch route from primary OSRM public server (foot profile) */
 async function tryOsrm(startLng: number, startLat: number, endLng: number, endLat: number): Promise<OsrmRouteData[]> {
-  const url = `https://router.project-osrm.org/route/v1/foot/${startLng},${startLat};${endLng},${endLat}?overview=full&geometries=geojson&alternatives=true`;
+  const url = `https://router.project-osrm.org/route/v1/foot/${startLng},${startLat};${endLng},${endLat}?overview=full&geometries=geojson&steps=true&alternatives=true`;
   const response = await fetch(url, { signal: AbortSignal.timeout(8000) });
   if (!response.ok) throw new Error(`OSRM HTTP ${response.status}`);
   const data = await response.json();
@@ -15,6 +26,15 @@ async function tryOsrm(startLng: number, startLat: number, endLng: number, endLa
     coordinates: route.geometry.coordinates as [number, number][],
     duration: route.duration,
     distance: route.distance,
+    steps: route.legs?.[0]?.steps?.map((s: any) => ({
+      maneuver: {
+        type: s.maneuver?.type || 'turn',
+        modifier: s.maneuver?.modifier || 'straight',
+      },
+      name: s.name || '',
+      distance: s.distance || 0,
+      duration: s.duration || 0,
+    })) || [],
   }));
 }
 
