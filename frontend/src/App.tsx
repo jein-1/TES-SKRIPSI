@@ -795,12 +795,22 @@ function App() {
   >(() => {
     try {
       const s = localStorage.getItem("evacuationHistory");
-      if (s)
-        return JSON.parse(s).map((r: any) => ({
-          ...r,
-          timestamp: new Date(r.timestamp),
-          eventName: r.eventName ?? r.routeName ?? "Unknown Event",
-        }));
+      if (s) {
+        const parsed = JSON.parse(s);
+        const migrated = parsed.map((r: any) => {
+          const isReal = r.type === "real" && (r.eventName?.toLowerCase().includes("bmkg") || r.eventName?.toLowerCase().includes("tsunami warning"));
+          return {
+            ...r,
+            type: isReal ? "real" : "simulation",
+            timestamp: new Date(r.timestamp),
+            eventName: r.eventName ?? r.routeName ?? "Simulasi Rute Evakuasi",
+          };
+        });
+        try {
+          localStorage.setItem("evacuationHistory", JSON.stringify(migrated));
+        } catch (_) {}
+        return migrated;
+      }
     } catch (_) {}
     return [];
   });
@@ -930,9 +940,9 @@ function App() {
       const best = routeResults[0];
       const sector = (Math.abs(Math.floor(pos[0] * 17 + pos[1] * 13)) % 12) + 1;
       const eventName =
-        type === "simulation"
-          ? `Coastal Surge: Sector ${sector} Evacuation`
-          : `Live Navigation: Route Alpha`;
+        type === "real"
+          ? `BMKG Peringatan Dini: Tsunami Sektor ${sector}`
+          : `Simulasi Rute Evakuasi: Sektor ${sector}`;
       const record: EvacuationRecord = {
         id: Date.now().toString(),
         timestamp: new Date(),
@@ -1102,9 +1112,10 @@ function App() {
             if (!panelUserClosedRef.current) {
               setShowPanel(true);
             }
+            const isRealAlert = typeof window !== "undefined" && localStorage.getItem("aegisRealTsunami") === "true";
             saveHistoryRecord(
               routeResults,
-              tsunamiAlertRef.current ? "simulation" : "real",
+              isRealAlert ? "real" : "simulation",
               newPos,
             );
           } else {
@@ -1324,7 +1335,8 @@ function App() {
         setSelectedRoute(0);
         setShowPanel(true);
         setIsCalculating(false);
-        saveHistoryRecord(routeResults, "real", [lat, lng]);
+        const isRealAlert = typeof window !== "undefined" && localStorage.getItem("aegisRealTsunami") === "true";
+        saveHistoryRecord(routeResults, isRealAlert ? "real" : "simulation", [lat, lng]);
       }, 300);
     },
     [gpsTracking, saveHistoryRecord, settings.algorithm],
@@ -1752,6 +1764,7 @@ function App() {
               gpsTracking={gpsTracking}
               tsunamiAlert={tsunamiAlert}
               onOpenProfile={() => setShowProfileModal(true)}
+              userPosition={userPosition}
             />
           )}
           {activePage === "navigate" && (
@@ -2391,7 +2404,7 @@ function App() {
                 A.T.L.A.S
               </h1>
               <p className="text-[9px] text-nerv-orange font-mono mt-0.5 truncate">
-                ADAPTIVE TRACKING, LOCATION & ALERT SYSTEM · {userLocationName ? userLocationName.split(' // ')[0] : 'PALU'}
+                AUTONOMOUS THREAT LOCATION & ALERT SYSTEM · {userLocationName ? userLocationName.split(' // ')[0] : 'PALU'}
               </p>
             </div>
           </div>
@@ -2477,11 +2490,11 @@ function App() {
                 A.T.L.A.S
               </h1>
               <span className="text-[10px] text-slate-400 font-mono hidden xl:inline">
-                (Adaptive Tracking, Location & Alert System)
+                (Autonomous Threat Location & Alert System)
               </span>
             </div>
             <p className="text-[9px] text-nerv-orange font-mono mt-0.5">
-              ADAPTIVE TRACKING, LOCATION & ALERT SYSTEM · {userLocationName ? userLocationName.split(' // ')[0] : 'PALU'}
+              AUTONOMOUS THREAT LOCATION & ALERT SYSTEM · {userLocationName ? userLocationName.split(' // ')[0] : 'PALU'}
             </p>
           </div>
         </div>
@@ -2587,7 +2600,7 @@ function App() {
                     A.T.L.A.S
                   </h3>
                   <p className="text-[9px] text-slate-400 font-mono tracking-tight leading-tight whitespace-normal">
-                    Adaptive Tracking, Location & Alert System
+                    Autonomous Threat Location & Alert System
                   </p>
                 </div>
                 <nav className="flex-1 mt-4">
@@ -3358,7 +3371,11 @@ function App() {
                   key={`${shelter.id}-${shelterVersion}`}
                   longitude={shelter.lng}
                   latitude={shelter.lat}
-                  onClick={() => setSelectedShelterId(isSelected ? null : shelter.id)}
+                  onClick={() => {
+                    setSelectedShelterId(shelter.id);
+                    setViewport((v) => ({ ...v, center: [shelter.lng, shelter.lat], zoom: 17 }));
+                    adminMapRef.current?.flyTo({ center: [shelter.lng, shelter.lat], zoom: 17, duration: 1200, essential: true });
+                  }}
                 >
                   <MarkerContent>
                     <div style={{
@@ -3490,10 +3507,12 @@ function App() {
                       if (targetShelter) {
                         setViewport((v) => ({ ...v, center: [targetShelter.lng, targetShelter.lat], zoom: 17 }));
                         setSelectedShelterId(targetShelter.id);
+                        adminMapRef.current?.flyTo({ center: [targetShelter.lng, targetShelter.lat], zoom: 17, duration: 1200, essential: true });
                         setShowPanel(false);
                       } else if (route.coordinates.length > 0) {
                         const ep = route.coordinates[route.coordinates.length - 1];
                         setViewport((v) => ({ ...v, center: [ep[0], ep[1]], zoom: 17 }));
+                        adminMapRef.current?.flyTo({ center: [ep[0], ep[1]], zoom: 17, duration: 1200, essential: true });
                         setShowPanel(false);
                       }
                     };
@@ -3699,9 +3718,11 @@ function App() {
                     if (targetShelter) {
                       setViewport((v) => ({ ...v, center: [targetShelter.lng, targetShelter.lat], zoom: 17 }));
                       setSelectedShelterId(targetShelter.id);
+                      adminMapRef.current?.flyTo({ center: [targetShelter.lng, targetShelter.lat], zoom: 17, duration: 1200, essential: true });
                     } else if (route.coordinates.length > 0) {
                       const ep = route.coordinates[route.coordinates.length - 1];
                       setViewport((v) => ({ ...v, center: [ep[0], ep[1]], zoom: 17 }));
+                      adminMapRef.current?.flyTo({ center: [ep[0], ep[1]], zoom: 17, duration: 1200, essential: true });
                     }
                   };
                   return (
@@ -4099,7 +4120,7 @@ function App() {
                 CONFIGURATION
               </h2>
               <p className="text-[11px] text-nerv-orange font-mono mt-1 font-bold">
-                A.T.L.A.S (Adaptive Tracking, Location & Alert System)
+                A.T.L.A.S (Autonomous Threat Location & Alert System)
               </p>
               <p className="text-[11px] text-slate-500 mt-0.5 font-mono">
                 Operational Unit: {terminalId} | STATUS:{" "}
@@ -5057,22 +5078,14 @@ function App() {
                     </div>
                   )}
 
-                  {/* Stats row */}
-                  <div className="grid grid-cols-3 gap-2">
-                    <div className="p-2.5 rounded-xl bg-slate-900/60 border border-slate-800 text-center">
-                      <p className="text-[8px] text-slate-500 uppercase tracking-wider font-bold mb-1">KAPASITAS</p>
-                      <p className="text-sm font-black text-white">{s.capacity.toLocaleString('id-ID')}</p>
-                      <p className="text-[8px] text-slate-600 font-bold">orang</p>
+                  {/* Stats row - Kapasitas (Radius & Koordinat diabaikan sesuai instruksi) */}
+                  <div className="p-3 rounded-xl bg-slate-900/60 border border-slate-800 flex items-center justify-between">
+                    <div>
+                      <p className="text-[9px] text-slate-500 uppercase tracking-wider font-bold mb-0.5">KAPASITAS DAYA TAMPUNG</p>
+                      <p className="text-base font-black text-white">{s.capacity.toLocaleString('id-ID')} <span className="text-xs text-slate-400 font-normal">orang</span></p>
                     </div>
-                    <div className="p-2.5 rounded-xl bg-slate-900/60 border border-slate-800 text-center">
-                      <p className="text-[8px] text-slate-500 uppercase tracking-wider font-bold mb-1">RADIUS GPS</p>
-                      <p className="text-sm font-black text-emerald-400">{s.radiusMeters ?? 50}</p>
-                      <p className="text-[8px] text-slate-600 font-bold">meter</p>
-                    </div>
-                    <div className="p-2.5 rounded-xl bg-slate-900/60 border border-slate-800 text-center">
-                      <p className="text-[8px] text-slate-500 uppercase tracking-wider font-bold mb-1">KOORDINAT</p>
-                      <p className="text-[9px] font-mono text-slate-400">{s.lat.toFixed(4)}</p>
-                      <p className="text-[9px] font-mono text-slate-400">{s.lng.toFixed(4)}</p>
+                    <div className="px-2.5 py-1 rounded-lg bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 font-mono text-[10px] font-bold">
+                      ZONA AMAN
                     </div>
                   </div>
 
@@ -5082,6 +5095,7 @@ function App() {
                       <button
                         onClick={() => {
                           setViewport(v => ({ ...v, center: [s.lng, s.lat], zoom: 17 }));
+                          adminMapRef.current?.flyTo({ center: [s.lng, s.lat], zoom: 17, duration: 1200, essential: true });
                         }}
                         className="flex-1 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 transition-colors"
                       >

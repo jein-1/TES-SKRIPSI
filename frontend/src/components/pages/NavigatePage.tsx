@@ -13,7 +13,7 @@ import {
 import { motion, AnimatePresence } from 'motion/react'
 import { findOptimalEvacuationRoutes, type RouteResult } from "../../lib/evacuation";
 import type { GempaData } from "../../lib/useBMKG";
-import { shelters, hazardZones } from '../../lib/evacuation'
+import { shelters, hazardZones, type Shelter } from '../../lib/evacuation'
 import { Geolocation } from '@capacitor/geolocation'
 import type * as GeoJSON from 'geojson'
 import { polygonCentroid } from '../../lib/zoneOffset'
@@ -108,6 +108,7 @@ export default function NavigatePage({ routes, selectedRoute, tsunamiAlert, user
   
   // OSRM Data
   const [osrmRoutes, setOsrmRoutes] = useState<OsrmRouteData[]>([])
+  const [inspectingShelter, setInspectingShelter] = useState<Shelter | null>(null)
 
   const [viewport, setViewport] = useState<MapViewport>({
     center: [119.8577, -0.8917], // MapLibre uses [lng, lat]
@@ -352,9 +353,9 @@ export default function NavigatePage({ routes, selectedRoute, tsunamiAlert, user
   const computedBearing = (effectivePosRaw && shelterPosRaw) ? getBearing(effectivePosRaw, shelterPosRaw) : 0
   const heading = deviceHeading ?? computedBearing
 
-  // Map viewport control
+  // Map viewport control (locked to user position ONLY when not inspecting a shelter)
   useEffect(() => {
-    if (effectivePos) {
+    if (effectivePos && !inspectingShelter) {
       setViewport(v => ({
         ...v,
         center: effectivePos,
@@ -363,7 +364,7 @@ export default function NavigatePage({ routes, selectedRoute, tsunamiAlert, user
         bearing: (emergency && headingLocked) ? heading : v.bearing
       }))
     }
-  }, [effectivePos?.[0], effectivePos?.[1], emergency, heading, headingLocked])
+  }, [effectivePos?.[0], effectivePos?.[1], emergency, heading, headingLocked, inspectingShelter])
 
   const distanceM   = (effectivePosRaw && shelterPosRaw) ? haversineM(effectivePosRaw, shelterPosRaw) : (route?.totalDistance ? route.totalDistance * 1000 : 0)
   const distLabel   = osrmRoutes.length > 0 ? (osrmRoutes[0].distance < 1000 ? `${Math.round(osrmRoutes[0].distance)}m` : `${(osrmRoutes[0].distance/1000).toFixed(1)} km`) : (distanceM < 1000 ? `${Math.round(distanceM)}m` : `${(distanceM/1000).toFixed(1)} km`)
@@ -614,8 +615,11 @@ export default function NavigatePage({ routes, selectedRoute, tsunamiAlert, user
                 <MarkerContent>
                   <div
                     onClick={() => {
-                      const rIdx = activeRoutes.findIndex(r => r.shelterId === s.id || r.shelterName === s.name)
-                      if (rIdx !== -1) setActiveRouteIdx(rIdx)
+                      setInspectingShelter(s);
+                      setViewport(v => ({ ...v, center: [s.lng, s.lat], zoom: 16.5 }));
+                      mapRef.current?.flyTo({ center: [s.lng, s.lat], zoom: 16.5, duration: 1000, essential: true });
+                      const rIdx = activeRoutes.findIndex(r => r.shelterId === s.id || r.shelterName === s.name);
+                      if (rIdx !== -1) setActiveRouteIdx(rIdx);
                     }}
                     className="cursor-pointer group relative flex flex-col items-center"
                     title={`${s.name} (Kapasitas: ${s.capacity} orang)`}
@@ -1059,6 +1063,83 @@ export default function NavigatePage({ routes, selectedRoute, tsunamiAlert, user
             ) : (
               <p className="text-xs text-slate-500 italic">Tidak ada deskripsi tambahan.</p>
             )}
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* ─── SHELTER INFO POPUP (GAMBAR 2) ─── */}
+      <AnimatePresence>
+        {inspectingShelter && (
+          <motion.div
+            initial={{ opacity: 0, y: 24, scale: 0.95 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: 24, scale: 0.95 }}
+            className="fixed bottom-20 left-4 right-4 md:left-auto md:right-6 md:w-96 z-[2500] bg-[#0d1929]/95 backdrop-blur-md border border-indigo-500/30 rounded-2xl shadow-[0_8px_40px_rgba(99,102,241,0.3)] overflow-hidden"
+          >
+            <div className="h-0.5 w-full bg-gradient-to-r from-indigo-700 via-indigo-400 to-indigo-700" />
+            <div className="p-4">
+              <div className="flex items-start justify-between gap-3 mb-3">
+                <div className="flex items-center gap-3 min-w-0">
+                  <div className="w-10 h-10 rounded-xl bg-indigo-500/20 border border-indigo-500/30 flex items-center justify-center text-xl shrink-0">
+                    🏠
+                  </div>
+                  <div className="min-w-0">
+                    <p className="text-[9px] text-indigo-400 font-bold uppercase tracking-widest mb-0.5">
+                      {inspectingShelter.id.startsWith('C') ? 'SHELTER KUSTOM' : 'SHELTER RESMI'}
+                    </p>
+                    <h3 className="text-white font-black text-sm leading-tight truncate">
+                      {inspectingShelter.name}
+                    </h3>
+                  </div>
+                </div>
+                <button
+                  onClick={() => {
+                    setInspectingShelter(null);
+                    if (effectivePos) {
+                      setViewport(v => ({ ...v, center: effectivePos, zoom: 16 }));
+                      mapRef.current?.flyTo({ center: effectivePos, zoom: 16, duration: 1000, essential: true });
+                    }
+                  }}
+                  className="w-7 h-7 rounded-lg bg-slate-800 hover:bg-slate-700 flex items-center justify-center text-slate-400 hover:text-white transition-colors shrink-0"
+                >
+                  <X className="w-3.5 h-3.5" />
+                </button>
+              </div>
+
+              {inspectingShelter.address && (
+                <div className="flex items-start gap-2.5 p-3 rounded-xl bg-slate-900/60 border border-slate-800 mb-2.5">
+                  <MapPin className="w-3.5 h-3.5 text-indigo-400 shrink-0 mt-0.5" />
+                  <div className="min-w-0">
+                    <p className="text-[9px] text-slate-500 uppercase tracking-wider font-bold mb-0.5">ALAMAT</p>
+                    <p className="text-xs text-slate-300 leading-snug">{inspectingShelter.address}</p>
+                  </div>
+                </div>
+              )}
+
+              {/* Stats - Kapasitas (Radius & Koordinat diabaikan sesuai instruksi) */}
+              <div className="p-3 rounded-xl bg-slate-900/60 border border-slate-800 flex items-center justify-between mb-3">
+                <div>
+                  <p className="text-[9px] text-slate-500 uppercase tracking-wider font-bold mb-0.5">KAPASITAS DAYA TAMPUNG</p>
+                  <p className="text-sm font-black text-white">{inspectingShelter.capacity.toLocaleString('id-ID')} <span className="text-xs text-slate-400 font-normal">orang</span></p>
+                </div>
+                <div className="px-2.5 py-1 rounded-lg bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 font-mono text-[10px] font-bold">
+                  ZONA AMAN
+                </div>
+              </div>
+
+              <div className="flex gap-2">
+                <button
+                  onClick={() => {
+                    const rIdx = activeRoutes.findIndex(r => r.shelterId === inspectingShelter.id || r.shelterName === inspectingShelter.name);
+                    if (rIdx !== -1) setActiveRouteIdx(rIdx);
+                    setInspectingShelter(null);
+                  }}
+                  className="flex-1 py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 transition-colors shadow-lg shadow-indigo-600/30"
+                >
+                  <Navigation2 className="w-3.5 h-3.5" /> Arahkan Rute ke Shelter Ini
+                </button>
+              </div>
+            </div>
           </motion.div>
         )}
       </AnimatePresence>

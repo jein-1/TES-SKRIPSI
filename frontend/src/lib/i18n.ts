@@ -49,7 +49,8 @@ export function useLanguage() {
 
 export const translations = {
   id: {
-    fullName: 'Adaptive Tracking, Location & Alert System',
+    fullName: 'Autonomous Threat Location & Alert System',
+    fullNameSub: 'Sistem Otonom Pemetaan Ancaman Bahaya dan Peringatan Darurat',
     systemTelemetry: 'A.T.L.A.S // SISTEM TELEMETRI OTOMONOM',
     detectingLocation: 'Mendeteksi lokasi Anda...',
     locationPermissionRequired: 'Izin Lokasi Diperlukan (Aktifkan GPS)',
@@ -87,7 +88,7 @@ export const translations = {
     tacticalMap: 'PETA TAKTIS',
     defconStatus: 'STATUS DEFCON',
     defconNormal: 'LEVEL 1 // STANDBY NORMAL',
-    allSensorsNominal: 'SEMUA SENSOR NOMINAL',
+    allSensorsNominal: 'SEMUA SENSOR NORMAL',
     reportSafetyStatus: 'LAPOR STATUS KESELAMATAN',
     reportSafetyDesc: 'Konfirmasikan kondisi keselamatan Anda ke Pusat Komando A.T.L.A.S dan grup keluarga.',
     iAmSafe: 'SAYA AMAN',
@@ -111,7 +112,8 @@ export const translations = {
     ipAddress: 'Alamat IP'
   },
   en: {
-    fullName: 'Adaptive Tracking, Location & Alert System',
+    fullName: 'Autonomous Threat Location & Alert System',
+    fullNameSub: 'Autonomous Hazard Mapping and Emergency Alert System',
     systemTelemetry: 'A.T.L.A.S // SYSTEM TELEMETRY',
     detectingLocation: 'Detecting your location...',
     locationPermissionRequired: 'Location Permission Required (Enable GPS)',
@@ -149,7 +151,7 @@ export const translations = {
     tacticalMap: 'TACTICAL MAP',
     defconStatus: 'DEFCON STATUS',
     defconNormal: 'LEVEL 1 // STANDBY NORMAL',
-    allSensorsNominal: 'ALL SENSORS NOMINAL',
+    allSensorsNominal: 'ALL SENSORS NORMAL',
     reportSafetyStatus: 'REPORT SAFETY STATUS',
     reportSafetyDesc: 'Confirm your safety status to A.T.L.A.S Command Center and family units.',
     iAmSafe: 'I AM SAFE',

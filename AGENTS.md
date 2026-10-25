@@ -1,14 +1,16 @@
-# A.T.L.A.S — Adaptive Tracking, Location & Alert System
+# A.T.L.A.S — Autonomous Threat Location & Alert System
+# (Sistem Otonom Pemetaan Ancaman Bahaya dan Peringatan Darurat)
 
 ## PERATURAN MUTLAK & PANDUAN SISTEM
 1. **PROYEK INI BUKAN SKRIPSI (NOT A SKRIPSI).**
    - JANGAN PERNAH menyebut, mengasumsikan, atau mengaitkan proyek ini dengan "skripsi", tugas akhir, tesis, kuliah, atau akademis.
    - JANGAN PERNAH menyebut "dosen", "dosen penguji", "sidang", "ujian", dll.
-   - Proyek ini adalah sistem pertahanan dan telemetri evakuasi bencana real-time berstandar profesional: **A.T.L.A.S** (Adaptive Tracking, Location & Alert System).
+   - Proyek ini adalah sistem pertahanan dan telemetri evakuasi bencana real-time berstandar profesional: **A.T.L.A.S** (Autonomous Threat Location & Alert System / Sistem Otonom Pemetaan Ancaman Bahaya dan Peringatan Darurat).
    - JANGAN PERNAH menyisipkan kata "skripsi" di dalam kode, komentar, dokumentasi, maupun balasan pesan.
 
 2. **BRANDING & TAMPILAN**
-   - Nama Resmi: **A.T.L.A.S** (Adaptive Tracking, Location & Alert System).
+   - Nama Resmi: **A.T.L.A.S** (Autonomous Threat Location & Alert System)
+     Subtitle / Bahasa: **Sistem Otonom Pemetaan Ancaman Bahaya dan Peringatan Darurat**
    - Tema: NERV Tactical Dark Aesthetic (`#07090E`, aksen `#FF5722`, font monospaced JetBrains Mono).
    - Kebijakan Perangkat: 1 Perangkat Fisik = 1 Registrasi Identitas Resmi Permanen.
 

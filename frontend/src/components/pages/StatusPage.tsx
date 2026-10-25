@@ -10,49 +10,80 @@ import { useLanguage } from '../../lib/i18n'
 
 const PALU_CENTER: [number, number] = [-0.8917, 119.8577]
 
-function MiniMap() {
+function MiniMap({ userPosition }: { userPosition?: [number, number] | null }) {
   const { t } = useLanguage()
-  const [pos, setPos] = useState<[number, number] | null>(null)
+  const [pos, setPos] = useState<[number, number] | null>(() => {
+    if (userPosition && !isNaN(userPosition[0]) && !isNaN(userPosition[1])) {
+      return [userPosition[1], userPosition[0]] // [lng, lat]
+    }
+    try {
+      const saved = localStorage.getItem('atlas_user_position')
+      if (saved) {
+        const parsed = JSON.parse(saved)
+        if (Array.isArray(parsed) && parsed.length >= 2) {
+          return [parsed[1], parsed[0]]
+        }
+      }
+    } catch {}
+    return [PALU_CENTER[1], PALU_CENTER[0]]
+  })
+
+  useEffect(() => {
+    if (userPosition && !isNaN(userPosition[0]) && !isNaN(userPosition[1])) {
+      setPos([userPosition[1], userPosition[0]])
+    }
+  }, [userPosition?.[0], userPosition?.[1]])
 
   useEffect(() => {
     if (!navigator.geolocation) return
-    navigator.geolocation.getCurrentPosition(
-      p => setPos([p.coords.longitude, p.coords.latitude]),
+    const gId = navigator.geolocation.getCurrentPosition(
+      p => {
+        if (!userPosition) {
+          setPos([p.coords.longitude, p.coords.latitude])
+        }
+      },
       () => {},
-      { enableHighAccuracy: false, timeout: 6000 }
+      { enableHighAccuracy: true, timeout: 8000 }
     )
     const w = navigator.geolocation.watchPosition(
-      p => setPos([p.coords.longitude, p.coords.latitude]),
+      p => {
+        if (!userPosition) {
+          setPos([p.coords.longitude, p.coords.latitude])
+        }
+      },
       () => {},
-      { enableHighAccuracy: false }
+      { enableHighAccuracy: true }
     )
     return () => navigator.geolocation.clearWatch(w)
-  }, [])
+  }, [userPosition])
 
   return (
     <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.25 }}
-      className="h-36 rounded-lg border border-nerv-border bg-nerv-card overflow-hidden relative pointer-events-none">
-      <div className="absolute top-2 left-2 z-20 flex items-center gap-1.5 px-2 py-0.5 rounded bg-black/80 border border-nerv-border">
-        <div className="w-1.5 h-1.5 rounded-full bg-nerv-green animate-pulse" />
-        <span className="text-[9px] font-mono font-bold text-slate-300">{t('gpsTelemetryMesh')}</span>
+      className="h-44 rounded-lg border border-nerv-border bg-nerv-card overflow-hidden relative">
+      <div className="absolute top-2 left-2 z-20 flex items-center gap-1.5 px-2 py-0.5 rounded bg-black/85 border border-nerv-border backdrop-blur-sm shadow-md">
+        <div className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+        <span className="text-[9px] font-mono font-bold text-slate-200">{t('gpsTelemetryMesh')}</span>
+      </div>
+      <div className="absolute top-2 right-2 z-20 flex items-center gap-1 px-2 py-0.5 rounded bg-nerv-orange/15 border border-nerv-orange/40 text-nerv-orange text-[9px] font-mono font-bold">
+        <span>LOKASI REAL-TIME</span>
       </div>
       <Map
         viewport={{
           center: pos ?? [PALU_CENTER[1], PALU_CENTER[0]],
-          zoom: pos ? 16 : 13
+          zoom: pos ? 16 : 14
         }}
-        interactive={false}
+        interactive={true}
       >
         {pos && (
           <MapMarker longitude={pos[0]} latitude={pos[1]}>
             <MarkerContent>
-              <div style={{ display:'flex', flexDirection:'column', alignItems:'center', gap:2, pointerEvents:'none', position:'relative' }}>
-                <div style={{ position:'relative', width:20, height:20, display:'flex', alignItems:'center', justifyContent:'center' }}>
-                  <div style={{ position:'absolute', width:20, height:20, borderRadius:'50%', background:'rgba(255,87,34,0.3)', animation:'haloPulse 2s infinite' }}></div>
-                  <div style={{ position:'relative', width:12, height:12, borderRadius:'50%', background:'#FF5722', border:'2px solid white', boxShadow:'0 0 10px rgba(255,87,34,0.9)', zIndex:1 }}></div>
+              <div style={{ display:'flex', flexDirection:'column', alignItems:'center', gap:3, pointerEvents:'none', position:'relative' }}>
+                <div style={{ position:'relative', width:26, height:26, display:'flex', alignItems:'center', justifyContent:'center' }}>
+                  <div style={{ position:'absolute', width:26, height:26, borderRadius:'50%', background:'rgba(255,87,34,0.35)', animation:'haloPulse 2s infinite' }}></div>
+                  <div style={{ position:'relative', width:14, height:14, borderRadius:'50%', background:'#FF5722', border:'2.5px solid #ffffff', boxShadow:'0 0 14px rgba(255,87,34,1)', zIndex:1 }}></div>
                 </div>
-                <span className="font-mono text-[8px] font-black px-1.5 py-0.5 rounded bg-black/90 text-nerv-orange border border-nerv-orange/40 uppercase tracking-widest mt-0.5">
-                  {t('targetLock')}
+                <span className="font-mono text-[8px] font-black px-2 py-0.5 rounded bg-black/90 text-nerv-orange border border-nerv-orange/50 uppercase tracking-widest shadow-md">
+                  {t('targetLock') || 'LOKASI ANDA'}
                 </span>
               </div>
             </MarkerContent>
@@ -78,6 +109,7 @@ interface Props {
   gpsTracking?: boolean
   tsunamiAlert?: boolean
   onOpenProfile?: () => void
+  userPosition?: [number, number] | null
 }
 
 interface DisasterEvent {
@@ -90,7 +122,7 @@ interface DisasterEvent {
   report_datetime?: string
 }
 
-export default function StatusPage({ onNavigate, userLocation, onBack, userName, onRequestGps, gpsTracking, tsunamiAlert, onOpenProfile }: Props) {
+export default function StatusPage({ onNavigate, userLocation, onBack, userName, onRequestGps, gpsTracking, tsunamiAlert, onOpenProfile, userPosition }: Props) {
   const { lang, setLanguage, t } = useLanguage()
   const [safePressed, setSafePressed] = useState(false)
   const [lastUpdated, setLastUpdated] = useState<string | null>(null)
@@ -141,7 +173,7 @@ export default function StatusPage({ onNavigate, userLocation, onBack, userName,
             <div className="flex items-center gap-2 mb-0.5">
               <div className="w-2 h-2 rounded-full bg-nerv-orange animate-ping" />
               <p className="text-[8px] sm:text-[9px] font-mono font-bold tracking-wider text-nerv-orange uppercase truncate">
-                A.T.L.A.S // ADAPTIVE TRACKING, LOCATION & ALERT SYSTEM
+                A.T.L.A.S // AUTONOMOUS THREAT LOCATION & ALERT SYSTEM
               </p>
             </div>
             <div className="flex items-center gap-1.5">
@@ -343,7 +375,7 @@ export default function StatusPage({ onNavigate, userLocation, onBack, userName,
         </motion.button>
 
         {/* Tactical Map */}
-        <MiniMap />
+        <MiniMap userPosition={userPosition} />
 
         <div className="h-16" />
       </div>
