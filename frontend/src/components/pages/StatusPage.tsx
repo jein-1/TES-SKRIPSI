@@ -76,6 +76,8 @@ interface Props {
   userName?: string
   onRequestGps?: () => void
   gpsTracking?: boolean
+  tsunamiAlert?: boolean
+  onOpenProfile?: () => void
 }
 
 interface DisasterEvent {
@@ -88,7 +90,7 @@ interface DisasterEvent {
   report_datetime?: string
 }
 
-export default function StatusPage({ onNavigate, userLocation, onBack, userName, onRequestGps, gpsTracking }: Props) {
+export default function StatusPage({ onNavigate, userLocation, onBack, userName, onRequestGps, gpsTracking, tsunamiAlert, onOpenProfile }: Props) {
   const { lang, setLanguage, t } = useLanguage()
   const [safePressed, setSafePressed] = useState(false)
   const [lastUpdated, setLastUpdated] = useState<string | null>(null)
@@ -162,10 +164,14 @@ export default function StatusPage({ onNavigate, userLocation, onBack, userName,
             <span className="text-slate-600">/</span>
             <span className={lang === 'en' ? 'text-nerv-orange' : 'text-slate-500'}>EN</span>
           </button>
-          <div className="px-2 py-1 rounded bg-black/60 border border-nerv-border text-right font-mono">
+          <button
+            onClick={onOpenProfile}
+            className="px-2.5 py-1 rounded bg-black/60 border border-nerv-border hover:border-nerv-cyan text-right font-mono transition-colors"
+            title="Pengaturan Profil"
+          >
             <span className="text-[8px] text-slate-500 block uppercase leading-none">NODE</span>
             <span className="text-xs font-bold text-nerv-cyan">#{userName ? userName.slice(0, 4).toUpperCase() : 'CIV-01'}</span>
-          </div>
+          </button>
         </div>
       </div>
 
@@ -221,73 +227,75 @@ export default function StatusPage({ onNavigate, userLocation, onBack, userName,
           </div>
         </motion.div>
 
-        {/* Personnel Status (I AM SAFE) Card */}
-        <motion.div
-          initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }}
-          className="p-5 rounded-lg border border-nerv-border bg-nerv-card text-center relative overflow-hidden"
-        >
-          {/* Top Bar Label */}
-          <div className="inline-flex items-center gap-2 px-3 py-1 rounded bg-black/60 border border-nerv-border mb-3 font-mono">
-            <div className="w-1.5 h-1.5 rounded-full bg-nerv-orange" />
-            <span className="text-[9px] font-bold tracking-widest text-slate-300 uppercase">
-              PERSONNEL REPORT // BEACON ACTIVE
-            </span>
-          </div>
-
-          <h3 className="text-xl font-black text-white tracking-wide font-mono mb-1">
-            {t('reportSafetyStatus')}
-          </h3>
-          <p className="text-xs text-slate-400 mb-5 leading-relaxed font-sans">
-            {t('reportSafetyDesc')}
-          </p>
-
-          {/* Big Tactical Button */}
-          <div className="relative flex justify-center mb-4">
-            <AnimatePresence>
-              {!safePressed && (
-                <>
-                  <motion.div
-                    key={`ring1-${pulseKey}`}
-                    initial={{ scale: 1, opacity: 0.4 }}
-                    animate={{ scale: 1.5, opacity: 0 }}
-                    transition={{ duration: 2.2, ease: 'easeOut' }}
-                    className="absolute inset-0 rounded-lg border border-nerv-orange"
-                    style={{ margin: '0 auto', width: 140, height: 140 }}
-                  />
-                </>
-              )}
-            </AnimatePresence>
-            <motion.button
-              whileTap={{ scale: 0.96 }}
-              onClick={handleSafe}
-              className={`relative w-[140px] h-[140px] rounded-lg flex flex-col items-center justify-center gap-2 font-mono font-black transition-all duration-300 border ${
-                safePressed
-                  ? 'bg-nerv-green/20 border-nerv-green text-nerv-green shadow-[0_0_30px_rgba(16,185,129,0.3)]'
-                  : 'bg-nerv-orange text-black border-nerv-orange shadow-[0_0_30px_rgba(255,87,34,0.3)] hover:brightness-110'
-              }`}
-            >
-              {safePressed ? (
-                <CheckCircle className="w-10 h-10" />
-              ) : (
-                <div className="w-10 h-10 rounded-full border-2 border-black flex items-center justify-center font-mono font-black text-lg">
-                  !
-                </div>
-              )}
-              <span className="text-xs tracking-wider uppercase">
-                {safePressed ? t('confirmed') : t('iAmSafe')}
+        {/* Personnel Status (I AM SAFE) Card — ONLY APPEARS DURING DISASTER OR SIMULATION */}
+        {tsunamiAlert && (
+          <motion.div
+            initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }}
+            className="p-5 rounded-lg border border-nerv-border bg-nerv-card text-center relative overflow-hidden"
+          >
+            {/* Top Bar Label */}
+            <div className="inline-flex items-center gap-2 px-3 py-1 rounded bg-black/60 border border-nerv-border mb-3 font-mono">
+              <div className="w-1.5 h-1.5 rounded-full bg-nerv-orange" />
+              <span className="text-[9px] font-bold tracking-widest text-slate-300 uppercase">
+                PERSONNEL REPORT // BEACON ACTIVE
               </span>
-            </motion.button>
-          </div>
+            </div>
 
-          {lastUpdated && (
-            <motion.p
-              initial={{ opacity: 0, y: 4 }} animate={{ opacity: 1, y: 0 }}
-              className="text-[11px] font-mono text-nerv-green font-bold"
-            >
-              {t('signalTransmitted')} {lastUpdated}
-            </motion.p>
-          )}
-        </motion.div>
+            <h3 className="text-xl font-black text-white tracking-wide font-mono mb-1">
+              {t('reportSafetyStatus')}
+            </h3>
+            <p className="text-xs text-slate-400 mb-5 leading-relaxed font-sans">
+              {t('reportSafetyDesc')}
+            </p>
+
+            {/* Big Tactical Button */}
+            <div className="relative flex justify-center mb-4">
+              <AnimatePresence>
+                {!safePressed && (
+                  <>
+                    <motion.div
+                      key={`ring1-${pulseKey}`}
+                      initial={{ scale: 1, opacity: 0.4 }}
+                      animate={{ scale: 1.5, opacity: 0 }}
+                      transition={{ duration: 2.2, ease: 'easeOut' }}
+                      className="absolute inset-0 rounded-lg border border-nerv-orange"
+                      style={{ margin: '0 auto', width: 140, height: 140 }}
+                    />
+                  </>
+                )}
+              </AnimatePresence>
+              <motion.button
+                whileTap={{ scale: 0.96 }}
+                onClick={handleSafe}
+                className={`relative w-[140px] h-[140px] rounded-lg flex flex-col items-center justify-center gap-2 font-mono font-black transition-all duration-300 border ${
+                  safePressed
+                    ? 'bg-nerv-green/20 border-nerv-green text-nerv-green shadow-[0_0_30px_rgba(16,185,129,0.3)]'
+                    : 'bg-nerv-orange text-black border-nerv-orange shadow-[0_0_30px_rgba(255,87,34,0.3)] hover:brightness-110'
+                }`}
+              >
+                {safePressed ? (
+                  <CheckCircle className="w-10 h-10" />
+                ) : (
+                  <div className="w-10 h-10 rounded-full border-2 border-black flex items-center justify-center font-mono font-black text-lg">
+                    !
+                  </div>
+                )}
+                <span className="text-xs tracking-wider uppercase">
+                  {safePressed ? t('confirmed') : t('iAmSafe')}
+                </span>
+              </motion.button>
+            </div>
+
+            {lastUpdated && (
+              <motion.p
+                initial={{ opacity: 0, y: 4 }} animate={{ opacity: 1, y: 0 }}
+                className="text-[11px] font-mono text-nerv-green font-bold"
+              >
+                {t('signalTransmitted')} {lastUpdated}
+              </motion.p>
+            )}
+          </motion.div>
+        )}
 
         {/* Family Status Tactical Card */}
         {(() => {

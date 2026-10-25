@@ -27,6 +27,7 @@ interface Props {
   adminPing?: { fromName: string; role: string; fromId: string; message?: string } | null
   onAdminPingDismiss?: () => void
   onStartGps?: () => void
+  onUpdateUserPosition?: (pos: [number, number]) => void
   // BMKG — passed from App.tsx (single source of truth with localStorage persistence)
   gempa?: GempaData | null
   isGempaDismissed?: boolean
@@ -62,7 +63,7 @@ function bearingLabel(b: number): { label: string; icon: string } {
 }
 
 // ── MAIN ──────────────────────────────────────────────────────
-export default function NavigatePage({ routes, selectedRoute, tsunamiAlert, userPosition, onBack, adminPing, onAdminPingDismiss, onStartGps, gempa, isGempaDismissed, onDismissGempa, settings }: Props) {
+export default function NavigatePage({ routes, selectedRoute, tsunamiAlert, userPosition, onBack, adminPing, onAdminPingDismiss, onStartGps, onUpdateUserPosition, gempa, isGempaDismissed, onDismissGempa, settings }: Props) {
   const [showMedical, setShowMedical]     = useState(false)
   const [selectedZoneInfo, setSelectedZoneInfo] = useState<HazardZone | null>(null)
   const [deviceHeading, setDeviceHeading] = useState<number | null>(null)
@@ -70,6 +71,7 @@ export default function NavigatePage({ routes, selectedRoute, tsunamiAlert, user
   const [activeRouteIdx, setActiveRouteIdx] = useState(selectedRoute)
   const [showRoutePanel, setShowRoutePanel] = useState(true)
   const [localPos, setLocalPos] = useState<[number,number] | null>(null)
+  const [isCalibrating, setIsCalibrating] = useState(false)
   const mapRef = useRef<MapRef | null>(null)
   const [showCalibration, setShowCalibration] = useState(() => !sessionStorage.getItem('compassCalibrated'))
   
@@ -87,14 +89,61 @@ export default function NavigatePage({ routes, selectedRoute, tsunamiAlert, user
   const effectivePosRaw = userPosition ?? localPos
   const effectivePos: [number, number] | null = effectivePosRaw ? [effectivePosRaw[1], effectivePosRaw[0]] : null
 
+  const handleApplyNewPosition = (pos: [number, number]) => {
+    setLocalPos(pos)
+    localStorage.setItem('atlas_user_position', JSON.stringify(pos))
+    onUpdateUserPosition?.(pos)
+    setViewport(v => ({ ...v, center: [pos[1], pos[0]] }))
+  }
+
+  const handleForceGpsRefresh = () => {
+    if (typeof window !== "undefined" && "geolocation" in navigator) {
+      navigator.geolocation.getCurrentPosition(
+        (p) => {
+          handleApplyNewPosition([p.coords.latitude, p.coords.longitude])
+          setIsCalibrating(false)
+        },
+        (err) => {
+          alert('GPS: ' + (err.message || 'Izin lokasi tidak diberikan.'))
+        },
+        { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 }
+      )
+    }
+  }
+
+  // Map Click Listener when in Calibration mode
   useEffect(() => {
-    if (userPosition) { setLocalPos(userPosition); return }
+    const map = mapRef.current
+    if (!map) return
+
+    const handleMapClick = (e: any) => {
+      if (isCalibrating && e.lngLat) {
+        handleApplyNewPosition([e.lngLat.lat, e.lngLat.lng])
+      }
+    }
+
+    map.on('click', handleMapClick)
+    return () => {
+      map.off('click', handleMapClick)
+    }
+  }, [isCalibrating])
+
+  useEffect(() => {
+    if (userPosition) {
+      setLocalPos(userPosition)
+      setViewport(v => ({ ...v, center: [userPosition[1], userPosition[0]] }))
+      return
+    }
     let watchId: string | null = null;
     if (typeof window !== "undefined" && "geolocation" in navigator) {
       navigator.geolocation.getCurrentPosition(
-        (p) => setLocalPos([p.coords.latitude, p.coords.longitude]),
+        (p) => {
+          const pos: [number, number] = [p.coords.latitude, p.coords.longitude]
+          setLocalPos(pos)
+          setViewport(v => ({ ...v, center: [pos[1], pos[0]] }))
+        },
         () => {},
-        { enableHighAccuracy: false, timeout: 8000, maximumAge: 60000 }
+        { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
       );
     }
     const startWatch = async () => {
@@ -433,7 +482,16 @@ export default function NavigatePage({ routes, selectedRoute, tsunamiAlert, user
 
           {/* User Location Marker with Flashlight */}
           {effectivePos && (
-            <MapMarker longitude={effectivePos[0]} latitude={effectivePos[1]} rotation={heading} rotationAlignment="map">
+            <MapMarker
+              longitude={effectivePos[0]}
+              latitude={effectivePos[1]}
+              rotation={heading}
+              rotationAlignment="map"
+              draggable={isCalibrating}
+              onDragEnd={(lngLat) => {
+                handleApplyNewPosition([lngLat.lat, lngLat.lng])
+              }}
+            >
               <MarkerContent>
                 <div style={{ position:'relative', width:60, height:60 }}>
                   <svg style={{ position:'absolute', top:0, left:0, width:'100%', height:'100%' }} viewBox="0 0 100 100">
@@ -447,12 +505,12 @@ export default function NavigatePage({ routes, selectedRoute, tsunamiAlert, user
                   </svg>
                   <div style={{
                     position:'absolute', top:18, left:18, width:24, height:24, 
-                    background: emergency ? '#ef4444' : '#3b82f6', borderRadius:'50%',
+                    background: isCalibrating ? '#ff5722' : (emergency ? '#ef4444' : '#3b82f6'), borderRadius:'50%',
                     animation: emergency ? 'haloPulseFast 1s infinite' : 'haloPulse 2s infinite'
                   }}></div>
                   <div style={{
                     position:'absolute', top:22, left:22, width:16, height:16, 
-                    background: emergency ? '#ef4444' : '#3b82f6', border:'2.5px solid white', 
+                    background: isCalibrating ? '#ff5722' : (emergency ? '#ef4444' : '#3b82f6'), border:'2.5px solid white', 
                     borderRadius:'50%', boxShadow:'0 0 6px rgba(0,0,0,0.4)'
                   }}></div>
                 </div>
@@ -461,6 +519,35 @@ export default function NavigatePage({ routes, selectedRoute, tsunamiAlert, user
           )}
 
         </Map>
+
+        {/* Floating Calibration Guide Banner */}
+        {isCalibrating && (
+          <div className="absolute top-4 left-1/2 -translate-x-1/2 z-[600] max-w-sm w-[92%] bg-black/90 border border-nerv-orange rounded-xl p-3 shadow-2xl font-mono text-center space-y-2 backdrop-blur-md">
+            <div className="flex items-center justify-center gap-1.5 text-nerv-orange text-xs font-bold uppercase">
+              <MapPin className="w-4 h-4 animate-bounce" />
+              <span>MODE ATUR / GESER LOKASI MANUAL</span>
+            </div>
+            <p className="text-[11px] text-slate-300 font-sans leading-tight">
+              Klik / sentuh area peta untuk memindahkan posisi Anda secara akurat, atau geser lingkaran biru langsung ke lokasi Anda saat ini.
+            </p>
+            <div className="flex gap-2 justify-center pt-1">
+              <button
+                type="button"
+                onClick={() => setIsCalibrating(false)}
+                className="px-4 py-1.5 rounded bg-nerv-green text-black font-black text-xs uppercase tracking-wider shadow-[0_0_10px_rgba(16,185,129,0.5)]"
+              >
+                SIMPAN POSISI INI
+              </button>
+              <button
+                type="button"
+                onClick={handleForceGpsRefresh}
+                className="px-3 py-1.5 rounded bg-black/60 border border-nerv-cyan text-nerv-cyan text-xs font-bold hover:bg-nerv-cyan/20"
+              >
+                GPS PRESISI
+              </button>
+            </div>
+          </div>
+        )}
 
         {/* Controls */}
         <div className="absolute top-3 right-3 z-[500] flex flex-col gap-2">
@@ -478,6 +565,20 @@ export default function NavigatePage({ routes, selectedRoute, tsunamiAlert, user
             title="Kembali ke posisi saya">
             <Navigation2 className="w-4 h-4 text-indigo-400"/>
           </button>
+
+          {/* Calibrate / Manual Location Button */}
+          <button
+            onClick={() => setIsCalibrating(!isCalibrating)}
+            className={`w-11 h-11 rounded-full flex items-center justify-center border shadow-lg transition-all ${
+              isCalibrating
+                ? 'bg-nerv-orange border-nerv-orange text-black ring-2 ring-nerv-orange/50 shadow-[0_0_15px_rgba(255,87,34,0.6)]'
+                : 'bg-slate-900/80 border-slate-700/60 text-nerv-cyan hover:text-white'
+            }`}
+            title="Kalibrasi Posisi / Geser Manual Pin"
+          >
+            <MapPin className="w-5 h-5"/>
+          </button>
+
           {emergency && (
             <button onClick={() => setHeadingLocked(!headingLocked)}
               className={`w-11 h-11 rounded-full flex items-center justify-center border shadow-lg ${

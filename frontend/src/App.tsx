@@ -34,6 +34,7 @@ import { ZRB_REFERENCE, type ZRBLevel } from "./lib/evacuation/zrbReference";
 // â”€â”€ Auth â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 import LoginPage from "./components/pages/LoginPage";
 import FirstVisitModal from "./components/modals/FirstVisitModal";
+import ProfileModal from "./components/modals/ProfileModal";
 import type { UserRole } from "./types";
 // â”€â”€ New Pages â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 import SensorsPage from "./components/pages/SensorsPage";
@@ -272,9 +273,16 @@ const ARRIVAL_RADIUS_METERS = 50;
 
 function App() {
   // â”€â”€ Map state â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-  const [userPosition, setUserPosition] = useState<[number, number] | null>(
-    null,
-  );
+  const [userPosition, setUserPosition] = useState<[number, number] | null>(() => {
+    try {
+      const saved = localStorage.getItem('atlas_user_position');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed) && parsed.length === 2) return parsed as [number, number];
+      }
+    } catch {}
+    return null;
+  });
   const [routes, setRoutes] = useState<RouteResult[]>([]);
   const [selectedRoute, setSelectedRoute] = useState(0);
   const [showPanel, setShowPanel] = useState(false);
@@ -301,12 +309,15 @@ function App() {
   // Instant IP Geolocation baseline — guarantees user's city & coords are detected immediately
   useEffect(() => {
     let active = true;
+    const hasSavedPos = !!localStorage.getItem('atlas_user_position');
     fetchIpLocation().then((loc) => {
       if (active && loc) {
-        setUserPosition((prev) => {
-          if (prev) return prev; // Keep precise GPS fix if already acquired
-          return [loc.lat, loc.lng];
-        });
+        if (!hasSavedPos) {
+          setUserPosition((prev) => {
+            if (prev) return prev; // Keep precise GPS fix if already acquired
+            return [loc.lat, loc.lng];
+          });
+        }
         setUserLocationName((prev) => {
           if (prev && !prev.toLowerCase().includes("mendeteksi") && !prev.toLowerCase().includes("izin")) {
             return prev;
@@ -648,6 +659,7 @@ function App() {
     const hasName = !!localStorage.getItem("aegisUserName");
     return !isAdminURL && (!registered || !hasName);
   });
+  const [showProfileModal, setShowProfileModal] = useState(false);
 
   // â”€â”€ Navigation â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   // Admin starts on 'map', public user starts on 'status'
@@ -839,6 +851,26 @@ function App() {
     setTimeout(() => startGpsTracking(), 800);
   };
 
+  // Manual location update (calibrated via map click or drag)
+  const handleManualLocationUpdate = useCallback((newPos: [number, number]) => {
+    setUserPosition(newPos);
+    setFlyToPos(newPos);
+    localStorage.setItem('atlas_user_position', JSON.stringify(newPos));
+    fetchLocationName(newPos[0], newPos[1]).then((name) => {
+      if (name) setUserLocationName(name);
+    });
+    const routeResults = findOptimalEvacuationRoutes(
+      newPos[0],
+      newPos[1],
+      99,
+      settings.algorithm as 'dijkstra' | 'haversine',
+    );
+    lastRouteCalcResultsRef.current = routeResults;
+    setRoutes(routeResults);
+    setSelectedRoute(0);
+    setIsCalculating(false);
+  }, [settings.algorithm]);
+
   // ── GPS ────────────────────────────────────────────────────────────────────
 
   // ── Save history record ────────────────────────────────────────────────────
@@ -903,8 +935,9 @@ function App() {
     setIsCalculating(true);
 
     // 1. Instant IP geolocation fallback so the UI immediately shows the real city
+    const hasSavedPos = !!localStorage.getItem('atlas_user_position');
     fetchIpLocation().then((loc) => {
-      if (loc && !hasFirstGPSFixRef.current) {
+      if (loc && !hasFirstGPSFixRef.current && !hasSavedPos) {
         setUserPosition((prev) => prev ?? [loc.lat, loc.lng]);
         setUserLocationName((prev) => {
           if (prev && !prev.toLowerCase().includes("mendeteksi") && !prev.toLowerCase().includes("izin")) {
@@ -956,13 +989,13 @@ function App() {
             setGpsError("Izin lokasi ditolak oleh browser.");
           }
         },
-        { enableHighAccuracy: false, timeout: 10000, maximumAge: 60000 }
+        { enableHighAccuracy: true, timeout: 12000, maximumAge: 0 }
       );
     }
 
     try {
       const watchId = await Geolocation.watchPosition(
-        { enableHighAccuracy: false, maximumAge: 10000, timeout: 20000 },
+        { enableHighAccuracy: true, maximumAge: 5000, timeout: 20000 },
         (pos, err) => {
           if (err) {
             console.warn("GPS Error:", err);
@@ -1562,6 +1595,8 @@ function App() {
               userName={userName}
               onRequestGps={!gpsTracking ? startGpsTracking : undefined}
               gpsTracking={gpsTracking}
+              tsunamiAlert={tsunamiAlert}
+              onOpenProfile={() => setShowProfileModal(true)}
             />
           )}
           {activePage === "navigate" && (
@@ -1580,6 +1615,7 @@ function App() {
                 setAdminPing(null);
               }}
               onStartGps={!gpsTracking ? startGpsTracking : undefined}
+              onUpdateUserPosition={handleManualLocationUpdate}
               settings={{ algorithm: settings.algorithm }}
             />
           )}
@@ -1959,6 +1995,22 @@ function App() {
               </button>
             );
           })}
+          {/* Profile / Node Identity Settings */}
+          <button
+            onClick={() => setShowProfileModal(true)}
+            className="relative flex flex-col items-center justify-center flex-1 h-full py-1.5 transition-all group text-slate-500 hover:text-slate-300"
+            title="Pengaturan Identitas & Terminal"
+          >
+            <div className="relative mb-0.5">
+              <Shield className="w-4 h-4 transition-transform group-hover:scale-110 text-nerv-cyan" />
+            </div>
+            <div className="flex items-center gap-0.5">
+              <span className="text-[7px] font-mono text-slate-600 block leading-none">[06]</span>
+              <span className="text-[9px] font-mono font-bold tracking-wider uppercase leading-none">
+                {lang === 'id' ? 'PROFIL' : 'PROFILE'}
+              </span>
+            </div>
+          </button>
           {/* Logout only shown when accessed via admin URL */}
           {isAdminURL && (
             <button
@@ -2142,6 +2194,13 @@ function App() {
             <FirstVisitModal key="first-visit" onComplete={handleFirstVisit} />
           )}
         </AnimatePresence>
+
+        <ProfileModal
+          isOpen={showProfileModal}
+          onClose={() => setShowProfileModal(false)}
+          userName={userName}
+          terminalId={terminalId}
+        />
       </div>
       <AlertModal state={alertModal} onClose={() => setAlertModal(null)} />
       </>

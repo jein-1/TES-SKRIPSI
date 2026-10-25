@@ -174,7 +174,21 @@ function MyQRModal({ onClose }: { onClose: () => void }) {
   const atlasId = getMyAegisId()
   const myName = getMyName()
   const [qrUrl, setQrUrl] = useState('')
-  const inviteUrl = `${window.location.origin}${window.location.pathname}?joinFamily=${encodeURIComponent(atlasId)}&inviteName=${encodeURIComponent(myName)}`
+  const [verifyCode, setVerifyCode] = useState(() => {
+    const existing = sessionStorage.getItem('atlas_qr_verify_code')
+    if (existing && existing.length === 6) return existing
+    const gen = Math.floor(100000 + Math.random() * 900000).toString()
+    sessionStorage.setItem('atlas_qr_verify_code', gen)
+    return gen
+  })
+
+  const refreshCode = () => {
+    const gen = Math.floor(100000 + Math.random() * 900000).toString()
+    sessionStorage.setItem('atlas_qr_verify_code', gen)
+    setVerifyCode(gen)
+  }
+
+  const inviteUrl = `${window.location.origin}${window.location.pathname}?joinFamily=${encodeURIComponent(atlasId)}&inviteName=${encodeURIComponent(myName)}&code=${verifyCode}`
 
   useEffect(() => {
     QRCode.toDataURL(inviteUrl, {
@@ -189,18 +203,18 @@ function MyQRModal({ onClose }: { onClose: () => void }) {
       await navigator.share({ title: 'A.T.L.A.S Personnel Link Invite', url: inviteUrl })
     } else {
       await navigator.clipboard.writeText(inviteUrl)
-      alert('Tautan link berhasil disalin!')
+      alert(`Tautan berhasil disalin!\nKode Verifikasi: ${verifyCode}`)
     }
   }
 
   return (
     <motion.div
       initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-      className="fixed inset-0 z-[2000] flex items-center justify-center bg-black/85 p-6 backdrop-blur-md"
+      className="fixed inset-0 z-[2000] flex items-center justify-center bg-black/85 p-4 backdrop-blur-md"
     >
       <motion.div
         initial={{ scale: 0.95 }} animate={{ scale: 1 }}
-        className="w-full max-w-xs p-5 rounded-lg border border-nerv-border bg-nerv-card relative shadow-2xl"
+        className="w-full max-w-xs p-5 rounded-xl border border-nerv-border bg-nerv-card relative shadow-2xl"
       >
         <button
           onClick={onClose}
@@ -211,9 +225,9 @@ function MyQRModal({ onClose }: { onClose: () => void }) {
 
         <div className="text-center font-mono">
           <p className="text-[9px] text-nerv-orange uppercase tracking-widest font-bold mb-1">
-            A.T.L.A.S // PERSONNEL ID QR
+            A.T.L.A.S // PERSONNEL ID QR & SECURITY KEY
           </p>
-          <p className="text-base font-bold text-white mb-3 truncate">{myName}</p>
+          <p className="text-base font-bold text-white mb-2 truncate">{myName}</p>
 
           <div className="p-3 bg-white rounded-lg inline-block shadow-inner mx-auto">
             {qrUrl ? (
@@ -225,16 +239,37 @@ function MyQRModal({ onClose }: { onClose: () => void }) {
             )}
           </div>
 
-          <p className="text-[10px] text-slate-400 mt-3 font-mono break-all px-2 bg-black/50 py-1 rounded border border-nerv-border">
+          <p className="text-[10px] text-slate-400 mt-2 font-mono break-all px-2 bg-black/50 py-1 rounded border border-nerv-border">
             {atlasId}
           </p>
-          <p className="text-[10px] text-slate-400 mt-2 font-sans">
-            Pindai QR ini dari perangkat lain untuk menautkan unit personel.
-          </p>
+
+          {/* Verification Code Box */}
+          <div className="mt-3 p-3 rounded-lg bg-black/70 border border-nerv-cyan/50 text-center">
+            <div className="flex items-center justify-between text-nerv-cyan text-[10px] font-bold tracking-widest uppercase mb-1">
+              <span className="flex items-center gap-1">
+                <Shield className="w-3 h-3" />
+                KODE VERIFIKASI KEAMANAN
+              </span>
+              <button
+                type="button"
+                onClick={refreshCode}
+                className="text-[9px] text-slate-400 hover:text-nerv-cyan underline"
+                title="Ganti kode acak baru"
+              >
+                Ganti
+              </button>
+            </div>
+            <div className="text-2xl font-black font-mono tracking-[0.3em] text-white py-0.5">
+              {verifyCode.slice(0, 3)} {verifyCode.slice(3)}
+            </div>
+            <p className="text-[9px] text-slate-400 font-sans leading-tight mt-1">
+              Kedua user harus mencocokkan kode ini saat menautkan keluarga.
+            </p>
+          </div>
 
           <button
             onClick={share}
-            className="mt-4 w-full py-2.5 rounded bg-nerv-orange hover:bg-orange-600 text-black font-mono font-bold text-xs uppercase tracking-wider flex items-center justify-center gap-2 transition-colors shadow-[0_0_15px_rgba(255,87,34,0.4)]"
+            className="mt-3 w-full py-2.5 rounded bg-nerv-orange hover:bg-orange-600 text-black font-mono font-bold text-xs uppercase tracking-wider flex items-center justify-center gap-2 transition-colors shadow-[0_0_15px_rgba(255,87,34,0.4)]"
           >
             <Share2 className="w-3.5 h-3.5" /> Bagikan Link Unit
           </button>
@@ -244,7 +279,7 @@ function MyQRModal({ onClose }: { onClose: () => void }) {
   )
 }
 
-// ── Add Member Modal (QR scan + Gallery upload) ───────────────
+// ── Add Member Modal (QR scan + Gallery upload + 2-Way Code Verification) ──
 function AddMemberModal({ onClose, onAdd }: { onClose: () => void; onAdd: (m: FamilyMember) => void }) {
   const [scanning, setScanning] = useState(false)
   const [camErr, setCamErr] = useState('')
@@ -254,6 +289,16 @@ function AddMemberModal({ onClose, onAdd }: { onClose: () => void; onAdd: (m: Fa
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const streamRef = useRef<MediaStream | null>(null)
   const rafRef = useRef(0)
+
+  // Verification Challenge State
+  const [pendingMember, setPendingMember] = useState<{
+    id: string
+    name: string
+    expectedCode: string
+  } | null>(null)
+  const [enteredCode, setEnteredCode] = useState('')
+  const [verifyErr, setVerifyErr] = useState('')
+  const [verifySuccess, setVerifySuccess] = useState(false)
 
   const stopCam = () => {
     cancelAnimationFrame(rafRef.current)
@@ -269,23 +314,52 @@ function AddMemberModal({ onClose, onAdd }: { onClose: () => void; onAdd: (m: Fa
       const url = new URL(data)
       const joinId = url.searchParams.get('joinFamily')
       const joinName = url.searchParams.get('inviteName')
+      const code = url.searchParams.get('code') || url.searchParams.get('verifyCode') || ''
       if (joinId && joinName) {
-        const newMember: FamilyMember = {
+        stopCam()
+        setPendingMember({
           id: joinId,
           name: joinName,
-          role: 'Unit Personel',
-          initials: joinName.split(' ').map((w: string) => w[0]).join('').slice(0, 2).toUpperCase(),
-          status: 'safe',
-          location: 'Terdeteksi via QR',
-          updatedAgo: 'baru saja',
-        }
-        onAdd(newMember)
-        aegisApi.notifyFamilyJoin(getMyAegisId(), getMyName(), joinId)
-        onClose()
+          expectedCode: code.trim(),
+        })
+        setEnteredCode('')
+        setVerifyErr('')
         return true
       }
     } catch { }
     return false
+  }
+
+  const handleVerifyAndLink = () => {
+    if (!pendingMember) return
+    const cleanEntered = enteredCode.replace(/\s+/g, '')
+
+    if (cleanEntered.length !== 6) {
+      setVerifyErr('Masukkan 6 digit angka kode verifikasi.')
+      return
+    }
+
+    if (pendingMember.expectedCode && cleanEntered !== pendingMember.expectedCode) {
+      setVerifyErr('KODE VERIFIKASI TIDAK COCOK! Penautan gagal demi keamanan.')
+      return
+    }
+
+    // Match success!
+    setVerifySuccess(true)
+    setTimeout(() => {
+      const newMember: FamilyMember = {
+        id: pendingMember.id,
+        name: pendingMember.name,
+        role: 'Unit Personel',
+        initials: pendingMember.name.split(' ').map((w: string) => w[0]).join('').slice(0, 2).toUpperCase(),
+        status: 'safe',
+        location: 'Terverifikasi via QR',
+        updatedAgo: 'baru saja',
+      }
+      onAdd(newMember)
+      aegisApi.notifyFamilyJoin(getMyAegisId(), getMyName(), pendingMember.id)
+      onClose()
+    }, 1000)
   }
 
   const startCam = async () => {
@@ -324,7 +398,6 @@ function AddMemberModal({ onClose, onAdd }: { onClose: () => void; onAdd: (m: Fa
       }
       const code = jsQR(id.data, id.width, id.height)
       if (code?.data) {
-        stopCam()
         if (!processQRData(code.data)) {
           setCamErr('QR tidak valid. Pastikan scan QR dari A.T.L.A.S.')
         }
@@ -374,12 +447,13 @@ function AddMemberModal({ onClose, onAdd }: { onClose: () => void; onAdd: (m: Fa
   return (
     <motion.div
       initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-      className="fixed inset-0 z-[2000] flex items-end justify-center bg-black/85 backdrop-blur-md"
+      className="fixed inset-0 z-[2000] flex items-start justify-center pt-6 sm:pt-14 px-4 bg-black/85 backdrop-blur-md overflow-y-auto"
     >
       <motion.div
-        initial={{ y: '100%' }} animate={{ y: 0 }} exit={{ y: '100%' }}
-        transition={{ type: 'spring', damping: 25, stiffness: 300 }}
-        className="w-full max-w-sm rounded-t-xl border-t border-x border-nerv-border p-5 bg-nerv-card shadow-2xl"
+        initial={{ opacity: 0, y: -20, scale: 0.96 }}
+        animate={{ opacity: 1, y: 0, scale: 1 }}
+        exit={{ opacity: 0, y: -20, scale: 0.96 }}
+        className="w-full max-w-sm rounded-xl border border-nerv-border p-5 bg-nerv-card shadow-2xl my-2"
       >
         <div className="flex items-center justify-between mb-3 border-b border-nerv-border pb-2">
           <div>
@@ -396,48 +470,116 @@ function AddMemberModal({ onClose, onAdd }: { onClose: () => void; onAdd: (m: Fa
           </button>
         </div>
 
-        <p className="text-[11px] text-slate-400 mb-3 font-sans">
-          Pindai kamera atau unggah tangkapan layar QR Code anggota untuk menghubungkan saluran darurat.
-        </p>
+        {/* STEP 2: VERIFICATION CHALLENGE */}
+        {pendingMember ? (
+          <div className="font-mono space-y-3">
+            <div className="p-3 rounded-lg bg-black/60 border border-nerv-cyan/50 text-center">
+              <span className="text-[9px] text-slate-400 uppercase block">TARGET UNIT TERDETEKSI</span>
+              <span className="text-sm font-bold text-nerv-cyan block truncate">{pendingMember.name}</span>
+              <span className="text-[9px] text-slate-500 block">ID: #{pendingMember.id.slice(0, 10)}</span>
+            </div>
 
-        {camErr && <p className="text-nerv-red font-mono text-[10px] text-center mb-2">{camErr}</p>}
-        {galleryErr && <p className="text-nerv-yellow font-mono text-[10px] text-center mb-2">{galleryErr}</p>}
-        {galleryLoading && (
-          <p className="text-nerv-cyan font-mono text-[10px] text-center mb-2 animate-pulse">
-            MEMPROSES TANGKAPAN QR...
-          </p>
-        )}
+            <div className="space-y-1">
+              <label className="text-[10px] text-slate-300 block font-bold uppercase">
+                MASUKKAN 6 DIGIT KODE VERIFIKASI:
+              </label>
+              <p className="text-[10px] text-slate-400 font-sans leading-tight">
+                Lihat kode 6-digit yang tertera pada layar perangkat {pendingMember.name}. Jika cocok maka akan tertaut, jika tidak cocok maka akan gagal.
+              </p>
+              <input
+                type="text"
+                maxLength={6}
+                value={enteredCode}
+                onChange={(e) => {
+                  setEnteredCode(e.target.value.replace(/[^0-9]/g, ''))
+                  setVerifyErr('')
+                }}
+                placeholder="Contoh: 742905"
+                className="w-full mt-2 px-3 py-2.5 rounded bg-black/80 border border-nerv-border focus:border-nerv-cyan text-center text-xl font-black tracking-[0.4em] text-white focus:outline-none"
+              />
+            </div>
 
-        <div className="relative w-full aspect-video rounded-lg overflow-hidden bg-black border border-nerv-border mb-3">
-          <video ref={videoRef} className="w-full h-full object-cover" playsInline muted />
-          <canvas ref={canvasRef} className="hidden" />
+            {verifyErr && (
+              <p className="text-nerv-red font-mono text-[11px] text-center font-bold bg-nerv-red/10 p-2 rounded border border-nerv-red/30">
+                {verifyErr}
+              </p>
+            )}
 
-          {!scanning && !camErr && (
-            <div className="absolute inset-0 flex flex-col items-center justify-center gap-2">
-              <Camera className="w-8 h-8 text-slate-600" />
+            {verifySuccess && (
+              <p className="text-nerv-green font-mono text-[11px] text-center font-bold bg-nerv-green/10 p-2 rounded border border-nerv-green/30 animate-pulse">
+                ✓ KODE COCOK! UNIT BERHASIL DITAUTKAN...
+              </p>
+            )}
+
+            <div className="flex gap-2 pt-2">
               <button
-                onClick={startCam}
-                className="px-3 py-1.5 rounded bg-nerv-cyan/20 border border-nerv-cyan text-nerv-cyan font-mono font-bold text-xs hover:bg-nerv-cyan/30 transition-colors"
+                type="button"
+                onClick={handleVerifyAndLink}
+                disabled={verifySuccess || enteredCode.length < 6}
+                className="flex-1 py-2.5 rounded bg-nerv-cyan hover:bg-cyan-400 disabled:opacity-40 text-black font-mono font-bold text-xs uppercase tracking-wider transition-colors shadow-[0_0_12px_rgba(0,229,255,0.4)]"
               >
-                AKTIFKAN SCANNER KAMERA
+                VERIFIKASI & TAUTKAN
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setPendingMember(null)
+                  setEnteredCode('')
+                  setVerifyErr('')
+                }}
+                className="px-3 py-2.5 rounded bg-black/60 border border-nerv-border text-slate-400 hover:text-white text-xs font-mono"
+              >
+                BATAL
               </button>
             </div>
-          )}
+          </div>
+        ) : (
+          /* STEP 1: SCAN OR UPLOAD QR */
+          <div>
+            <p className="text-[11px] text-slate-400 mb-3 font-sans">
+              Pindai kamera atau unggah tangkapan layar QR Code anggota untuk menghubungkan saluran darurat.
+            </p>
 
-          {scanning && (
-            <div className="absolute inset-0 pointer-events-none border-2 border-nerv-orange/50 m-6 rounded flex items-center justify-center">
-              <div className="w-full h-0.5 bg-nerv-orange shadow-[0_0_8px_rgba(255,87,34,1)] animate-bounce" />
+            {camErr && <p className="text-nerv-red font-mono text-[10px] text-center mb-2">{camErr}</p>}
+            {galleryErr && <p className="text-nerv-yellow font-mono text-[10px] text-center mb-2">{galleryErr}</p>}
+            {galleryLoading && (
+              <p className="text-nerv-cyan font-mono text-[10px] text-center mb-2 animate-pulse">
+                MEMPROSES TANGKAPAN QR...
+              </p>
+            )}
+
+            <div className="relative w-full aspect-video rounded-lg overflow-hidden bg-black border border-nerv-border mb-3">
+              <video ref={videoRef} className="w-full h-full object-cover" playsInline muted />
+              <canvas ref={canvasRef} className="hidden" />
+
+              {!scanning && !camErr && (
+                <div className="absolute inset-0 flex flex-col items-center justify-center gap-2">
+                  <Camera className="w-8 h-8 text-slate-600" />
+                  <button
+                    onClick={startCam}
+                    className="px-3 py-1.5 rounded bg-nerv-cyan/20 border border-nerv-cyan text-nerv-cyan font-mono font-bold text-xs hover:bg-nerv-cyan/30 transition-colors"
+                  >
+                    AKTIFKAN SCANNER KAMERA
+                  </button>
+                </div>
+              )}
+
+              {scanning && (
+                <div className="absolute inset-0 pointer-events-none border-2 border-nerv-orange/50 m-6 rounded flex items-center justify-center">
+                  <div className="w-full h-0.5 bg-nerv-orange shadow-[0_0_8px_rgba(255,87,34,1)] animate-bounce" />
+                </div>
+              )}
             </div>
-          )}
-        </div>
 
-        <div className="flex gap-2">
-          <label className="flex-1 py-2.5 rounded bg-black/60 border border-nerv-border hover:border-nerv-orange text-slate-300 font-mono text-xs font-bold flex items-center justify-center gap-2 cursor-pointer transition-colors">
-            <UserPlus className="w-3.5 h-3.5 text-nerv-cyan" />
-            UPLOAD FOTO QR
-            <input type="file" accept="image/*" onChange={handleGalleryUpload} className="hidden" />
-          </label>
-        </div>
+            <div className="flex gap-2">
+              <label className="flex-1 py-2.5 rounded bg-black/60 border border-nerv-border hover:border-nerv-orange text-slate-300 font-mono text-xs font-bold flex items-center justify-center gap-2 cursor-pointer transition-colors">
+                <UserPlus className="w-3.5 h-3.5 text-nerv-cyan" />
+                UPLOAD FOTO QR
+                <input type="file" accept="image/*" onChange={handleGalleryUpload} className="hidden" />
+              </label>
+            </div>
+          </div>
+        )}
       </motion.div>
     </motion.div>
   )
