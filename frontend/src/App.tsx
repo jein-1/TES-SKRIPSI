@@ -41,7 +41,8 @@ import StatusPage from "./components/pages/StatusPage";
 import NavigatePage from "./components/pages/NavigatePage";
 import FamilyPage from "./components/pages/FamilyPage";
 import GuidesPage from "./components/pages/GuidesPage";
-import { fetchLocationName } from "./lib/geocode";
+import { fetchLocationName, fetchIpLocation } from "./lib/geocode";
+import { useLanguage } from "./lib/i18n";
 import { useAegisSync, aegisApi } from "./lib/useAegisSync";
 import { useBMKG, createCirclePolygon } from "./lib/useBMKG";
 import {
@@ -292,9 +293,32 @@ function App() {
   } | null>(null);
 
   // ── GPS & Alert state ──────────────────────────────────────────
+  const { lang, t } = useLanguage();
   const [gpsTracking, setGpsTracking] = useState(false);
   const [gpsError, setGpsError] = useState<string | null>(null);
   const [userLocationName, setUserLocationName] = useState<string>("Mendeteksi lokasi...");
+
+  // Instant IP Geolocation baseline — guarantees user's city & coords are detected immediately
+  useEffect(() => {
+    let active = true;
+    fetchIpLocation().then((loc) => {
+      if (active && loc) {
+        setUserPosition((prev) => {
+          if (prev) return prev; // Keep precise GPS fix if already acquired
+          return [loc.lat, loc.lng];
+        });
+        setUserLocationName((prev) => {
+          if (prev && !prev.toLowerCase().includes("mendeteksi") && !prev.toLowerCase().includes("izin")) {
+            return prev;
+          }
+          return loc.formatted;
+        });
+      }
+    }).catch(() => {});
+    return () => {
+      active = false;
+    };
+  }, []);
 
   // Reverse-geocode userPosition to real city/region name
   useEffect(() => {
@@ -624,7 +648,6 @@ function App() {
     const hasName = !!localStorage.getItem("aegisUserName");
     return !isAdminURL && (!registered || !hasName);
   });
-  const [showEditProfile, setShowEditProfile] = useState(false);
 
   // â”€â”€ Navigation â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   // Admin starts on 'map', public user starts on 'status'
@@ -816,14 +839,6 @@ function App() {
     setTimeout(() => startGpsTracking(), 800);
   };
 
-  // Profile edit (name change only — device stays registered)
-  const handleEditProfile = (name: string) => {
-    localStorage.setItem("aegisUserName", name);
-    document.cookie = `aegisUserName=${encodeURIComponent(name)};max-age=${365 * 24 * 3600};path=/;SameSite=Lax`;
-    setUserName(name);
-    setShowEditProfile(false);
-  };
-
   // ── GPS ────────────────────────────────────────────────────────────────────
 
   // ── Save history record ────────────────────────────────────────────────────
@@ -887,30 +902,53 @@ function App() {
     setGpsError(null);
     setIsCalculating(true);
 
-    // Fast initial position fix (especially on PC/laptop browsers via network/WiFi positioning)
+    // 1. Instant IP geolocation fallback so the UI immediately shows the real city
+    fetchIpLocation().then((loc) => {
+      if (loc && !hasFirstGPSFixRef.current) {
+        setUserPosition((prev) => prev ?? [loc.lat, loc.lng]);
+        setUserLocationName((prev) => {
+          if (prev && !prev.toLowerCase().includes("mendeteksi") && !prev.toLowerCase().includes("izin")) {
+            return prev;
+          }
+          return loc.formatted;
+        });
+        const routeResults = findOptimalEvacuationRoutes(
+          loc.lat,
+          loc.lng,
+          99,
+          settings.algorithm as 'dijkstra' | 'haversine',
+        );
+        lastRouteCalcResultsRef.current = routeResults;
+        setRoutes(routeResults);
+        setIsCalculating(false);
+      }
+    }).catch(() => {});
+
+    // 2. Fast initial position fix via browser network/WiFi positioning
     if (typeof window !== "undefined" && "geolocation" in navigator) {
       navigator.geolocation.getCurrentPosition(
         (pos) => {
-          if (!hasFirstGPSFixRef.current) {
-            hasFirstGPSFixRef.current = true;
-            const newPos: [number, number] = [
-              pos.coords.latitude,
-              pos.coords.longitude,
-            ];
-            setGpsAccuracy(pos.coords.accuracy);
-            setUserPosition(newPos);
-            setFlyToPos(newPos);
-            const routeResults = findOptimalEvacuationRoutes(
-              newPos[0],
-              newPos[1],
-              99,
-              settings.algorithm as 'dijkstra' | 'haversine',
-            );
-            lastRouteCalcResultsRef.current = routeResults;
-            setRoutes(routeResults);
-            setSelectedRoute(0);
-            setIsCalculating(false);
-          }
+          hasFirstGPSFixRef.current = true;
+          const newPos: [number, number] = [
+            pos.coords.latitude,
+            pos.coords.longitude,
+          ];
+          setGpsAccuracy(pos.coords.accuracy);
+          setUserPosition(newPos);
+          setFlyToPos(newPos);
+          fetchLocationName(newPos[0], newPos[1]).then((name) => {
+            if (name) setUserLocationName(name);
+          });
+          const routeResults = findOptimalEvacuationRoutes(
+            newPos[0],
+            newPos[1],
+            99,
+            settings.algorithm as 'dijkstra' | 'haversine',
+          );
+          lastRouteCalcResultsRef.current = routeResults;
+          setRoutes(routeResults);
+          setSelectedRoute(0);
+          setIsCalculating(false);
         },
         (err) => {
           console.warn("Initial GPS acquisition failed:", err);
@@ -918,31 +956,29 @@ function App() {
             setGpsError("Izin lokasi ditolak oleh browser.");
           }
         },
-        { enableHighAccuracy: false, timeout: 8000, maximumAge: 60000 }
+        { enableHighAccuracy: false, timeout: 10000, maximumAge: 60000 }
       );
     }
 
     try {
       const watchId = await Geolocation.watchPosition(
-        { enableHighAccuracy: true, maximumAge: 5000, timeout: 15000 },
+        { enableHighAccuracy: false, maximumAge: 10000, timeout: 20000 },
         (pos, err) => {
           if (err) {
             console.warn("GPS Error:", err);
-            // Don't abort tracking on temporary errors like signal loss!
-            // Just notify user temporarily.
-            setGpsError("Mencari sinyal GPS...");
             return;
           }
           if (!pos) return;
 
-          // Show accuracy badge but don't filter â€” let all positions through
           setGpsAccuracy(pos.coords.accuracy);
           const newPos: [number, number] = [
             pos.coords.latitude,
             pos.coords.longitude,
           ];
           setUserPosition(newPos);
-          // Only fly to position on the FIRST GPS fix to prevent map shaking
+          fetchLocationName(newPos[0], newPos[1]).then((name) => {
+            if (name) setUserLocationName(name);
+          });
           if (!hasFirstGPSFixRef.current) {
             hasFirstGPSFixRef.current = true;
             setFlyToPos(newPos);
@@ -1869,16 +1905,16 @@ function App() {
           }}
         >
           {[
-            { page: "status" as ActivePage, Icon: Home, label: "STATUS", code: "01" },
+            { page: "status" as ActivePage, Icon: Home, label: lang === 'id' ? 'STATUS' : 'STATUS', code: "01" },
             {
               page: "navigate" as ActivePage,
               Icon: Navigation2,
-              label: "NAVIGATE",
+              label: lang === 'id' ? 'NAVIGASI' : 'NAVIGATE',
               code: "02"
             },
-            { page: "history" as ActivePage, Icon: History, label: "ARCHIVE", code: "03" },
-            { page: "family" as ActivePage, Icon: Users, label: "UNITS", code: "04" },
-            { page: "guides" as ActivePage, Icon: BookOpen, label: "MANUAL", code: "05" },
+            { page: "history" as ActivePage, Icon: History, label: lang === 'id' ? 'ARSIP' : 'ARCHIVE', code: "03" },
+            { page: "family" as ActivePage, Icon: Users, label: lang === 'id' ? 'UNIT' : 'UNITS', code: "04" },
+            { page: "guides" as ActivePage, Icon: BookOpen, label: lang === 'id' ? 'PANDUAN' : 'MANUAL', code: "05" },
           ].map(({ page, Icon, label, code }) => {
             const isAlert = page === "navigate" && tsunamiAlert;
             const isFamilyAlert = page === "family" && hasFamilyPing;
@@ -1924,7 +1960,7 @@ function App() {
             );
           })}
           {/* Logout only shown when accessed via admin URL */}
-          {isAdminURL ? (
+          {isAdminURL && (
             <button
               onClick={handleLogout}
               className="flex flex-col items-center gap-1 py-2 px-4 text-slate-700 active:text-red-400 transition-colors"
@@ -1932,16 +1968,6 @@ function App() {
               <Lock className="w-5 h-5" />
               <span className="text-[9px] font-bold tracking-wider">
                 KELUAR
-              </span>
-            </button>
-          ) : (
-            <button
-              onClick={() => setShowEditProfile(true)}
-              className="flex flex-col items-center gap-1 py-2 px-4 text-slate-600 active:text-indigo-400 transition-colors"
-            >
-              <Shield className="w-5 h-5" />
-              <span className="text-[9px] font-bold tracking-wider">
-                PROFIL
               </span>
             </button>
           )}
@@ -2114,14 +2140,6 @@ function App() {
         <AnimatePresence>
           {showFirstVisit && (
             <FirstVisitModal key="first-visit" onComplete={handleFirstVisit} />
-          )}
-          {showEditProfile && (
-            <FirstVisitModal
-              key="edit-profile"
-              isEditing
-              onComplete={handleEditProfile}
-              onCancel={() => setShowEditProfile(false)}
-            />
           )}
         </AnimatePresence>
       </div>

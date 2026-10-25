@@ -3,18 +3,16 @@
 // ═══════════════════════════════════════════════════════════════
 import { useState, useEffect } from 'react'
 import { motion, AnimatePresence } from 'motion/react'
-import { Shield, Smartphone, Monitor, User, ArrowRight, Check, Globe } from 'lucide-react'
+import { Shield, Smartphone, Monitor, User, ArrowRight, Globe } from 'lucide-react'
 import { useLanguage } from '../../lib/i18n'
+import { fetchClientIp } from '../../lib/geocode'
 
 interface Props {
   onComplete: (name: string) => void
-  isEditing?: boolean
-  initialName?: string
   onClose?: () => void
-  onCancel?: () => void
 }
 
-function detectDevice(): { device: string; mobile: boolean } {
+function detectDevice(): { device: string; mobile: boolean; browser: string } {
   const ua = navigator.userAgent
   let device = 'Desktop'
   const mobile = /Android|iPhone|iPad|iPod/i.test(ua)
@@ -22,21 +20,35 @@ function detectDevice(): { device: string; mobile: boolean } {
   else if (/iPhone/i.test(ua)) device = 'iPhone'
   else if (/iPad/i.test(ua)) device = 'iPad'
   else if (/Windows/i.test(ua)) device = 'Windows'
-  else if (/Macintosh/i.test(ua)) device = 'Mac'
+  else if (/Macintosh/i.test(ua)) device = 'macOS'
   else if (/Linux/i.test(ua)) device = 'Linux'
-  return { device, mobile }
+
+  let browser = 'Browser'
+  if (/Edg\//i.test(ua)) browser = 'Edge'
+  else if (/Chrome\//i.test(ua)) browser = 'Chrome'
+  else if (/Safari\//i.test(ua) && !/Chrome\//i.test(ua)) browser = 'Safari'
+  else if (/Firefox\//i.test(ua)) browser = 'Firefox'
+
+  return { device, mobile, browser }
 }
 
-export default function FirstVisitModal({ onComplete, isEditing = false, initialName = '', onClose, onCancel }: Props) {
+export default function FirstVisitModal({ onComplete }: Props) {
   const { lang, setLanguage, t } = useLanguage()
-  const [name, setName] = useState(initialName || localStorage.getItem('aegisUserName') || '')
+  const [name, setName] = useState('')
   const [error, setError] = useState('')
-  const [{ device, mobile }] = useState(detectDevice)
+  const [{ device, mobile, browser }] = useState(detectDevice)
+  const [clientIp, setClientIp] = useState<string>('Mendeteksi IP...')
   const [submitting, setSubmitting] = useState(false)
 
   useEffect(() => {
-    if (initialName) setName(initialName)
-  }, [initialName])
+    let isMounted = true
+    fetchClientIp().then((ip) => {
+      if (isMounted) setClientIp(ip)
+    })
+    return () => {
+      isMounted = false
+    }
+  }, [])
 
   const validate = (val: string): string => {
     const trimmed = val.trim()
@@ -106,31 +118,35 @@ export default function FirstVisitModal({ onComplete, isEditing = false, initial
           </p>
         </div>
 
-        {/* Device info */}
-        <div className="flex items-center justify-center gap-2 mb-5 px-3 py-1.5 rounded bg-black/60 border border-nerv-border text-slate-400 font-mono text-[10px]">
-          {mobile ? <Smartphone className="w-3.5 h-3.5 text-nerv-cyan" /> : <Monitor className="w-3.5 h-3.5 text-nerv-cyan" />}
-          <span>
-            {t('device')}: <span className="text-white font-bold">{device} · {mobile ? 'Mobile' : 'Desktop'}</span>
-          </span>
+        {/* Device & Real-time IP badge */}
+        <div className="flex flex-col items-center justify-center gap-1.5 mb-5 px-3 py-2 rounded bg-black/60 border border-nerv-border text-slate-400 font-mono text-[10px]">
+          <div className="flex items-center gap-2">
+            {mobile ? <Smartphone className="w-3.5 h-3.5 text-nerv-cyan shrink-0" /> : <Monitor className="w-3.5 h-3.5 text-nerv-cyan shrink-0" />}
+            <span>
+              {t('device')}: <span className="text-white font-bold">{device} · {mobile ? 'Mobile' : 'Desktop'} ({browser})</span>
+            </span>
+          </div>
+          <div className="flex items-center gap-1.5 text-[9px] text-nerv-cyan border-t border-slate-800/80 pt-1 w-full justify-center">
+            <Globe className="w-3 h-3 text-nerv-cyan shrink-0" />
+            <span>{t('currentIp')}: <span className="text-slate-200 font-bold">{clientIp}</span></span>
+          </div>
         </div>
 
         {/* Form Container */}
         <div className="p-5 rounded-lg border border-nerv-border bg-nerv-card shadow-2xl">
           <h2 className="text-base font-mono font-bold text-white mb-1 uppercase">
-            {isEditing ? t('editProfile') : t('welcome')}
+            {t('welcome')}
           </h2>
           <p className="text-[11px] text-slate-400 mb-4 font-sans leading-relaxed">
-            {isEditing ? t('editSubtitle') : t('welcomeSubtitle')}
+            {t('welcomeSubtitle')}
           </p>
 
-          {!isEditing && (
-            <div className="mb-4 p-2.5 rounded bg-black/40 border border-nerv-orange/30 font-mono">
-              <p className="text-[10px] text-nerv-orange font-bold uppercase">⚠ {t('oneDeviceOneReg')}</p>
-              <p className="text-[9px] text-slate-400 mt-0.5 font-sans leading-relaxed">
-                {t('oneDeviceDesc')}
-              </p>
-            </div>
-          )}
+          <div className="mb-4 p-2.5 rounded bg-black/40 border border-nerv-orange/30 font-mono">
+            <p className="text-[10px] text-nerv-orange font-bold uppercase">⚠ {t('oneDeviceOneReg')}</p>
+            <p className="text-[9px] text-slate-400 mt-0.5 font-sans leading-relaxed">
+              {t('oneDeviceDesc')}
+            </p>
+          </div>
 
           <label className="block mb-1.5">
             <span className="text-[10px] text-slate-400 font-mono uppercase tracking-widest font-bold">
@@ -168,25 +184,17 @@ export default function FirstVisitModal({ onComplete, isEditing = false, initial
             )}
           </AnimatePresence>
 
-          <div className="flex gap-2 mt-5">
-            {isEditing && (onClose || onCancel) && (
-              <button
-                onClick={() => (onClose || onCancel)?.()}
-                className="flex-1 py-2.5 rounded bg-black/60 border border-nerv-border hover:border-slate-500 text-slate-400 font-mono text-xs font-bold uppercase tracking-wider transition-colors"
-              >
-                Batal
-              </button>
-            )}
+          <div className="mt-5">
             <button
               onClick={handleSubmit}
               disabled={submitting}
-              className="flex-1 py-3 rounded bg-nerv-orange hover:bg-orange-600 text-black font-mono font-bold text-xs uppercase tracking-widest flex items-center justify-center gap-2 shadow-[0_0_15px_rgba(255,87,34,0.4)] transition-all"
+              className="w-full py-3 rounded bg-nerv-orange hover:bg-orange-600 text-black font-mono font-bold text-xs uppercase tracking-widest flex items-center justify-center gap-2 shadow-[0_0_15px_rgba(255,87,34,0.4)] transition-all"
             >
               {submitting ? (
                 <div className="w-4 h-4 border-2 border-black border-t-transparent rounded-full animate-spin" />
               ) : (
                 <>
-                  <span>{isEditing ? t('saveProfile') : t('continue')}</span>
+                  <span>{t('continue')}</span>
                   <ArrowRight className="w-3.5 h-3.5" />
                 </>
               )}

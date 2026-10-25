@@ -11,6 +11,7 @@ import { useLanguage } from '../../lib/i18n'
 const PALU_CENTER: [number, number] = [-0.8917, 119.8577]
 
 function MiniMap() {
+  const { t } = useLanguage()
   const [pos, setPos] = useState<[number, number] | null>(null)
 
   useEffect(() => {
@@ -23,7 +24,7 @@ function MiniMap() {
     const w = navigator.geolocation.watchPosition(
       p => setPos([p.coords.longitude, p.coords.latitude]),
       () => {},
-      { enableHighAccuracy: true }
+      { enableHighAccuracy: false }
     )
     return () => navigator.geolocation.clearWatch(w)
   }, [])
@@ -33,7 +34,7 @@ function MiniMap() {
       className="h-36 rounded-lg border border-nerv-border bg-nerv-card overflow-hidden relative pointer-events-none">
       <div className="absolute top-2 left-2 z-20 flex items-center gap-1.5 px-2 py-0.5 rounded bg-black/80 border border-nerv-border">
         <div className="w-1.5 h-1.5 rounded-full bg-nerv-green animate-pulse" />
-        <span className="text-[9px] font-mono font-bold text-slate-300">GPS TELEMETRY MESH</span>
+        <span className="text-[9px] font-mono font-bold text-slate-300">{t('gpsTelemetryMesh')}</span>
       </div>
       <Map
         viewport={{
@@ -51,7 +52,7 @@ function MiniMap() {
                   <div style={{ position:'relative', width:12, height:12, borderRadius:'50%', background:'#FF5722', border:'2px solid white', boxShadow:'0 0 10px rgba(255,87,34,0.9)', zIndex:1 }}></div>
                 </div>
                 <span className="font-mono text-[8px] font-black px-1.5 py-0.5 rounded bg-black/90 text-nerv-orange border border-nerv-orange/40 uppercase tracking-widest mt-0.5">
-                  TARGET LOCK
+                  {t('targetLock')}
                 </span>
               </div>
             </MarkerContent>
@@ -61,7 +62,7 @@ function MiniMap() {
       {!pos && (
         <div className="absolute inset-0 flex flex-col items-center justify-center bg-nerv-bg/90 z-10 font-mono">
           <MapPin className="w-5 h-5 text-nerv-orange mb-1 animate-bounce"/>
-          <p className="text-[10px] text-slate-400">SEARCHING SATELLITE FIX...</p>
+          <p className="text-[10px] text-slate-400">{t('searchingSatelliteFix')}</p>
         </div>
       )}
     </motion.div>
@@ -144,7 +145,7 @@ export default function StatusPage({ onNavigate, userLocation, onBack, userName,
             <div className="flex items-center gap-1.5">
               <MapPin className="w-3.5 h-3.5 text-nerv-cyan shrink-0" />
               <h2 className="text-xs sm:text-sm font-mono font-bold text-white truncate">
-                {userLocation || 'MENDETEKSI LOKASI...'}
+                {userLocation || t('detectingLocation')}
               </h2>
             </div>
           </div>
@@ -181,11 +182,11 @@ export default function StatusPage({ onNavigate, userLocation, onBack, userName,
                 <div className="flex items-center gap-1.5 mb-1">
                   <Radio className="w-3.5 h-3.5 text-nerv-orange animate-pulse" />
                   <span className="text-[9px] font-mono font-black text-nerv-orange tracking-widest uppercase">
-                    LIVE SEISMIC FEED · {latestQuake.source}
+                    {t('liveSeismicFeed')} · {latestQuake.source}
                   </span>
                 </div>
                 <p className="text-sm font-bold text-white leading-snug line-clamp-2">
-                  {latestQuake.location || 'Gempa Terdeteksi di Wilayah Indonesia'}
+                  {latestQuake.location || t('quakeDetected')}
                 </p>
                 {latestQuake.potensi && (
                   <p className="text-[10px] font-mono text-nerv-yellow mt-1 font-semibold">
@@ -211,12 +212,12 @@ export default function StatusPage({ onNavigate, userLocation, onBack, userName,
           className="p-3 rounded-lg border border-nerv-border bg-nerv-card flex items-center justify-between font-mono"
         >
           <div>
-            <p className="text-[9px] text-slate-500 uppercase tracking-widest font-bold">DEFCON STATUS</p>
-            <p className="text-base font-black text-nerv-green">LEVEL 1 // STANDBY NORMAL</p>
+            <p className="text-[9px] text-slate-500 uppercase tracking-widest font-bold">{t('defconStatus')}</p>
+            <p className="text-base font-black text-nerv-green">{t('defconNormal')}</p>
           </div>
           <div className="flex items-center gap-1.5 px-2.5 py-1 rounded bg-nerv-green/10 border border-nerv-green/30 text-nerv-green text-[10px] font-bold">
             <CheckCircle className="w-3.5 h-3.5" />
-            <span>ALL SENSORS NOMINAL</span>
+            <span>{t('allSensorsNominal')}</span>
           </div>
         </motion.div>
 
@@ -234,10 +235,10 @@ export default function StatusPage({ onNavigate, userLocation, onBack, userName,
           </div>
 
           <h3 className="text-xl font-black text-white tracking-wide font-mono mb-1">
-            REPORT SAFETY STATUS
+            {t('reportSafetyStatus')}
           </h3>
           <p className="text-xs text-slate-400 mb-5 leading-relaxed font-sans">
-            Konfirmasikan kondisi keselamatan Anda ke Pusat Komando A.T.L.A.S dan grup keluarga.
+            {t('reportSafetyDesc')}
           </p>
 
           {/* Big Tactical Button */}
@@ -273,7 +274,7 @@ export default function StatusPage({ onNavigate, userLocation, onBack, userName,
                 </div>
               )}
               <span className="text-xs tracking-wider uppercase">
-                {safePressed ? 'CONFIRMED' : 'I AM SAFE'}
+                {safePressed ? t('confirmed') : t('iAmSafe')}
               </span>
             </motion.button>
           </div>
@@ -283,7 +284,7 @@ export default function StatusPage({ onNavigate, userLocation, onBack, userName,
               initial={{ opacity: 0, y: 4 }} animate={{ opacity: 1, y: 0 }}
               className="text-[11px] font-mono text-nerv-green font-bold"
             >
-              SIGNAL TRANSMITTED: {lastUpdated}
+              {t('signalTransmitted')} {lastUpdated}
             </motion.p>
           )}
         </motion.div>
@@ -292,8 +293,6 @@ export default function StatusPage({ onNavigate, userLocation, onBack, userName,
         {(() => {
           const fam = loadFamily()
           if (fam.length === 0) return null
-          const preview = fam.slice(0, 3)
-          const extra = fam.length - 3
           const safeCount = fam.filter(m => m.status === 'safe').length
           return (
             <motion.button
@@ -306,9 +305,9 @@ export default function StatusPage({ onNavigate, userLocation, onBack, userName,
                   <Users className="w-4 h-4 text-nerv-cyan" />
                 </div>
                 <div>
-                  <p className="text-[9px] font-mono text-slate-500 uppercase tracking-widest font-bold">LINKED PERSONNEL</p>
-                  <p className="text-sm font-bold text-white">Family Unit · {fam.length} Anggota</p>
-                  <p className="text-[10px] font-mono text-nerv-green mt-0.5">{safeCount}/{fam.length} ANGGOTA TERVERIFIKASI AMAN</p>
+                  <p className="text-[9px] font-mono text-slate-500 uppercase tracking-widest font-bold">{t('linkedPersonnel')}</p>
+                  <p className="text-sm font-bold text-white">{t('familyUnit')} · {fam.length} {t('members')}</p>
+                  <p className="text-[10px] font-mono text-nerv-green mt-0.5">{safeCount}/{fam.length} {t('membersVerifiedSafe')}</p>
                 </div>
               </div>
               <ChevronRight className="w-4 h-4 text-slate-500 shrink-0" />
@@ -327,9 +326,9 @@ export default function StatusPage({ onNavigate, userLocation, onBack, userName,
               <BookOpen className="w-4 h-4 text-nerv-orange" />
             </div>
             <div>
-              <p className="text-[9px] font-mono text-slate-500 uppercase tracking-widest font-bold">TACTICAL PROTOCOL</p>
-              <p className="text-sm font-bold text-white">Protokol Evakuasi Tsunami</p>
-              <p className="text-[10px] text-slate-400 mt-0.5">Standar Operasional Darurat & Titik Kumpul Aman</p>
+              <p className="text-[9px] font-mono text-slate-500 uppercase tracking-widest font-bold">{t('tacticalProtocol')}</p>
+              <p className="text-sm font-bold text-white">{t('tsunamiProtocol')}</p>
+              <p className="text-[10px] text-slate-400 mt-0.5">{t('tsunamiProtocolDesc')}</p>
             </div>
           </div>
           <ChevronRight className="w-4 h-4 text-slate-500 shrink-0" />
