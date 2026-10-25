@@ -30,6 +30,7 @@ export interface AegisSyncEvent {
   role?: string;
   id?: string;
   name?: string;
+  nik?: string;
   deviceModel?: string;
   lat?: number;
   lng?: number;
@@ -130,25 +131,25 @@ export const aegisApi = {
   },
 
   /** Reply to a ping (Supabase Broadcast) */
-  pingReply: async (fromId: string, fromName: string, toId: string) => {
+  pingReply: async (fromId: string, fromName: string, toId: string, nik?: string) => {
     await broadcastChannel.send({
       type: "broadcast",
       event: "PING_REPLY",
-      payload: { fromId, fromName, toId },
+      payload: { fromId, fromName, toId, nik },
     });
   },
 
   /** Broadcast user location (Supabase Upsert & Broadcast) */
-  broadcastLocation: async (id: string, name: string, deviceModel: string, lat: number, lng: number, battery: number) => {
+  broadcastLocation: async (id: string, name: string, deviceModel: string, lat: number, lng: number, battery: number, nik?: string) => {
     // 1. Broadcast immediately for fast admin dashboard update
     await broadcastChannel.send({
       type: "broadcast",
       event: "LOCATION_UPDATE",
-      payload: { id, name, deviceModel, lat, lng, battery },
+      payload: { id, name, deviceModel, lat, lng, battery, nik },
     });
     
     // 2. Persist to Postgres for audit trail
-    await supabase.from("location_updates").upsert({
+    const upsertData: Record<string, any> = {
       id,
       name,
       device_model: deviceModel,
@@ -156,7 +157,15 @@ export const aegisApi = {
       lng,
       battery,
       updated_at: new Date().toISOString()
-    });
+    };
+    if (nik) {
+      upsertData.nik = nik;
+    }
+    const { error } = await supabase.from("location_updates").upsert(upsertData);
+    if (error && error.message && error.message.includes("nik")) {
+      delete upsertData.nik;
+      await supabase.from("location_updates").upsert(upsertData);
+    }
   },
 
   /** Get current tsunami state on mount */
@@ -333,12 +342,13 @@ export const aegisApi = {
       const tenMinsAgo = new Date(Date.now() - 10 * 60 * 1000).toISOString();
       const { data, error } = await supabase
         .from("location_updates")
-        .select("id, name, device_model, lat, lng, battery, updated_at")
+        .select("*")
         .gte("updated_at", tenMinsAgo);
       if (error || !data) return [];
       return data.map((row: any) => ({
         id: row.id,
         name: row.name,
+        nik: row.nik || undefined,
         deviceModel: row.device_model,
         lat: row.lat,
         lng: row.lng,

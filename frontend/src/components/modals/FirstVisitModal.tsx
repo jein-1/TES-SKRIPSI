@@ -3,12 +3,12 @@
 // ═══════════════════════════════════════════════════════════════
 import { useState, useEffect } from 'react'
 import { motion, AnimatePresence } from 'motion/react'
-import { Shield, Smartphone, Monitor, User, ArrowRight, Globe } from 'lucide-react'
+import { Shield, Smartphone, Monitor, User, ArrowRight, Globe, CreditCard } from 'lucide-react'
 import { useLanguage } from '../../lib/i18n'
 import { fetchClientIp } from '../../lib/geocode'
 
 interface Props {
-  onComplete: (name: string) => void
+  onComplete: (name: string, nik: string) => void
   onClose?: () => void
 }
 
@@ -35,6 +35,7 @@ function detectDevice(): { device: string; mobile: boolean; browser: string } {
 export default function FirstVisitModal({ onComplete }: Props) {
   const { lang, setLanguage, t } = useLanguage()
   const [name, setName] = useState('')
+  const [nik, setNik] = useState('')
   const [error, setError] = useState('')
   const [{ device, mobile, browser }] = useState(detectDevice)
   const [clientIp, setClientIp] = useState<string>('Mendeteksi IP...')
@@ -50,24 +51,30 @@ export default function FirstVisitModal({ onComplete }: Props) {
     }
   }, [])
 
-  const validate = (val: string): string => {
-    const trimmed = val.trim()
-    if (trimmed.length < 3) return lang === 'id' ? 'Nama minimal 3 karakter' : 'Name must be at least 3 characters'
-    if (trimmed.length > 30) return lang === 'id' ? 'Nama maksimal 30 karakter' : 'Name cannot exceed 30 characters'
-    if (!/^[a-zA-Z\s]+$/.test(trimmed)) return lang === 'id' ? 'Hanya huruf dan spasi diperbolehkan' : 'Only letters and spaces allowed'
+  const validate = (): string => {
+    const trimmedName = name.trim()
+    if (trimmedName.length < 3) return lang === 'id' ? 'Nama minimal 3 karakter' : 'Name must be at least 3 characters'
+    if (trimmedName.length > 35) return lang === 'id' ? 'Nama maksimal 35 karakter' : 'Name cannot exceed 35 characters'
+    if (!/^[a-zA-Z\s]+$/.test(trimmedName)) return lang === 'id' ? 'Nama hanya boleh huruf dan spasi (sesuai KTP)' : 'Name must contain only letters and spaces'
+
+    const cleanNik = nik.trim()
+    if (cleanNik.length !== 16 || !/^\d{16}$/.test(cleanNik)) {
+      return lang === 'id' ? 'NIK KTP harus tepat 16 digit angka' : 'National ID (NIK) must be exactly 16 numeric digits'
+    }
     return ''
   }
 
   const handleSubmit = () => {
-    const err = validate(name)
+    const err = validate()
     if (err) { setError(err); return }
     setSubmitting(true)
     setTimeout(() => {
-      onComplete(name.trim())
+      onComplete(name.trim(), nik.trim())
     }, 400)
   }
 
   const charLeft = name.trim().length
+  const nikDigits = nik.trim().length
 
   return (
     <motion.div
@@ -141,54 +148,95 @@ export default function FirstVisitModal({ onComplete }: Props) {
             {t('welcomeSubtitle')}
           </p>
 
-          <div className="mb-4 p-2.5 rounded bg-black/40 border border-nerv-orange/30 font-mono">
-            <p className="text-[10px] text-nerv-orange font-bold uppercase">⚠ {t('oneDeviceOneReg')}</p>
-            <p className="text-[9px] text-slate-400 mt-0.5 font-sans leading-relaxed">
+          <div className="mb-4 p-2.5 rounded bg-black/50 border border-nerv-orange/40 font-mono relative overflow-hidden">
+            <div className="flex items-center justify-between mb-1">
+              <p className="text-[10px] text-nerv-orange font-bold uppercase tracking-wider flex items-center gap-1">
+                <span>⚠</span> {t('oneDeviceOneReg')}
+              </p>
+              <span className="text-[8px] px-1.5 py-0.5 rounded bg-nerv-orange/20 text-nerv-orange border border-nerv-orange/40">
+                NERV-SEC-01
+              </span>
+            </div>
+            <p className="text-[9px] text-slate-300 mt-0.5 font-sans leading-relaxed">
               {t('oneDeviceDesc')}
             </p>
           </div>
 
-          <label className="block mb-1.5">
-            <span className="text-[10px] text-slate-400 font-mono uppercase tracking-widest font-bold">
-              {t('nameLabel')}
-            </span>
-            <span className="text-[9px] text-slate-500 font-mono ml-2">{t('nameHint')}</span>
-          </label>
-          <div className="relative">
-            <User className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500" />
-            <input
-              type="text"
-              value={name}
-              maxLength={30}
-              onChange={e => { setName(e.target.value); setError('') }}
-              onKeyDown={e => e.key === 'Enter' && handleSubmit()}
-              placeholder={t('namePlaceholder')}
-              autoFocus
-              className="w-full pl-9 pr-12 py-2.5 rounded bg-black/60 border border-nerv-border text-white placeholder-slate-600 font-mono text-sm focus:outline-none focus:border-nerv-orange transition-colors"
-            />
-            <span className={`absolute right-3 top-1/2 -translate-y-1/2 text-[10px] font-mono ${charLeft < 3 ? 'text-nerv-red' : 'text-slate-500'}`}>
-              {name.trim().length}/30
-            </span>
+          {/* Input Nama Sesuai KTP */}
+          <div className="mb-3.5">
+            <div className="flex items-center justify-between mb-1.5">
+              <label className="text-[10px] text-slate-300 font-mono uppercase tracking-widest font-bold flex items-center gap-1.5">
+                <User className="w-3 h-3 text-nerv-orange" />
+                {t('nameLabel')}
+              </label>
+              <span className="text-[9px] text-slate-400 font-mono">{t('nameHint')}</span>
+            </div>
+            <div className="relative">
+              <input
+                type="text"
+                value={name}
+                maxLength={35}
+                onChange={e => { setName(e.target.value); setError('') }}
+                onKeyDown={e => e.key === 'Enter' && handleSubmit()}
+                placeholder={t('namePlaceholder')}
+                autoFocus
+                className="w-full px-3 py-2.5 rounded bg-black/60 border border-nerv-border text-white placeholder-slate-600 font-mono text-sm focus:outline-none focus:border-nerv-orange focus:ring-1 focus:ring-nerv-orange/30 transition-all"
+              />
+              <span className={`absolute right-3 top-1/2 -translate-y-1/2 text-[10px] font-mono ${charLeft < 3 ? 'text-nerv-red' : 'text-slate-400'}`}>
+                {charLeft}/35
+              </span>
+            </div>
+          </div>
+
+          {/* Input NIK KTP 16 Digit */}
+          <div className="mb-4">
+            <div className="flex items-center justify-between mb-1.5">
+              <label className="text-[10px] text-slate-300 font-mono uppercase tracking-widest font-bold flex items-center gap-1.5">
+                <CreditCard className="w-3 h-3 text-nerv-cyan" />
+                {t('nikLabel')}
+              </label>
+              <span className="text-[9px] text-nerv-cyan font-mono">{t('nikHint')}</span>
+            </div>
+            <div className="relative">
+              <input
+                type="text"
+                inputMode="numeric"
+                value={nik}
+                maxLength={16}
+                onChange={e => {
+                  const cleaned = e.target.value.replace(/\D/g, '').slice(0, 16);
+                  setNik(cleaned);
+                  setError('');
+                }}
+                onKeyDown={e => e.key === 'Enter' && handleSubmit()}
+                placeholder={t('nikPlaceholder')}
+                className="w-full px-3 py-2.5 rounded bg-black/60 border border-nerv-border text-nerv-cyan placeholder-slate-600 font-mono text-sm tracking-wider focus:outline-none focus:border-nerv-cyan focus:ring-1 focus:ring-nerv-cyan/30 transition-all"
+              />
+              <span className={`absolute right-3 top-1/2 -translate-y-1/2 text-[10px] font-mono font-bold ${nikDigits === 16 ? 'text-nerv-green' : 'text-nerv-orange'}`}>
+                {nikDigits}/16
+              </span>
+            </div>
           </div>
 
           <AnimatePresence>
             {error && (
-              <motion.p
+              <motion.div
                 initial={{ opacity: 0, y: -4 }}
                 animate={{ opacity: 1, y: 0 }}
                 exit={{ opacity: 0 }}
-                className="text-nerv-red font-mono text-[10px] mt-2"
+                className="p-2 rounded bg-nerv-red/20 border border-nerv-red/50 text-nerv-red font-mono text-[10px] mb-3 flex items-center gap-1.5"
               >
-                ⚠ {error}
-              </motion.p>
+                <span>⚠</span>
+                <span>{error}</span>
+              </motion.div>
             )}
           </AnimatePresence>
 
-          <div className="mt-5">
+          <div className="mt-2">
             <button
               onClick={handleSubmit}
               disabled={submitting}
-              className="w-full py-3 rounded bg-nerv-orange hover:bg-orange-600 text-black font-mono font-bold text-xs uppercase tracking-widest flex items-center justify-center gap-2 shadow-[0_0_15px_rgba(255,87,34,0.4)] transition-all"
+              className="w-full py-3 rounded bg-nerv-orange hover:bg-orange-600 active:scale-[0.99] text-black font-mono font-bold text-xs uppercase tracking-widest flex items-center justify-center gap-2 shadow-[0_0_20px_rgba(255,87,34,0.4)] transition-all"
             >
               {submitting ? (
                 <div className="w-4 h-4 border-2 border-black border-t-transparent rounded-full animate-spin" />

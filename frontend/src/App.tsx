@@ -91,6 +91,8 @@ import {
   Home,
   Edit2,
   Target,
+  Search,
+  CreditCard,
 } from "lucide-react";
 import { motion, AnimatePresence, useDragControls } from "motion/react";
 
@@ -413,7 +415,7 @@ function App() {
   // ── Admin Ping State ─────────────────────────────────────────────────
   const [showAdminPingModal, setShowAdminPingModal] = useState<{ id: string; name: string } | null>(null);
   const [adminPingMessage, setAdminPingMessage] = useState("");
-  const [pingReplies, setPingReplies] = useState<{ id: string; name: string; ts: number }[]>([]);
+  const [pingReplies, setPingReplies] = useState<{ id: string; name: string; nik?: string; ts: number }[]>([]);
   const [pingSentToast, setPingSentToast] = useState<{ name: string; ts: number } | null>(null);
   
   // ── Shelter interaction state ──────────────────────────────────────────
@@ -447,6 +449,7 @@ function App() {
       {
         id: string;
         name: string;
+        nik?: string;
         deviceModel: string;
         lat: number;
         lng: number;
@@ -459,6 +462,7 @@ function App() {
   const [selectedUserInfo, setSelectedUserInfo] = useState<{
     id: string;
     name: string;
+    nik?: string;
     deviceModel: string;
     lat: number;
     lng: number;
@@ -467,6 +471,7 @@ function App() {
     ts: number;
   } | null>(null);
   const [isPinging, setIsPinging] = useState(false);
+  const [adminUserSearch, setAdminUserSearch] = useState("");
 
   // — URL-based Admin Detection ———————————————————————————————————————————
   // Admin mode: URL contains ?admin OR ?key=aegis2024 OR hash #admin
@@ -642,24 +647,50 @@ function App() {
     return (sessionStorage.getItem("aegisRole") as AppUserRole) ?? null;
   });
 
-  // User display name — stored in localStorage, set on first visit
+  // User display name & NIK — stored in localStorage, set on first visit
   const [userName, setUserName] = useState<string>(() => {
-    const ls = localStorage.getItem("aegisUserName");
+    const ls = localStorage.getItem("atlasUserName") || localStorage.getItem("aegisUserName");
     if (ls) return ls;
-    const m = document.cookie.match(/(?:^|; )aegisUserName=([^;]*)/);
+    const m = document.cookie.match(/(?:^|; )(?:atlasUserName|aegisUserName)=([^;]*)/);
     if (m) {
       const n = decodeURIComponent(m[1]);
+      localStorage.setItem("atlasUserName", n);
       localStorage.setItem("aegisUserName", n);
       return n;
     }
     return "";
   });
+  const [userNik, setUserNik] = useState<string>(() => {
+    const ls = localStorage.getItem("atlasUserNik") || localStorage.getItem("aegisUserNik");
+    if (ls) return ls;
+    const m = document.cookie.match(/(?:^|; )(?:atlasUserNik|aegisUserNik)=([^;]*)/);
+    if (m) {
+      const n = decodeURIComponent(m[1]);
+      localStorage.setItem("atlasUserNik", n);
+      localStorage.setItem("aegisUserNik", n);
+      return n;
+    }
+    return "";
+  });
   const [showFirstVisit, setShowFirstVisit] = useState(() => {
-    const registered = localStorage.getItem("aegisRegistered");
-    const hasName = !!localStorage.getItem("aegisUserName");
-    return !isAdminURL && (!registered || !hasName);
+    const registered = localStorage.getItem("atlasRegistered") || localStorage.getItem("aegisRegistered");
+    const hasName = !!(localStorage.getItem("atlasUserName") || localStorage.getItem("aegisUserName"));
+    const hasNik = !!(localStorage.getItem("atlasUserNik") || localStorage.getItem("aegisUserNik"));
+    return !isAdminURL && (!registered || !hasName || !hasNik);
   });
   const [showProfileModal, setShowProfileModal] = useState(false);
+
+  // Case-insensitive flexible filter for Admin to search users by Name or NIK
+  const adminFilteredUsers = useMemo(() => {
+    const q = adminUserSearch.trim().toLowerCase();
+    if (!q) return [];
+    return Object.values(activeUsers).filter((u) => {
+      const name = (u.name || "").toLowerCase();
+      const nik = ((u as any).nik || "").toLowerCase();
+      const id = (u.id || "").toLowerCase();
+      return name.includes(q) || nik.includes(q) || id.includes(q);
+    });
+  }, [adminUserSearch, activeUsers]);
 
   // â”€â”€ Navigation â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   // Admin starts on 'map', public user starts on 'status'
@@ -841,12 +872,18 @@ function App() {
     setActivePage("status");
   };
 
-  // First visit name completion
-  const handleFirstVisit = (name: string) => {
+  // First visit name and NIK completion
+  const handleFirstVisit = (name: string, nik: string) => {
+    localStorage.setItem("atlasUserName", name);
     localStorage.setItem("aegisUserName", name);
+    localStorage.setItem("atlasUserNik", nik);
+    localStorage.setItem("aegisUserNik", nik);
+    localStorage.setItem("atlasRegistered", "1");
     localStorage.setItem("aegisRegistered", "1");
-    document.cookie = `aegisUserName=${encodeURIComponent(name)};max-age=${365 * 24 * 3600};path=/;SameSite=Lax`;
+    document.cookie = `atlasUserName=${encodeURIComponent(name)};max-age=${365 * 24 * 3600};path=/;SameSite=Lax`;
+    document.cookie = `atlasUserNik=${encodeURIComponent(nik)};max-age=${365 * 24 * 3600};path=/;SameSite=Lax`;
     setUserName(name);
+    setUserNik(nik);
     setShowFirstVisit(false);
     setTimeout(() => startGpsTracking(), 800);
   };
@@ -1084,6 +1121,7 @@ function App() {
                         newPos[0],
                         newPos[1],
                         bat,
+                        userNik,
                       )
                       .catch(() => {});
                   })
@@ -1096,6 +1134,7 @@ function App() {
                         newPos[0],
                         newPos[1],
                         100,
+                        userNik,
                       )
                       .catch(() => {});
                   });
@@ -1109,13 +1148,13 @@ function App() {
                     newPos[0],
                     newPos[1],
                     100,
+                    userNik,
                   )
                   .catch(() => {});
               });
           }
 
-          // â”€â”€ Arrival detection: check if within ARRIVAL_RADIUS_METERS of any shelter â”€â”€
-          // ── Arrival detection: check if within ARRIVAL_RADIUS_METERS of any shelter ──
+          // ── Arrival detection: check if within shelter radius with dynamic GPS tolerance ──
           // Only fires once per GPS session (arrivedFiredRef prevents repeat triggers)
           if (!arrivedFiredRef.current) {
             const toRad = (d: number) => d * (Math.PI / 180);
@@ -1129,7 +1168,13 @@ function App() {
                   Math.cos(toRad(sh.lat)) *
                   Math.sin(dLng / 2) ** 2;
               const dist = R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-              return dist <= (sh.radiusMeters ?? ARRIVAL_RADIUS_METERS);
+              // Dynamic GPS accuracy buffer tolerance:
+              // Base radius configured by Admin: sh.radiusMeters ?? ARRIVAL_RADIUS_METERS
+              // Dynamic GPS jitter tolerance: min(accuracy || 20, 25)
+              const baseRadius = sh.radiusMeters ?? ARRIVAL_RADIUS_METERS;
+              const gpsTolerance = Math.min(pos.coords.accuracy || 20, 25);
+              const effectiveRadius = Math.max(baseRadius, 30) + gpsTolerance;
+              return dist <= effectiveRadius;
             });
             if (arrived) {
               arrivedFiredRef.current = true;
@@ -1387,7 +1432,7 @@ function App() {
       if (isAdminURL && ev.toId === terminalId) {
         // Instead of native alert, add to toast queue
         setPingReplies(prev => {
-          const newReplies = [...prev, { id: ev.fromId, name: ev.fromName, ts: Date.now() }];
+          const newReplies = [...prev, { id: ev.fromId, name: ev.fromName, nik: ev.nik, ts: Date.now() }];
           // Auto remove after 5s
           setTimeout(() => {
             setPingReplies(current => current.filter(r => r.ts !== newReplies[newReplies.length - 1].ts));
@@ -1403,6 +1448,7 @@ function App() {
         const updatedUser = {
           id: ev.id,
           name: ev.name || ev.id,
+          nik: ev.nik || "",
           deviceModel: ev.deviceModel || "Unknown Device",
           lat: ev.lat,
           lng: ev.lng,
@@ -1636,7 +1682,7 @@ function App() {
               adminPing={adminPing}
               onAdminPingDismiss={() => {
                 if (adminPing?.fromId) {
-                  aegisApi.pingReply(terminalId, userName || "Pengguna", adminPing.fromId).catch(() => {});
+                  aegisApi.pingReply(terminalId, userName || "Pengguna", adminPing.fromId, userNik).catch(() => {});
                 }
                 setAdminPing(null);
               }}
@@ -2225,6 +2271,7 @@ function App() {
           isOpen={showProfileModal}
           onClose={() => setShowProfileModal(false)}
           userName={userName}
+          userNik={userNik}
           terminalId={terminalId}
         />
       </div>
@@ -2525,6 +2572,82 @@ function App() {
         {/* â•â•â• CENTER MAP â•â•â• */}
         <main className="flex-1 relative z-0 bg-[#0b1120]">
           {/* Admin: GPS badges dihapus - admin hanya memantau, tidak navigasi */}
+
+          {/* Admin NERV Tactical Search Bar */}
+          {isAdminURL && (
+            <div className="absolute top-4 left-4 z-[900] w-72 sm:w-80 pointer-events-auto">
+              <div className="relative">
+                <div className="flex items-center gap-2 px-3 py-2 rounded-xl bg-black/85 backdrop-blur-md border border-nerv-border shadow-[0_4px_25px_rgba(0,0,0,0.6)] focus-within:border-nerv-orange transition-all">
+                  <Search className="w-4 h-4 text-nerv-orange shrink-0" />
+                  <input
+                    type="text"
+                    value={adminUserSearch}
+                    onChange={(e) => setAdminUserSearch(e.target.value)}
+                    placeholder="CARI NAMA / NIK KTP..."
+                    className="w-full bg-transparent text-xs text-white placeholder-slate-500 font-mono tracking-wider focus:outline-none"
+                  />
+                  {adminUserSearch && (
+                    <button
+                      onClick={() => setAdminUserSearch("")}
+                      className="p-1 rounded hover:bg-slate-800 text-slate-400 hover:text-white transition-colors"
+                    >
+                      <X className="w-3.5 h-3.5" />
+                    </button>
+                  )}
+                </div>
+
+                {/* Dropdown Hasil Pencarian */}
+                <AnimatePresence>
+                  {adminUserSearch.trim() && (
+                    <motion.div
+                      initial={{ opacity: 0, y: -6 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      exit={{ opacity: 0, y: -6 }}
+                      className="absolute top-full left-0 right-0 mt-2 bg-nerv-card/95 backdrop-blur-xl border border-nerv-border rounded-xl shadow-2xl overflow-hidden max-h-72 overflow-y-auto divide-y divide-nerv-border/60 font-mono"
+                    >
+                      <div className="px-3 py-1.5 bg-black/60 text-[9px] font-bold text-nerv-cyan uppercase tracking-widest flex items-center justify-between">
+                        <span>HASIL PENCARIAN</span>
+                        <span>{adminFilteredUsers.length} DITEMUKAN</span>
+                      </div>
+
+                      {adminFilteredUsers.length === 0 ? (
+                        <div className="p-3 text-center text-[10px] text-slate-400 font-sans">
+                          Tidak ditemukan personel dengan nama atau NIK tersebut.
+                        </div>
+                      ) : (
+                        adminFilteredUsers.map((u) => (
+                          <div
+                            key={u.id}
+                            onClick={() => {
+                              setViewport((v) => ({ ...v, center: [u.lng, u.lat], zoom: 17 }));
+                              setSelectedUserInfo({ ...u });
+                              setAdminUserSearch("");
+                            }}
+                            className="p-2.5 hover:bg-white/5 cursor-pointer transition-colors flex items-center justify-between gap-2"
+                          >
+                            <div className="min-w-0">
+                              <div className="flex items-center gap-1.5">
+                                <span className={`w-1.5 h-1.5 rounded-full ${u.isOffline ? 'bg-slate-500' : 'bg-nerv-green animate-pulse'}`} />
+                                <span className="text-xs font-bold text-white truncate">{u.name}</span>
+                              </div>
+                              <div className="flex items-center gap-1.5 text-[9px] text-nerv-cyan mt-0.5">
+                                <CreditCard className="w-2.5 h-2.5 shrink-0" />
+                                <span className="truncate">{u.nik ? `NIK: ${u.nik}` : 'NIK: BELUM TERDAFTAR'}</span>
+                              </div>
+                            </div>
+                            <div className="text-right shrink-0">
+                              <span className="text-[9px] text-slate-400 block">{u.battery !== undefined ? `${u.battery}%` : 'N/A'}</span>
+                              <span className="text-[8px] text-nerv-orange uppercase font-bold">FOKUS ➔</span>
+                            </div>
+                          </div>
+                        ))
+                      )}
+                    </motion.div>
+                  )}
+                </AnimatePresence>
+              </div>
+            </div>
+          )}
 
           {/* BMKG OVERLAY */}
           {gempa && !isGempaDismissed && (
@@ -3378,6 +3501,16 @@ function App() {
                     </button>
                   </div>
                   <div className="p-5 space-y-3">
+                    {/* NIK KTP Display Block */}
+                    <div className="p-3 rounded-2xl bg-slate-900/60 border border-slate-800">
+                      <p className="text-[9px] text-nerv-cyan uppercase tracking-widest font-bold mb-1 flex items-center gap-1.5 font-mono">
+                        <CreditCard className="w-3 h-3 text-nerv-cyan" /> NIK KTP (IDENTITAS RESMI)
+                      </p>
+                      <p className="text-sm font-black text-nerv-cyan font-mono tracking-wider">
+                        {liveUser.nik || 'BELUM TERDAFTAR'}
+                      </p>
+                    </div>
+
                     <div className="p-3.5 rounded-2xl bg-slate-900/60 border border-slate-800">
                       <p className="text-[9px] text-slate-500 uppercase tracking-widest font-bold mb-2 flex items-center gap-1.5"><Cpu className="w-3 h-3" /> PERANGKAT</p>
                       <p className="text-sm font-bold text-white">{liveUser.deviceModel || 'Unknown Device'}</p>
@@ -4285,6 +4418,7 @@ function App() {
                       terminalId,
                       userName || "Pengguna",
                       adminPing.fromId,
+                      userNik,
                     );
                     setAdminPing(null);
                   }}
@@ -5289,8 +5423,9 @@ function App() {
                 <Check className="w-4 h-4 text-emerald-400" />
               </div>
               <div className="min-w-0">
-                <p className="text-[9px] text-emerald-400 font-bold uppercase tracking-widest">Balasan Ping</p>
-                <p className="text-xs font-bold truncate">{reply.name} <span className="font-normal text-emerald-200">Aman.</span></p>
+                <p className="text-[9px] text-emerald-400 font-bold uppercase tracking-widest font-mono">KONFIRMASI PERSONEL AMAN</p>
+                <p className="text-xs font-bold truncate">{reply.name}</p>
+                {reply.nik && <p className="text-[9px] text-nerv-cyan font-mono truncate">NIK: {reply.nik}</p>}
               </div>
             </motion.div>
           ))}

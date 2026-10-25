@@ -5,7 +5,7 @@ import { useState, useEffect } from 'react'
 import { motion, AnimatePresence } from 'motion/react'
 import {
   Shield, Smartphone, Monitor, User, Globe, AlertOctagon,
-  X, Check, Lock, RefreshCw, Cpu
+  X, Check, Lock, RefreshCw, Cpu, CreditCard
 } from 'lucide-react'
 import { useLanguage } from '../../lib/i18n'
 import { fetchClientIp } from '../../lib/geocode'
@@ -14,6 +14,7 @@ interface Props {
   isOpen: boolean
   onClose: () => void
   userName: string | null
+  userNik?: string | null
   terminalId: string
 }
 
@@ -37,7 +38,7 @@ function detectDevice(): { device: string; mobile: boolean; browser: string } {
   return { device, mobile, browser }
 }
 
-export default function ProfileModal({ isOpen, onClose, userName, terminalId }: Props) {
+export default function ProfileModal({ isOpen, onClose, userName, userNik, terminalId }: Props) {
   const { lang, setLanguage, t } = useLanguage()
   const [{ device, mobile, browser }] = useState(detectDevice)
   const [clientIp, setClientIp] = useState<string>('Mendeteksi IP...')
@@ -119,22 +120,38 @@ export default function ProfileModal({ isOpen, onClose, userName, terminalId }: 
             {/* Locked User Identity */}
             <div className="p-3 rounded-lg bg-black/40 border border-nerv-border relative">
               <div className="flex items-center justify-between mb-1.5">
-                <span className="text-[9px] text-slate-400 uppercase font-bold flex items-center gap-1">
+                <span className="text-[9px] text-slate-400 uppercase font-bold flex items-center gap-1 font-mono">
                   <User className="w-3 h-3 text-nerv-orange" />
-                  {lang === 'id' ? 'NAMA PERSONEL TERDAFTAR' : 'REGISTERED PERSONNEL NAME'}
+                  {lang === 'id' ? 'NAMA LENGKAP TERDAFTAR (KTP)' : 'REGISTERED FULL NAME (ID)'}
                 </span>
-                <span className="text-[8px] bg-nerv-orange/20 border border-nerv-orange/50 text-nerv-orange px-2 py-0.5 rounded flex items-center gap-1">
+                <span className="text-[8px] bg-nerv-orange/20 border border-nerv-orange/50 text-nerv-orange px-2 py-0.5 rounded flex items-center gap-1 font-mono">
                   <Lock className="w-2.5 h-2.5" />
-                  1 PERANGKAT = 1 REGISTRASI
+                  TERKUNCI
                 </span>
               </div>
-              <div className="text-base font-bold text-white tracking-wide truncate">
+              <div className="text-base font-bold text-white tracking-wide truncate font-mono">
                 {userName || 'PERSONEL ATLAS'}
+              </div>
+            </div>
+
+            {/* Locked NIK KTP */}
+            <div className="p-3 rounded-lg bg-black/40 border border-nerv-border relative">
+              <div className="flex items-center justify-between mb-1.5">
+                <span className="text-[9px] text-slate-400 uppercase font-bold flex items-center gap-1 font-mono">
+                  <CreditCard className="w-3 h-3 text-nerv-cyan" />
+                  {lang === 'id' ? 'NOMOR INDUK KEPENDUDUKAN (NIK KTP)' : 'REGISTERED CITIZEN ID (NIK)'}
+                </span>
+                <span className="text-[8px] bg-nerv-cyan/20 border border-nerv-cyan/50 text-nerv-cyan px-2 py-0.5 rounded flex items-center gap-1 font-mono">
+                  16 DIGIT
+                </span>
+              </div>
+              <div className="text-sm font-bold text-nerv-cyan tracking-widest font-mono">
+                {userNik || '72710XXXXXXXXXXX'}
               </div>
               <p className="text-[10px] text-slate-500 font-sans mt-1">
                 {lang === 'id'
-                  ? 'Identitas terkunci secara permanen pada perangkat fisik ini untuk validasi jalur komando dan telemetri evakuasi.'
-                  : 'Identity is permanently locked to this physical device for command validation and telemetry.'}
+                  ? 'Identitas KTP terkunci permanen pada perangkat ini untuk validasi koordinasi evakuasi SAR.'
+                  : 'Citizen ID is locked permanently to this device for SAR evacuation coordination.'}
               </p>
             </div>
 
