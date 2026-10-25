@@ -8,7 +8,7 @@ const config: CapacitorConfig = {
   // ── Koneksi ke Railway server (admin mode) ─────────────────
   // APK admin load dari Railway dengan key admin otomatis
   server: {
-    url: 'https://tes-skripsi-production.up.railway.app/?key=aegis2024',
+    url: 'https://atlas-production.up.railway.app/?key=aegis2024',
     cleartext: false,
     androidScheme: 'https',
   },

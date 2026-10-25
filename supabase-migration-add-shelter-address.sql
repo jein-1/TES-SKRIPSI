@@ -11,5 +11,5 @@ ALTER TABLE custom_shelters
 -- Aktifkan Realtime untuk custom_shelters (jika belum)
 ALTER PUBLICATION supabase_realtime ADD TABLE custom_shelters;
 
--- Nonaktifkan RLS untuk kemudahan skripsi (sesuai konvensi project ini)
+-- Nonaktifkan RLS untuk akses langsung API backend
 ALTER TABLE custom_shelters DISABLE ROW LEVEL SECURITY;

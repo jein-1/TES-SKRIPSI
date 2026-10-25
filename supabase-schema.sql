@@ -37,8 +37,7 @@ CREATE TABLE location_updates (
 ALTER PUBLICATION supabase_realtime ADD TABLE location_updates;
 
 -- -------------------------------------------------------------
--- Bypassing RLS for server/anon access 
--- (Untuk kemudahan skripsi, RLS dimatikan. Di production asli, nyalakan RLS)
+-- Bypassing RLS for direct server/anon access
 ALTER TABLE tsunami_state DISABLE ROW LEVEL SECURITY;
 ALTER TABLE push_subscriptions DISABLE ROW LEVEL SECURITY;
 ALTER TABLE location_updates DISABLE ROW LEVEL SECURITY;

@@ -4334,7 +4334,7 @@ function App() {
                 </div>
                 <div className="space-y-2">
                   {[
-                    ["Versi Aplikasi", "v1.0.0 (Skripsi)"],
+                    ["Versi Aplikasi", "v1.0.0 (A.T.L.A.S Enterprise)"],
                     ["Platform", "React 18 + Vite"],
                     ["Routing Engine", "Leaflet + OSM"],
                     ["Jarak Hitung", "Haversine Formula"],

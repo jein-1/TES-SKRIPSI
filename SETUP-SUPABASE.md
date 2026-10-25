@@ -21,7 +21,7 @@ Ini membuatnya sangat handal (status persisten), real-time, dan tidak membutuhka
    - **Project API Keys (anon / public)** (ini akan menjadi `VITE_SUPABASE_ANON_KEY` / `SUPABASE_ANON_KEY`)
 
 ## 4. Konfigurasi Environment Variables di Vercel
-1. Buka dashboard Vercel Anda, masuk ke project **TES-SKRIPSI**, lalu buka **Settings** -> **Environment Variables**.
+1. Buka dashboard Vercel Anda, masuk ke project **A.T.L.A.S**, lalu buka **Settings** -> **Environment Variables**.
 2. Tambahkan _key-value_ berikut (jangan lupa simpan):
    - `VITE_SUPABASE_URL` = (isi dengan Project URL Supabase)
    - `VITE_SUPABASE_ANON_KEY` = (isi dengan Anon Key Supabase)
