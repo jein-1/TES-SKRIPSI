@@ -225,6 +225,8 @@ type MapProps = {
   onViewportChange?: (viewport: MapViewport) => void;
   /** Show a loading indicator on the map */
   loading?: boolean;
+  /** Callback fired when map canvas is clicked */
+  onMapClick?: (e: MapLibreGL.MapMouseEvent) => void;
 } & Omit<MapLibreGL.MapOptions, "container" | "style">;
 
 function DefaultLoader() {
@@ -259,6 +261,7 @@ const Map = forwardRef<MapRef, MapProps>(function Map(
     projection,
     viewport,
     onViewportChange,
+    onMapClick,
     loading = false,
     ...props
   },
@@ -278,6 +281,9 @@ const Map = forwardRef<MapRef, MapProps>(function Map(
 
   const onViewportChangeRef = useRef(onViewportChange);
   onViewportChangeRef.current = onViewportChange;
+
+  const onMapClickRef = useRef(onMapClick);
+  onMapClickRef.current = onMapClick;
 
   const stableStyles = useStableValue(styles);
 
@@ -330,15 +336,21 @@ const Map = forwardRef<MapRef, MapProps>(function Map(
       onViewportChangeRef.current?.(getViewport(map));
     };
 
+    const clickHandler = (e: MapLibreGL.MapMouseEvent) => {
+      onMapClickRef.current?.(e);
+    };
+
     map.on("load", loadHandler);
     map.on("style.load", styleLoadHandler);
     map.on("move", handleMove);
+    map.on("click", clickHandler);
     setMapInstance(map);
 
     return () => {
       map.off("load", loadHandler);
       map.off("style.load", styleLoadHandler);
       map.off("move", handleMove);
+      map.off("click", clickHandler);
       map.remove();
       setIsLoaded(false);
       setIsStyleLoaded(false);

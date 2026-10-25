@@ -6,7 +6,8 @@ import { Map, MapMarker, MarkerContent, MapRoute, MapGeoJSON, type MapViewport, 
 import { fetchOsrmRoute, type OsrmRouteData } from '../../lib/osrm'
 import {
   AlertTriangle, Navigation2, Phone, ChevronLeft,
-  MapPin, Compass, Lock, Unlock, ChevronRight, ArrowRight, Radio, X
+  MapPin, Compass, Lock, Unlock, ChevronRight, ArrowRight, Radio, X,
+  Search, Loader2
 } from 'lucide-react'
 import { motion, AnimatePresence } from 'motion/react'
 import { findOptimalEvacuationRoutes, type RouteResult } from "../../lib/evacuation";
@@ -89,44 +90,80 @@ export default function NavigatePage({ routes, selectedRoute, tsunamiAlert, user
   const effectivePosRaw = userPosition ?? localPos
   const effectivePos: [number, number] | null = effectivePosRaw ? [effectivePosRaw[1], effectivePosRaw[0]] : null
 
-  const handleApplyNewPosition = (pos: [number, number]) => {
+  const [gpsRefreshing, setGpsRefreshing] = useState(false)
+  const [calibrationFeedback, setCalibrationFeedback] = useState<string | null>(null)
+  const [searchQuery, setSearchQuery] = useState('')
+  const [searchingLocation, setSearchingLocation] = useState(false)
+
+  const handleApplyNewPosition = (pos: [number, number], feedbackText?: string) => {
     setLocalPos(pos)
     localStorage.setItem('atlas_user_position', JSON.stringify(pos))
     onUpdateUserPosition?.(pos)
-    setViewport(v => ({ ...v, center: [pos[1], pos[0]] }))
+    setViewport(v => ({ ...v, center: [pos[1], pos[0]], zoom: Math.max(v.zoom, 14) }))
+    setCalibrationFeedback(feedbackText || `✓ Pin dipindahkan ke [${pos[0].toFixed(4)}, ${pos[1].toFixed(4)}]`)
+  }
+
+  const handleSearchLocation = async (e: React.FormEvent) => {
+    e.preventDefault()
+    const q = searchQuery.trim()
+    if (!q) return
+    setSearchingLocation(true)
+    setCalibrationFeedback(`Mencari "${q}"...`)
+    try {
+      const res = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(q)}&limit=1`)
+      if (res.ok) {
+        const data = await res.json()
+        if (data && data.length > 0) {
+          const lat = parseFloat(data[0].lat)
+          const lon = parseFloat(data[0].lon)
+          handleApplyNewPosition([lat, lon], `✓ Ditemukan: ${data[0].display_name.split(',')[0]}`)
+          setSearchQuery('')
+          setSearchingLocation(false)
+          return
+        }
+      }
+      setCalibrationFeedback(`Lokasi "${q}" tidak ditemukan. Coba ketik nama kota / jalan lain.`)
+    } catch {
+      setCalibrationFeedback(`Gagal mencari lokasi. Pastikan koneksi internet aktif.`)
+    }
+    setSearchingLocation(false)
   }
 
   const handleForceGpsRefresh = () => {
-    if (typeof window !== "undefined" && "geolocation" in navigator) {
-      navigator.geolocation.getCurrentPosition(
-        (p) => {
-          handleApplyNewPosition([p.coords.latitude, p.coords.longitude])
-          setIsCalibrating(false)
-        },
-        (err) => {
-          alert('GPS: ' + (err.message || 'Izin lokasi tidak diberikan.'))
-        },
-        { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 }
-      )
+    if (typeof window === "undefined" || !("geolocation" in navigator)) {
+      setCalibrationFeedback("Sensor Geolocation tidak didukung di browser ini.")
+      return
     }
+    setGpsRefreshing(true)
+    setCalibrationFeedback("Menghubungi satelit GPS / WiFi...")
+
+    // 1. Try High Accuracy with 6s timeout
+    navigator.geolocation.getCurrentPosition(
+      (p) => {
+        setGpsRefreshing(false)
+        handleApplyNewPosition([p.coords.latitude, p.coords.longitude], "✓ Sinyal GPS presisi berhasil disinkronkan!")
+        setTimeout(() => setIsCalibrating(false), 1200)
+      },
+      (err) => {
+        console.warn("High accuracy GPS failed, falling back to standard network positioning...", err)
+        // 2. Immediate fallback to coarse network positioning (WiFi/cellular)
+        navigator.geolocation.getCurrentPosition(
+          (p) => {
+            setGpsRefreshing(false)
+            handleApplyNewPosition([p.coords.latitude, p.coords.longitude], "✓ Lokasi jaringan berhasil diperoleh!")
+            setTimeout(() => setIsCalibrating(false), 1200)
+          },
+          (err2) => {
+            setGpsRefreshing(false)
+            console.warn("Coarse geolocation failed:", err2)
+            setCalibrationFeedback("Perangkat PC tidak memiliki sensor satelit GPS. Klik langsung pada peta atau ketik nama lokasi di kotak pencarian.")
+          },
+          { enableHighAccuracy: false, timeout: 6000, maximumAge: 60000 }
+        )
+      },
+      { enableHighAccuracy: true, timeout: 6000, maximumAge: 0 }
+    )
   }
-
-  // Map Click Listener when in Calibration mode
-  useEffect(() => {
-    const map = mapRef.current
-    if (!map) return
-
-    const handleMapClick = (e: any) => {
-      if (isCalibrating && e.lngLat) {
-        handleApplyNewPosition([e.lngLat.lat, e.lngLat.lng])
-      }
-    }
-
-    map.on('click', handleMapClick)
-    return () => {
-      map.off('click', handleMapClick)
-    }
-  }, [isCalibrating])
 
   useEffect(() => {
     if (userPosition) {
@@ -386,6 +423,11 @@ export default function NavigatePage({ routes, selectedRoute, tsunamiAlert, user
           ref={mapRef}
           viewport={viewport}
           onViewportChange={setViewport}
+          onMapClick={(e) => {
+            if (isCalibrating && e.lngLat) {
+              handleApplyNewPosition([e.lngLat.lat, e.lngLat.lng]);
+            }
+          }}
         >
           {/* BMKG GEMPA TERKINI (Epicenter & Radius) - Removed from User POV to avoid squished view, but Overlay widget is kept at the top */}
 
@@ -522,27 +564,67 @@ export default function NavigatePage({ routes, selectedRoute, tsunamiAlert, user
 
         {/* Floating Calibration Guide Banner */}
         {isCalibrating && (
-          <div className="absolute top-4 left-1/2 -translate-x-1/2 z-[600] max-w-sm w-[92%] bg-black/90 border border-nerv-orange rounded-xl p-3 shadow-2xl font-mono text-center space-y-2 backdrop-blur-md">
-            <div className="flex items-center justify-center gap-1.5 text-nerv-orange text-xs font-bold uppercase">
-              <MapPin className="w-4 h-4 animate-bounce" />
-              <span>MODE ATUR / GESER LOKASI MANUAL</span>
+          <div className="absolute top-4 left-1/2 -translate-x-1/2 z-[600] max-w-md w-[94%] bg-[#080d1a]/95 border border-nerv-orange rounded-xl p-3.5 shadow-2xl font-mono text-center space-y-2.5 backdrop-blur-md">
+            <div className="flex items-center justify-between border-b border-nerv-border pb-1.5">
+              <div className="flex items-center gap-1.5 text-nerv-orange text-xs font-bold uppercase">
+                <MapPin className="w-4 h-4 animate-bounce" />
+                <span>ATUR / GESER LOKASI MANUAL</span>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsCalibrating(false)}
+                className="w-6 h-6 rounded bg-black/60 border border-nerv-border flex items-center justify-center text-slate-400 hover:text-white"
+              >
+                <X className="w-3.5 h-3.5" />
+              </button>
             </div>
+
+            {/* Quick Location Search */}
+            <form onSubmit={handleSearchLocation} className="flex gap-1.5">
+              <div className="relative flex-1">
+                <Search className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-1/2 -translate-y-1/2" />
+                <input
+                  type="text"
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  placeholder="Ketik nama jalan / kota / daerah..."
+                  className="w-full pl-8 pr-2 py-1.5 text-xs bg-black/80 border border-nerv-border focus:border-nerv-cyan rounded text-white focus:outline-none"
+                />
+              </div>
+              <button
+                type="submit"
+                disabled={searchingLocation}
+                className="px-3 py-1.5 rounded bg-nerv-cyan hover:bg-cyan-400 text-black font-black text-xs uppercase disabled:opacity-40"
+              >
+                {searchingLocation ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : 'CARI'}
+              </button>
+            </form>
+
             <p className="text-[11px] text-slate-300 font-sans leading-tight">
-              Klik / sentuh area peta untuk memindahkan posisi Anda secara akurat, atau geser lingkaran biru langsung ke lokasi Anda saat ini.
+              Sentuh/klik peta langsung atau geser pin lingkaran biru ke titik Anda saat ini.
             </p>
+
+            {calibrationFeedback && (
+              <p className="text-[10px] font-mono font-bold p-1.5 rounded bg-black/60 border border-nerv-border text-nerv-cyan">
+                {calibrationFeedback}
+              </p>
+            )}
+
             <div className="flex gap-2 justify-center pt-1">
               <button
                 type="button"
                 onClick={() => setIsCalibrating(false)}
-                className="px-4 py-1.5 rounded bg-nerv-green text-black font-black text-xs uppercase tracking-wider shadow-[0_0_10px_rgba(16,185,129,0.5)]"
+                className="flex-1 py-1.5 rounded bg-nerv-green hover:bg-emerald-500 text-black font-black text-xs uppercase tracking-wider shadow-[0_0_10px_rgba(16,185,129,0.5)] transition-colors"
               >
                 SIMPAN POSISI INI
               </button>
               <button
                 type="button"
+                disabled={gpsRefreshing}
                 onClick={handleForceGpsRefresh}
-                className="px-3 py-1.5 rounded bg-black/60 border border-nerv-cyan text-nerv-cyan text-xs font-bold hover:bg-nerv-cyan/20"
+                className="px-3 py-1.5 rounded bg-black/60 border border-nerv-cyan text-nerv-cyan text-xs font-bold hover:bg-nerv-cyan/20 flex items-center gap-1.5 transition-colors"
               >
+                {gpsRefreshing && <Loader2 className="w-3 h-3 animate-spin" />}
                 GPS PRESISI
               </button>
             </div>
