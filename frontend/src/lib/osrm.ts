@@ -98,17 +98,42 @@ export async function fetchOsrmRoute(
   endLng: number,
   endLat: number
 ): Promise<OsrmRouteData[]> {
+  let routes: OsrmRouteData[] = [];
   try {
     const result = await tryOsrm(startLng, startLat, endLng, endLat);
-    if (result.length > 0) return result;
+    if (result.length > 0) routes = result;
   } catch (err) {
     console.warn('[Routing] OSRM failed, trying Valhalla...', err);
   }
-  try {
-    const result = await tryValhalla(startLng, startLat, endLng, endLat);
-    if (result.length > 0) return result;
-  } catch (err) {
-    console.warn('[Routing] Valhalla failed too:', err);
+  if (routes.length === 0) {
+    try {
+      const result = await tryValhalla(startLng, startLat, endLng, endLat);
+      if (result.length > 0) routes = result;
+    } catch (err) {
+      console.warn('[Routing] Valhalla failed too:', err);
+    }
   }
+
+  if (routes.length > 0) {
+    return routes.map(r => {
+      const coords = [...r.coordinates];
+      if (coords.length > 0) {
+        const first = coords[0];
+        // Connect start position to road entrance if not exactly identical
+        if (Math.hypot(first[0] - startLng, first[1] - startLat) > 0.00002) {
+          coords.unshift([startLng, startLat]);
+        }
+        const last = coords[coords.length - 1];
+        // Connect road exit directly into shelter position
+        if (Math.hypot(last[0] - endLng, last[1] - endLat) > 0.00002) {
+          coords.push([endLng, endLat]);
+        }
+      } else {
+        coords.push([startLng, startLat], [endLng, endLat]);
+      }
+      return { ...r, coordinates: coords };
+    });
+  }
+
   return [];
 }

@@ -28,7 +28,8 @@ const googleMapStyle: MapLibreGL.StyleSpecification = {
       type: "raster",
       tiles: ["https://mt1.google.com/vt/lyrs=m&x={x}&y={y}&z={z}"],
       tileSize: 256,
-      attribution: "© Google Maps"
+      attribution: "© Google Maps",
+      maxzoom: 19
     }
   },
   layers: [
@@ -317,6 +318,7 @@ const Map = forwardRef<MapRef, MapProps>(function Map(
       container: containerRef.current,
       style: initialStyle,
       renderWorldCopies: false,
+      maxZoom: 19.5,
       attributionControl: {
         compact: true,
       },

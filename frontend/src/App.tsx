@@ -1359,6 +1359,7 @@ function App() {
         tiles: ["https://mt1.google.com/vt/lyrs=m&x={x}&y={y}&z={z}"],
         tileSize: 256,
         attribution: "© Google Maps",
+        maxzoom: 19,
       },
     },
     layers: [
@@ -1382,6 +1383,7 @@ function App() {
         ],
         tileSize: 256,
         attribution: "© Esri, HERE, Garmin, © OpenStreetMap",
+        maxzoom: 16,
       },
       "esri-dark-reference": {
         type: "raster" as const,
@@ -1390,6 +1392,7 @@ function App() {
         ],
         tileSize: 256,
         attribution: "© Esri",
+        maxzoom: 16,
       },
     },
     layers: [
@@ -1418,6 +1421,7 @@ function App() {
         tiles: ["https://mt1.google.com/vt/lyrs=y&x={x}&y={y}&z={z}"],
         tileSize: 256,
         attribution: "© Google Maps Satellite",
+        maxzoom: 19,
       },
     },
     layers: [
@@ -3459,7 +3463,7 @@ function App() {
                 return (
                   <MapRoute
                     key={`road-${i}`}
-                    coordinates={route.coordinates.map(c => [c[0], c[1]])}
+                    coordinates={route.coordinates.map(c => [c[1], c[0]])}
                     color={routeColors[i]}
                     width={isSelected ? 3 : 2}
                     opacity={isSelected ? 0.45 : 0.2}
@@ -4141,60 +4145,6 @@ function App() {
             </div>
 
             <div className="flex-1 overflow-y-auto custom-scrollbar px-4 pb-6 space-y-4 pt-4">
-              {/* â”€â”€â”€ CORE PROCESSING â”€â”€â”€ */}
-              <section
-                className="rounded-2xl border border-slate-800/50 p-4"
-                style={{ background: "#0c1525" }}
-              >
-                <div className="flex items-center gap-2 mb-4">
-                  <div className="w-7 h-7 rounded-lg bg-slate-700/50 flex items-center justify-center">
-                    <Cpu className="w-3.5 h-3.5 text-slate-400" />
-                  </div>
-                  <h3 className="text-[11px] font-black text-white uppercase tracking-widest">
-                    Core Processing
-                  </h3>
-                </div>
-
-                {/* Routing Algorithm */}
-                <p className="text-[9px] text-slate-600 uppercase tracking-widest font-bold mb-2">
-                  Routing Algorithm
-                </p>
-                <div className="grid grid-cols-2 gap-2 mb-5">
-                  {[
-                    {
-                      id: "dijkstra" as const,
-                      label: "DIJKSTRA",
-                      sub: "Shortest Path First",
-                    },
-                    {
-                      id: "haversine" as const,
-                      label: "HAVERSINE",
-                      sub: "Spherical Geometry",
-                    },
-                  ].map((algo) => (
-                    <button
-                      key={algo.id}
-                      onClick={() =>
-                        setSettings((s) => ({ ...s, algorithm: algo.id }))
-                      }
-                      className={`p-3 rounded-xl border text-left transition-all
-                        ${
-                          settings.algorithm === algo.id
-                            ? "bg-indigo-600/30 border-indigo-500/60 text-white"
-                            : "bg-slate-800/40 border-slate-700/40 text-slate-500 hover:border-slate-600"
-                        }`}
-                    >
-                      <p className="text-xs font-black tracking-wide">
-                        {algo.label}
-                      </p>
-                      <p className="text-[10px] mt-0.5 opacity-60">
-                        {algo.sub}
-                      </p>
-                    </button>
-                  ))}
-                </div>
-              </section>
-
               {/* ─── DEVICE IDENTITY ─── */}
               <section
                 className="rounded-2xl border border-slate-800/50 p-4"
