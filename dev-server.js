@@ -95,6 +95,15 @@ const server = http.createServer(async (req, res) => {
   }
 });
 
+server.on('error', (err) => {
+  if (err.code === 'EADDRINUSE') {
+    console.error(`\n⚠️ Port ${PORT} sedang dipakai. Matikan proses port ${PORT} sebelumnya.\n`);
+    process.exit(1);
+  } else {
+    throw err;
+  }
+});
+
 server.listen(PORT, () => {
   console.log(`\n🚀 ATLAS Local API Dev Server running at: http://localhost:${PORT}`);
   console.log(`   - Home:     http://localhost:${PORT}/api/disaster/home`);
