@@ -849,6 +849,28 @@ function App() {
     setGpsError(null);
     setIsCalculating(true);
 
+    // Fallback timer: if after 3.5s no GPS fix arrived (desktop without GPS or slow permission), fallback to Palu center
+    const fallbackTimeout = setTimeout(() => {
+      if (!hasFirstGPSFixRef.current) {
+        console.info("Using Palu standby coordinates for evacuation routing");
+        const standbyPos: [number, number] = [-0.8917, 119.8577];
+        setUserPosition(standbyPos);
+        setGpsAccuracy(null);
+        hasFirstGPSFixRef.current = true;
+        setFlyToPos(standbyPos);
+        const routeResults = findOptimalEvacuationRoutes(
+          standbyPos[0],
+          standbyPos[1],
+          99,
+          settings.algorithm as 'dijkstra' | 'haversine',
+        );
+        lastRouteCalcResultsRef.current = routeResults;
+        setRoutes(routeResults);
+        setSelectedRoute(0);
+        setIsCalculating(false);
+      }
+    }, 3500);
+
     try {
       const watchId = await Geolocation.watchPosition(
         { enableHighAccuracy: true, maximumAge: 5000, timeout: 15000 },
@@ -861,6 +883,7 @@ function App() {
             return;
           }
           if (!pos) return;
+          clearTimeout(fallbackTimeout);
 
           // Show accuracy badge but don't filter â€” let all positions through
           setGpsAccuracy(pos.coords.accuracy);
@@ -1047,14 +1070,14 @@ function App() {
     setGpsTracking(false);
   }, []);
 
-  // Auto-start GPS on mobile
+  // Auto-start GPS on load for all clients
   useEffect(() => {
-    if (isMobile && settings.autoStartGPS && !gpsAutoStartedRef.current) {
+    if (settings.autoStartGPS && !gpsAutoStartedRef.current) {
       gpsAutoStartedRef.current = true;
-      const t = setTimeout(() => startGpsTracking(), 1000);
+      const t = setTimeout(() => startGpsTracking(), 600);
       return () => clearTimeout(t);
     }
-  }, [isMobile, settings.autoStartGPS, startGpsTracking]);
+  }, [settings.autoStartGPS, startGpsTracking]);
 
   // â”€â”€ Tsunami â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   const activateTsunamiAlert = useCallback(() => {
@@ -1450,7 +1473,9 @@ function App() {
               key="status"
               onNavigate={(p) => setActivePage(p)}
               userLocation={
-                userPosition ? "Palu, Sulawesi Tengah" : "Mendeteksi lokasi..."
+                userPosition
+                  ? (gpsAccuracy ? `Palu [${userPosition[0].toFixed(3)}, ${userPosition[1].toFixed(3)}]` : "Palu // Standby Sector")
+                  : "Mendeteksi sinyal GPS..."
               }
               userName={userName}
               onRequestGps={!gpsTracking ? startGpsTracking : undefined}
@@ -1496,45 +1521,32 @@ function App() {
         <AnimatePresence>
           {activePage === "history" && (
             <motion.div
-              initial={{ opacity: 0, x: 40 }}
+              initial={{ opacity: 0, x: 30 }}
               animate={{ opacity: 1, x: 0 }}
-              exit={{ opacity: 0, x: 40 }}
+              exit={{ opacity: 0, x: 30 }}
               transition={{ duration: 0.22 }}
-              className="fixed inset-0 z-[1800] flex flex-col"
-              style={{ background: "#080e1a" }}
+              className="fixed inset-0 z-[1800] flex flex-col bg-nerv-bg text-slate-200"
             >
-              {/* AEGIS top bar */}
-              <div
-                className="flex items-center justify-between px-4 py-3 border-b border-slate-800/60 shrink-0"
-                style={{ background: "#0a1020" }}
-              >
+              {/* NERV top bar */}
+              <div className="flex items-center justify-between px-4 py-3 border-b border-nerv-border bg-[#0B0F19] shrink-0">
                 <button
-                  onClick={() => setActivePage("map")}
-                  className="flex items-center gap-1.5 text-slate-400 hover:text-white transition-colors"
+                  onClick={() => setActivePage("status")}
+                  className="flex items-center gap-1.5 text-slate-400 hover:text-white transition-colors font-mono text-xs"
                 >
-                  <ChevronLeft className="w-5 h-5" />
-                  <span className="text-xs font-bold tracking-wide">
-                    KEMBALI
-                  </span>
+                  <ChevronLeft className="w-4 h-4 text-slate-300" />
+                  <span>KEMBALI</span>
                 </button>
-                <span className="text-sm font-black text-white tracking-widest">
-                  TACTICAL ARCHIVE
-                </span>
-                <div className="w-9 h-9 rounded-full bg-indigo-500/20 border border-indigo-500/30 flex items-center justify-center">
-                  <Shield className="w-4 h-4 text-indigo-400" />
+                <div className="text-center font-mono">
+                  <span className="text-[10px] text-nerv-orange font-bold tracking-widest block uppercase">
+                    A.T.L.A.S // ARCHIVE
+                  </span>
+                  <span className="text-xs font-bold text-white tracking-wider">
+                    EVACUATION TELEMETRY LOGS
+                  </span>
                 </div>
-              </div>
-
-              {/* Title */}
-              <div className="px-5 pt-5 pb-3 shrink-0">
-                <p className="text-[10px] font-bold text-indigo-400 tracking-widest uppercase mb-1">
-                  Tactical Archive
-                </p>
-                <h2 className="text-3xl font-black text-white tracking-tight leading-none">
-                  EVACUATION
-                  <br />
-                  HISTORY
-                </h2>
+                <div className="w-8 h-8 rounded bg-black/60 border border-nerv-border flex items-center justify-center font-mono text-xs text-nerv-cyan">
+                  #03
+                </div>
               </div>
 
               {/* Avg Response card + Visual Gauge */}
@@ -1800,25 +1812,26 @@ function App() {
           )}
         </AnimatePresence>
 
-        {/* USER BOTTOM NAV â€” fixed z-[1900] sits on top of pages */}
+        {/* USER BOTTOM NAV — NERV Tactical Dock */}
         <nav
-          className="fixed bottom-0 left-0 right-0 z-[1900] flex items-center gap-4 px-4 overflow-x-auto overflow-y-hidden whitespace-nowrap hide-scrollbar border-t bg-[#0a1020]/98 border-slate-800/60 backdrop-blur-xl"
+          className="fixed bottom-0 left-0 right-0 z-[1900] flex items-center justify-around px-2 border-t bg-[#07090E]/95 border-nerv-border backdrop-blur-xl"
           style={{
             paddingBottom: "env(safe-area-inset-bottom)",
-            height: "60px",
+            height: "64px",
           }}
         >
           {[
-            { page: "status" as ActivePage, Icon: Home, label: "STATUS" },
+            { page: "status" as ActivePage, Icon: Home, label: "STATUS", code: "01" },
             {
               page: "navigate" as ActivePage,
               Icon: Navigation2,
               label: "NAVIGATE",
+              code: "02"
             },
-            { page: "history" as ActivePage, Icon: History, label: "HISTORY" },
-            { page: "family" as ActivePage, Icon: Users, label: "FAMILY" },
-            { page: "guides" as ActivePage, Icon: BookOpen, label: "GUIDES" },
-          ].map(({ page, Icon, label }) => {
+            { page: "history" as ActivePage, Icon: History, label: "ARCHIVE", code: "03" },
+            { page: "family" as ActivePage, Icon: Users, label: "UNITS", code: "04" },
+            { page: "guides" as ActivePage, Icon: BookOpen, label: "MANUAL", code: "05" },
+          ].map(({ page, Icon, label, code }) => {
             const isAlert = page === "navigate" && tsunamiAlert;
             const isFamilyAlert = page === "family" && hasFamilyPing;
             const isActive = activePage === page;
@@ -1826,22 +1839,39 @@ function App() {
               <button
                 key={page}
                 onClick={() => setActivePage(page)}
-                className={`flex flex-col items-center justify-center shrink-0 min-w-[60px] gap-1 py-2 px-4 transition-colors ${isAlert ? "text-red-400" : isActive ? "text-emerald-400" : "text-slate-600 active:text-slate-400"}`}
+                className={`relative flex flex-col items-center justify-center flex-1 h-full py-1.5 transition-all group ${
+                  isAlert
+                    ? "text-nerv-red"
+                    : isActive
+                      ? "text-nerv-orange"
+                      : "text-slate-500 hover:text-slate-300"
+                }`}
               >
-                <div className="relative">
+                {isActive && (
+                  <motion.div
+                    layoutId="nervActiveNav"
+                    className="absolute top-0 inset-x-2 h-0.5 bg-nerv-orange shadow-[0_0_8px_rgba(255,87,34,0.8)]"
+                  />
+                )}
+                <div className="relative mb-0.5">
                   <Icon
-                    className={`w-5 h-5 ${isAlert ? "animate-pulse" : ""}`}
+                    className={`w-4 h-4 transition-transform group-hover:scale-110 ${
+                      isAlert ? "animate-pulse text-nerv-red" : ""
+                    }`}
                   />
                   {isAlert && (
-                    <span className="absolute -top-0.5 -right-0.5 w-2 h-2 rounded-full bg-red-400 animate-ping block" />
+                    <span className="absolute -top-1 -right-1 w-2 h-2 rounded-full bg-nerv-red animate-ping block" />
                   )}
                   {isFamilyAlert && (
-                    <span className="absolute -top-0.5 -right-0.5 w-2.5 h-2.5 rounded-full bg-red-500 block border-2 border-[#0a1020]" />
+                    <span className="absolute -top-1 -right-1 w-2.5 h-2.5 rounded-full bg-nerv-red block border-2 border-black" />
                   )}
                 </div>
-                <span className="text-[9px] font-bold tracking-wider">
-                  {label}
-                </span>
+                <div className="flex items-center gap-0.5">
+                  <span className="text-[7px] font-mono text-slate-600 block leading-none">[{code}]</span>
+                  <span className="text-[9px] font-mono font-bold tracking-wider uppercase leading-none">
+                    {label}
+                  </span>
+                </div>
               </button>
             );
           })}

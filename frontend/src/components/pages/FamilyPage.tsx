@@ -1,6 +1,11 @@
-// FAMILY PAGE — My Family group + member location map
+// ═══════════════════════════════════════════════════════════════
+// FAMILY PAGE — NERV Tactical Personnel Directory & Location Telemetry
+// ═══════════════════════════════════════════════════════════════
 import { useState, useEffect, useRef, useCallback } from 'react'
-import { UserPlus, AlertTriangle, CheckCircle, Clock, ChevronLeft, QrCode, Camera, Image, X, Trash2, Share2, Radio, MapPin, Navigation2 } from 'lucide-react'
+import {
+  UserPlus, AlertTriangle, CheckCircle, Clock, ChevronLeft,
+  QrCode, Camera, X, Trash2, Share2, Radio, MapPin, Navigation2, Shield
+} from 'lucide-react'
 import { motion, AnimatePresence } from 'motion/react'
 import { Map, MapMarker, MarkerContent } from '@/components/ui/map'
 import QRCode from 'qrcode'
@@ -11,34 +16,76 @@ import type { FamilyMember } from '../../types'
 // ── Storage helpers ────────────────────────────────────────────
 export function getMyAegisId(): string {
   let id = localStorage.getItem('aegisId')
-  if (!id) { id = `AEGIS-${Date.now().toString(36).toUpperCase()}`; localStorage.setItem('aegisId', id) }
+  if (!id) {
+    id = `ATLAS-${Date.now().toString(36).toUpperCase()}`
+    localStorage.setItem('aegisId', id)
+  }
   return id
 }
-export function getMyName(): string { return localStorage.getItem('aegisUserName') ?? 'Pengguna' }
-export function loadFamily(): FamilyMember[] {
-  try { return JSON.parse(localStorage.getItem('aegisFamily') ?? '[]') } catch { return [] }
-}
-export function saveFamily(m: FamilyMember[]) { localStorage.setItem('aegisFamily', JSON.stringify(m)) }
 
-// Member locations: { [memberId]: { lat, lng, ts } }
-function loadMemberLocs(): Record<string, { lat: number; lng: number; ts: number }> {
-  try { return JSON.parse(localStorage.getItem('aegisMemberLocs') ?? '{}') } catch { return {} }
+export function getMyName(): string {
+  return localStorage.getItem('aegisUserName') ?? 'Personnel-01'
 }
+
+export function loadFamily(): FamilyMember[] {
+  try {
+    return JSON.parse(localStorage.getItem('aegisFamily') ?? '[]')
+  } catch {
+    return []
+  }
+}
+
+export function saveFamily(m: FamilyMember[]) {
+  localStorage.setItem('aegisFamily', JSON.stringify(m))
+}
+
+function loadMemberLocs(): Record<string, { lat: number; lng: number; ts: number }> {
+  try {
+    return JSON.parse(localStorage.getItem('aegisMemberLocs') ?? '{}')
+  } catch {
+    return {}
+  }
+}
+
 function saveMemberLoc(id: string, lat: number, lng: number) {
   const locs = loadMemberLocs()
   locs[id] = { lat, lng, ts: Date.now() }
   localStorage.setItem('aegisMemberLocs', JSON.stringify(locs))
 }
 
-// ── Status chip ───────────────────────────────────────────────
+// ── NERV Status chip ───────────────────────────────────────────
 function StatusChip({ status }: { status: FamilyMember['status'] }) {
-  if (status === 'safe') return <div className="flex items-center gap-1"><CheckCircle className="w-3 h-3 text-emerald-400"/><span className="text-[10px] font-black text-emerald-400">SAFE</span></div>
-  if (status === 'danger') return <div className="flex items-center gap-1"><AlertTriangle className="w-3 h-3 text-red-400 animate-pulse"/><span className="text-[10px] font-black text-red-400">DANGER</span></div>
-  return <div className="flex items-center gap-1"><Clock className="w-3 h-3 text-slate-500"/><span className="text-[10px] font-black text-slate-500">UNKNOWN</span></div>
+  if (status === 'safe') {
+    return (
+      <div className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded bg-nerv-green/10 border border-nerv-green/30">
+        <CheckCircle className="w-3 h-3 text-nerv-green" />
+        <span className="text-[9px] font-mono font-bold tracking-wider text-nerv-green uppercase">
+          SECURE // AMAN
+        </span>
+      </div>
+    )
+  }
+  if (status === 'danger') {
+    return (
+      <div className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded bg-nerv-red/10 border border-nerv-red/50 animate-pulse">
+        <AlertTriangle className="w-3 h-3 text-nerv-red" />
+        <span className="text-[9px] font-mono font-bold tracking-wider text-nerv-red uppercase">
+          HAZARD // BAHAYA
+        </span>
+      </div>
+    )
+  }
+  return (
+    <div className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded bg-black/40 border border-nerv-border">
+      <Clock className="w-3 h-3 text-slate-500" />
+      <span className="text-[9px] font-mono font-bold tracking-wider text-slate-400 uppercase">
+        STANDBY // MENUNGGU
+      </span>
+    </div>
+  )
 }
 
 // ── Member Location Map Modal ─────────────────────────────────
-
 function MemberMapModal({ member, onClose }: { member: FamilyMember; onClose: () => void }) {
   const locs = loadMemberLocs()
   const loc = locs[member.id]
@@ -46,20 +93,30 @@ function MemberMapModal({ member, onClose }: { member: FamilyMember; onClose: ()
   const center: [number, number] = loc ? [loc.lat, loc.lng] : PALU
 
   return (
-    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-      className="fixed inset-0 z-[3000] flex items-center justify-center bg-black/80 p-4 backdrop-blur-sm">
-      <motion.div initial={{ scale: 0.9, y: 20 }} animate={{ scale: 1, y: 0 }}
-        className="w-full max-w-sm rounded-3xl border border-slate-700/50 overflow-hidden" style={{ background: '#0f1a2e' }}>
-        <div className="flex items-center justify-between px-4 py-3 border-b border-slate-700/40">
+    <motion.div
+      initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+      className="fixed inset-0 z-[3000] flex items-center justify-center bg-black/85 p-4 backdrop-blur-md"
+    >
+      <motion.div
+        initial={{ scale: 0.95, y: 15 }} animate={{ scale: 1, y: 0 }}
+        className="w-full max-w-sm rounded-lg border border-nerv-border overflow-hidden bg-nerv-card shadow-2xl"
+      >
+        <div className="flex items-center justify-between px-4 py-3 border-b border-nerv-border bg-[#0B0F19]">
           <div>
-            <p className="text-[10px] text-indigo-400 uppercase tracking-widest font-bold">Lokasi Anggota</p>
-            <p className="text-base font-black text-white">{member.name}</p>
+            <p className="text-[9px] font-mono font-bold text-nerv-cyan uppercase tracking-widest">
+              A.T.L.A.S // MEMBER TELEMETRY
+            </p>
+            <p className="text-sm font-mono font-bold text-white truncate">{member.name}</p>
           </div>
-          <button onClick={onClose} className="w-8 h-8 rounded-xl bg-slate-800 flex items-center justify-center">
-            <X className="w-4 h-4 text-slate-400"/>
+          <button
+            onClick={onClose}
+            className="w-7 h-7 rounded bg-black/60 border border-nerv-border flex items-center justify-center hover:border-nerv-orange transition-colors"
+          >
+            <X className="w-4 h-4 text-slate-300" />
           </button>
         </div>
-        <div className="h-64 relative">
+
+        <div className="h-64 relative bg-[#07090E]">
           <Map
             viewport={{
               center: [center[1], center[0]],
@@ -70,29 +127,38 @@ function MemberMapModal({ member, onClose }: { member: FamilyMember; onClose: ()
             {loc && (
               <MapMarker longitude={loc.lng} latitude={loc.lat}>
                 <MarkerContent>
-                  <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2, pointerEvents: 'none' }}>
-                    <div style={{ width:14, height:14, borderRadius:'50%', background:'#6366f1', border:'2.5px solid white', boxShadow:'0 0 10px rgba(99,102,241,0.8)' }}></div>
-                    <span style={{ background: '#0a1020', border: '1px solid #1e293b', color: 'white', fontSize: 10, fontWeight: 900, padding: '2px 8px', borderRadius: 8, whiteSpace: 'nowrap' }}>{member.name}</span>
+                  <div className="flex flex-col items-center gap-1 pointer-events-none">
+                    <div className="w-3.5 h-3.5 rounded-full bg-nerv-cyan border-2 border-white shadow-[0_0_12px_rgba(0,229,255,0.9)] animate-pulse" />
+                    <span className="bg-[#07090E] border border-nerv-border text-white text-[10px] font-mono font-bold px-2 py-0.5 rounded whitespace-nowrap shadow-md">
+                      {member.name}
+                    </span>
                   </div>
                 </MarkerContent>
               </MapMarker>
             )}
           </Map>
+
           {!loc && (
-            <div className="absolute inset-0 flex flex-col items-center justify-center bg-[#060d1a]/80 pointer-events-none z-10">
-              <MapPin className="w-8 h-8 text-slate-500 mb-2"/>
-              <p className="text-slate-400 text-sm font-bold">Lokasi belum tersedia</p>
-              <p className="text-slate-600 text-[11px] mt-1">Anggota belum membagikan lokasi</p>
+            <div className="absolute inset-0 flex flex-col items-center justify-center bg-[#07090E]/90 pointer-events-none z-10 px-4 text-center">
+              <MapPin className="w-7 h-7 text-slate-500 mb-2 animate-bounce" />
+              <p className="text-white text-xs font-mono font-bold">TELEMETRI LOKASI BELUM TERSEDIA</p>
+              <p className="text-slate-500 text-[10px] font-mono mt-1">Personel belum mengirim koordinat GPS</p>
             </div>
           )}
         </div>
+
         {loc && (
-          <div className="px-4 py-3 border-t border-slate-700/40">
-            <p className="text-[10px] text-slate-500">Koordinat: <span className="text-slate-300 font-mono">{loc.lat.toFixed(5)}, {loc.lng.toFixed(5)}</span></p>
-            <p className="text-[10px] text-slate-600 mt-0.5">
-              Diperbarui: {new Date(loc.ts).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })}
-              {' · '}<span className="text-emerald-500">Tersimpan offline</span>
-            </p>
+          <div className="px-4 py-3 border-t border-nerv-border bg-[#0B0F19] flex items-center justify-between font-mono text-[10px]">
+            <div>
+              <span className="text-slate-500 block uppercase text-[8px]">COORDINATES</span>
+              <span className="text-nerv-cyan font-bold">{loc.lat.toFixed(5)}, {loc.lng.toFixed(5)}</span>
+            </div>
+            <div className="text-right">
+              <span className="text-slate-500 block uppercase text-[8px]">CACHE UPDATE</span>
+              <span className="text-nerv-green font-bold">
+                {new Date(loc.ts).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })} WIB
+              </span>
+            </div>
           </div>
         )}
       </motion.div>
@@ -102,30 +168,72 @@ function MemberMapModal({ member, onClose }: { member: FamilyMember; onClose: ()
 
 // ── My QR Modal ───────────────────────────────────────────────
 function MyQRModal({ onClose }: { onClose: () => void }) {
-  const aegisId = getMyAegisId(); const myName = getMyName()
+  const atlasId = getMyAegisId()
+  const myName = getMyName()
   const [qrUrl, setQrUrl] = useState('')
-  const inviteUrl = `${window.location.origin}${window.location.pathname}?joinFamily=${encodeURIComponent(aegisId)}&inviteName=${encodeURIComponent(myName)}`
+  const inviteUrl = `${window.location.origin}${window.location.pathname}?joinFamily=${encodeURIComponent(atlasId)}&inviteName=${encodeURIComponent(myName)}`
+
   useEffect(() => {
-    QRCode.toDataURL(inviteUrl, { width: 220, margin: 2, color: { dark: '#ffffff', light: '#0f1a2e' } }).then(setQrUrl)
+    QRCode.toDataURL(inviteUrl, {
+      width: 220,
+      margin: 2,
+      color: { dark: '#000000', light: '#FFFFFF' }
+    }).then(setQrUrl)
   }, [inviteUrl])
+
   const share = async () => {
-    if (navigator.share) await navigator.share({ title: 'Aegis Family Invite', url: inviteUrl })
-    else { await navigator.clipboard.writeText(inviteUrl); alert('Link disalin!') }
+    if (navigator.share) {
+      await navigator.share({ title: 'A.T.L.A.S Personnel Link Invite', url: inviteUrl })
+    } else {
+      await navigator.clipboard.writeText(inviteUrl)
+      alert('Tautan link berhasil disalin!')
+    }
   }
+
   return (
-    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-      className="fixed inset-0 z-[2000] flex items-center justify-center bg-black/80 p-6 backdrop-blur-sm">
-      <motion.div initial={{ scale: 0.9 }} animate={{ scale: 1 }}
-        className="w-full max-w-xs p-6 rounded-3xl border border-slate-700/50 relative" style={{ background: '#0f1a2e' }}>
-        <button onClick={onClose} className="absolute top-4 right-4 w-8 h-8 rounded-xl bg-slate-800 flex items-center justify-center"><X className="w-4 h-4 text-slate-400"/></button>
-        <div className="text-center">
-          <p className="text-[10px] text-indigo-400 uppercase tracking-widest font-bold mb-1">QR Code Saya</p>
-          <p className="text-lg font-black text-white mb-4">{myName}</p>
-          {qrUrl ? <img src={qrUrl} alt="QR" className="mx-auto rounded-2xl w-48 h-48"/> : <div className="mx-auto w-48 h-48 rounded-2xl bg-slate-800 flex items-center justify-center"><QrCode className="w-12 h-12 text-slate-600"/></div>}
-          <p className="text-[9px] text-slate-500 mt-2 font-mono break-all">{aegisId}</p>
-          <p className="text-[11px] text-slate-400 mt-2">Scan QR ini untuk bergabung ke Family.</p>
-          <button onClick={share} className="mt-4 w-full py-3 rounded-2xl bg-indigo-600 text-white font-black text-sm flex items-center justify-center gap-2">
-            <Share2 className="w-4 h-4"/> Bagikan Link / QR
+    <motion.div
+      initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+      className="fixed inset-0 z-[2000] flex items-center justify-center bg-black/85 p-6 backdrop-blur-md"
+    >
+      <motion.div
+        initial={{ scale: 0.95 }} animate={{ scale: 1 }}
+        className="w-full max-w-xs p-5 rounded-lg border border-nerv-border bg-nerv-card relative shadow-2xl"
+      >
+        <button
+          onClick={onClose}
+          className="absolute top-4 right-4 w-7 h-7 rounded bg-black/60 border border-nerv-border flex items-center justify-center hover:border-nerv-orange transition-colors"
+        >
+          <X className="w-4 h-4 text-slate-300" />
+        </button>
+
+        <div className="text-center font-mono">
+          <p className="text-[9px] text-nerv-orange uppercase tracking-widest font-bold mb-1">
+            A.T.L.A.S // PERSONNEL ID QR
+          </p>
+          <p className="text-base font-bold text-white mb-3 truncate">{myName}</p>
+
+          <div className="p-3 bg-white rounded-lg inline-block shadow-inner mx-auto">
+            {qrUrl ? (
+              <img src={qrUrl} alt="Personnel QR" className="w-44 h-44 rounded" />
+            ) : (
+              <div className="w-44 h-44 bg-slate-200 flex items-center justify-center">
+                <QrCode className="w-12 h-12 text-slate-400 animate-pulse" />
+              </div>
+            )}
+          </div>
+
+          <p className="text-[10px] text-slate-400 mt-3 font-mono break-all px-2 bg-black/50 py-1 rounded border border-nerv-border">
+            {atlasId}
+          </p>
+          <p className="text-[10px] text-slate-400 mt-2 font-sans">
+            Pindai QR ini dari perangkat lain untuk menautkan unit personel.
+          </p>
+
+          <button
+            onClick={share}
+            className="mt-4 w-full py-2.5 rounded bg-nerv-orange hover:bg-orange-600 text-black font-mono font-bold text-xs uppercase tracking-wider flex items-center justify-center gap-2 transition-colors shadow-[0_0_15px_rgba(255,87,34,0.4)]"
+          >
+            <Share2 className="w-3.5 h-3.5" /> Bagikan Link Unit
           </button>
         </div>
       </motion.div>
@@ -141,7 +249,6 @@ function AddMemberModal({ onClose, onAdd }: { onClose: () => void; onAdd: (m: Fa
   const [galleryLoading, setGalleryLoading] = useState(false)
   const videoRef = useRef<HTMLVideoElement>(null)
   const canvasRef = useRef<HTMLCanvasElement>(null)
-  const fileInputRef = useRef<HTMLInputElement>(null)
   const streamRef = useRef<MediaStream | null>(null)
   const rafRef = useRef(0)
 
@@ -151,9 +258,9 @@ function AddMemberModal({ onClose, onAdd }: { onClose: () => void; onAdd: (m: Fa
     streamRef.current = null
     setScanning(false)
   }
+
   useEffect(() => () => stopCam(), [])
 
-  // Proses data QR string → tambah member
   const processQRData = (data: string): boolean => {
     try {
       const url = new URL(data)
@@ -161,9 +268,13 @@ function AddMemberModal({ onClose, onAdd }: { onClose: () => void; onAdd: (m: Fa
       const joinName = url.searchParams.get('inviteName')
       if (joinId && joinName) {
         const newMember: FamilyMember = {
-          id: joinId, name: joinName, role: 'Anggota Keluarga',
+          id: joinId,
+          name: joinName,
+          role: 'Unit Personel',
           initials: joinName.split(' ').map((w: string) => w[0]).join('').slice(0, 2).toUpperCase(),
-          status: 'safe', location: 'Terdeteksi via QR', updatedAgo: 'baru saja',
+          status: 'safe',
+          location: 'Terdeteksi via QR',
+          updatedAgo: 'baru saja',
         }
         onAdd(newMember)
         aegisApi.notifyFamilyJoin(getMyAegisId(), getMyName(), joinId)
@@ -175,105 +286,159 @@ function AddMemberModal({ onClose, onAdd }: { onClose: () => void; onAdd: (m: Fa
   }
 
   const startCam = async () => {
-    setCamErr(''); setGalleryErr(''); setScanning(true)
+    setCamErr('')
+    setGalleryErr('')
+    setScanning(true)
     try {
       const s = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } })
       streamRef.current = s
-      if (videoRef.current) { videoRef.current.srcObject = s; await videoRef.current.play(); scanLoop() }
-    } catch { setCamErr('Izin kamera ditolak. Coba upload dari galeri.'); setScanning(false) }
+      if (videoRef.current) {
+        videoRef.current.srcObject = s
+        await videoRef.current.play()
+        scanLoop()
+      }
+    } catch {
+      setCamErr('Izin sensor kamera ditolak. Silakan gunakan opsi upload foto QR.')
+      setScanning(false)
+    }
   }
 
   const scanLoop = () => {
-    const v = videoRef.current; const c = canvasRef.current
-    if (!v || !c || v.readyState < 2) { rafRef.current = requestAnimationFrame(scanLoop); return }
-    c.width = v.videoWidth; c.height = v.videoHeight
+    const v = videoRef.current
+    const c = canvasRef.current
+    if (!v || !c || v.readyState < 2) {
+      rafRef.current = requestAnimationFrame(scanLoop)
+      return
+    }
+    c.width = v.videoWidth
+    c.height = v.videoHeight
     c.getContext('2d')?.drawImage(v, 0, 0)
     import('jsqr').then(({ default: jsQR }) => {
       const id = c.getContext('2d')?.getImageData(0, 0, c.width, c.height)
-      if (!id) { rafRef.current = requestAnimationFrame(scanLoop); return }
+      if (!id) {
+        rafRef.current = requestAnimationFrame(scanLoop)
+        return
+      }
       const code = jsQR(id.data, id.width, id.height)
       if (code?.data) {
         stopCam()
-        if (!processQRData(code.data)) setCamErr('QR tidak valid. Pastikan scan QR dari Aegis Family.')
+        if (!processQRData(code.data)) {
+          setCamErr('QR tidak valid. Pastikan scan QR dari A.T.L.A.S.')
+        }
         return
       }
       rafRef.current = requestAnimationFrame(scanLoop)
-    }).catch(() => { rafRef.current = requestAnimationFrame(scanLoop) })
+    }).catch(() => {
+      rafRef.current = requestAnimationFrame(scanLoop)
+    })
   }
 
-  // Upload QR dari galeri
   const handleGalleryUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
     if (!file) return
-    setGalleryErr(''); setGalleryLoading(true); stopCam()
+    setGalleryErr('')
+    setGalleryLoading(true)
+    stopCam()
     try {
       const img = new window.Image()
       img.onload = async () => {
         const c = canvasRef.current!
-        c.width = img.width; c.height = img.height
+        c.width = img.width
+        c.height = img.height
         c.getContext('2d')!.drawImage(img, 0, 0)
         const { default: jsQR } = await import('jsqr')
         const id = c.getContext('2d')!.getImageData(0, 0, c.width, c.height)
         const code = jsQR(id.data, id.width, id.height)
         setGalleryLoading(false)
         if (code?.data) {
-          if (!processQRData(code.data)) setGalleryErr('QR ditemukan tapi tidak valid.')
+          if (!processQRData(code.data)) setGalleryErr('QR ditemukan tetapi bukan ID A.T.L.A.S yang valid.')
         } else {
-          setGalleryErr('QR tidak terdeteksi. Coba foto lebih jelas/dekat.')
+          setGalleryErr('QR tidak terdeteksi pada gambar. Coba ambil gambar lebih jelas.')
         }
       }
-      img.onerror = () => { setGalleryLoading(false); setGalleryErr('Gagal membaca gambar.') }
+      img.onerror = () => {
+        setGalleryLoading(false)
+        setGalleryErr('Gagal memproses file gambar.')
+      }
       img.src = URL.createObjectURL(file)
-    } catch { setGalleryLoading(false); setGalleryErr('Gagal memproses gambar.') }
+    } catch {
+      setGalleryLoading(false)
+      setGalleryErr('Gagal mengekstrak QR code.')
+    }
     e.target.value = ''
   }
 
   return (
-    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-      className="fixed inset-0 z-[2000] flex items-end justify-center bg-black/80 backdrop-blur-sm">
-      <motion.div initial={{ y: '100%' }} animate={{ y: 0 }} exit={{ y: '100%' }}
+    <motion.div
+      initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+      className="fixed inset-0 z-[2000] flex items-end justify-center bg-black/85 backdrop-blur-md"
+    >
+      <motion.div
+        initial={{ y: '100%' }} animate={{ y: 0 }} exit={{ y: '100%' }}
         transition={{ type: 'spring', damping: 25, stiffness: 300 }}
-        className="w-full max-w-sm rounded-t-3xl border border-slate-700/50 p-5" style={{ background: '#0f1a2e' }}>
-        <div className="flex items-center justify-between mb-4">
-          <h3 className="text-base font-black text-white">Tambah Anggota Family</h3>
-          <button onClick={onClose} className="w-8 h-8 rounded-xl bg-slate-800 flex items-center justify-center"><X className="w-4 h-4 text-slate-400"/></button>
+        className="w-full max-w-sm rounded-t-xl border-t border-x border-nerv-border p-5 bg-nerv-card shadow-2xl"
+      >
+        <div className="flex items-center justify-between mb-3 border-b border-nerv-border pb-2">
+          <div>
+            <p className="text-[9px] font-mono font-bold text-nerv-cyan uppercase tracking-widest">
+              A.T.L.A.S // LINK PERSONNEL
+            </p>
+            <h3 className="text-sm font-mono font-bold text-white uppercase">TAUTKAN ANGGOTA KELUARGA</h3>
+          </div>
+          <button
+            onClick={onClose}
+            className="w-7 h-7 rounded bg-black/60 border border-nerv-border flex items-center justify-center hover:border-nerv-orange transition-colors"
+          >
+            <X className="w-4 h-4 text-slate-300" />
+          </button>
         </div>
-        <p className="text-[11px] text-slate-400 mb-3">Scan atau upload foto QR Code anggota untuk bergabung ke <span className="text-white font-bold">My Family</span>.</p>
-        {camErr && <p className="text-red-400 text-[11px] text-center mb-2">{camErr}</p>}
-        {galleryErr && <p className="text-amber-400 text-[11px] text-center mb-2">{galleryErr}</p>}
-        {galleryLoading && <p className="text-indigo-400 text-[11px] text-center mb-2 animate-pulse">Memproses gambar QR...</p>}
-        <div className="relative w-full aspect-square rounded-2xl overflow-hidden bg-slate-900 border border-slate-700/40">
-          <video ref={videoRef} className="w-full h-full object-cover" playsInline muted/>
-          <canvas ref={canvasRef} className="hidden"/>
+
+        <p className="text-[11px] text-slate-400 mb-3 font-sans">
+          Pindai kamera atau unggah tangkapan layar QR Code anggota untuk menghubungkan saluran darurat.
+        </p>
+
+        {camErr && <p className="text-nerv-red font-mono text-[10px] text-center mb-2">{camErr}</p>}
+        {galleryErr && <p className="text-nerv-yellow font-mono text-[10px] text-center mb-2">{galleryErr}</p>}
+        {galleryLoading && (
+          <p className="text-nerv-cyan font-mono text-[10px] text-center mb-2 animate-pulse">
+            MEMPROSES TANGKAPAN QR...
+          </p>
+        )}
+
+        <div className="relative w-full aspect-video rounded-lg overflow-hidden bg-black border border-nerv-border mb-3">
+          <video ref={videoRef} className="w-full h-full object-cover" playsInline muted />
+          <canvas ref={canvasRef} className="hidden" />
+
           {!scanning && !camErr && (
             <div className="absolute inset-0 flex flex-col items-center justify-center gap-2">
-              <Camera className="w-10 h-10 text-slate-600"/>
-              <p className="text-slate-500 text-sm">Kamera belum aktif</p>
-              <p className="text-slate-600 text-xs">atau upload foto QR dari galeri</p>
+              <Camera className="w-8 h-8 text-slate-600" />
+              <button
+                onClick={startCam}
+                className="px-3 py-1.5 rounded bg-nerv-cyan/20 border border-nerv-cyan text-nerv-cyan font-mono font-bold text-xs hover:bg-nerv-cyan/30 transition-colors"
+              >
+                AKTIFKAN SCANNER KAMERA
+              </button>
             </div>
           )}
-          {scanning && <div className="absolute inset-0 flex items-center justify-center pointer-events-none"><div className="w-40 h-40 border-2 border-indigo-400/60 rounded-xl"/></div>}
+
+          {scanning && (
+            <div className="absolute inset-0 pointer-events-none border-2 border-nerv-orange/50 m-6 rounded flex items-center justify-center">
+              <div className="w-full h-0.5 bg-nerv-orange shadow-[0_0_8px_rgba(255,87,34,1)] animate-bounce" />
+            </div>
+          )}
         </div>
-        {/* Hidden file input */}
-        <input ref={fileInputRef} type="file" accept="image/*" className="hidden" onChange={handleGalleryUpload}/>
-        <div className="flex gap-2 mt-4">
-          <button onClick={onClose} className="py-3 px-3 rounded-2xl bg-slate-700/60 text-slate-300 font-bold text-sm">Batal</button>
-          {/* Upload galeri */}
-          <button onClick={() => fileInputRef.current?.click()}
-            className="flex-1 py-3 rounded-2xl bg-emerald-700/80 border border-emerald-600/50 text-white font-black text-sm flex items-center justify-center gap-1.5">
-            <Image className="w-4 h-4"/> Galeri
-          </button>
-          {/* Kamera */}
-          {!scanning
-            ? <button onClick={startCam} className="flex-1 py-3 rounded-2xl bg-indigo-600 text-white font-black text-sm flex items-center justify-center gap-1.5"><Camera className="w-4 h-4"/> Kamera</button>
-            : <button onClick={stopCam} className="flex-1 py-3 rounded-2xl bg-slate-700 text-white font-bold text-sm">Stop</button>
-          }
+
+        <div className="flex gap-2">
+          <label className="flex-1 py-2.5 rounded bg-black/60 border border-nerv-border hover:border-nerv-orange text-slate-300 font-mono text-xs font-bold flex items-center justify-center gap-2 cursor-pointer transition-colors">
+            <UserPlus className="w-3.5 h-3.5 text-nerv-cyan" />
+            UPLOAD FOTO QR
+            <input type="file" accept="image/*" onChange={handleGalleryUpload} className="hidden" />
+          </label>
         </div>
       </motion.div>
     </motion.div>
   )
 }
-
 
 // ── Main FamilyPage ───────────────────────────────────────────
 interface Props {
@@ -289,57 +454,60 @@ export default function FamilyPage({ onBack, onPingClear }: Props) {
   const [viewMember, setViewMember] = useState<FamilyMember | null>(null)
   const [pinging, setPinging] = useState(false)
   const [pingBanner, setPingBanner] = useState('')
-  const [incomingPing, setIncomingPing] = useState<{fromId: string, fromName: string} | null>(null)
-  const alarmRef = useRef<HTMLAudioElement | null>(null);
-  const familyPingIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const [incomingPing, setIncomingPing] = useState<{ fromId: string; fromName: string } | null>(null)
+  const alarmRef = useRef<HTMLAudioElement | null>(null)
+  const familyPingIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
   useEffect(() => {
-    onPingClear?.();
-    alarmRef.current = new Audio("/alarm.mp3");
-    alarmRef.current.loop = true;
-    return () => alarmRef.current?.pause();
-  }, [onPingClear]);
+    onPingClear?.()
+    alarmRef.current = new Audio("/alarm.mp3")
+    alarmRef.current.loop = true
+    return () => alarmRef.current?.pause()
+  }, [onPingClear])
 
   useEffect(() => {
     if (incomingPing) {
       const doVibrate = () => {
-        if ("vibrate" in navigator) navigator.vibrate([300, 100, 300]);
-        alarmRef.current?.play?.().catch(() => {});
-      };
-      doVibrate();
-      familyPingIntervalRef.current = setInterval(doVibrate, 1500);
+        if ("vibrate" in navigator) navigator.vibrate([300, 100, 300])
+        alarmRef.current?.play?.().catch(() => {})
+      }
+      doVibrate()
+      familyPingIntervalRef.current = setInterval(doVibrate, 1500)
       return () => {
-        if (familyPingIntervalRef.current) clearInterval(familyPingIntervalRef.current);
-        alarmRef.current?.pause?.();
-      };
+        if (familyPingIntervalRef.current) clearInterval(familyPingIntervalRef.current)
+        alarmRef.current?.pause?.()
+      }
     }
-  }, [incomingPing]);
+  }, [incomingPing])
 
-  const save = useCallback((m: FamilyMember[]) => { setMembers(m); saveFamily(m) }, [])
+  const save = useCallback((m: FamilyMember[]) => {
+    setMembers(m)
+    saveFamily(m)
+  }, [])
 
-  // Broadcast my location to all members
+  // Broadcast my location to all linked members
   useEffect(() => {
-    let watchId: string | null = null;
+    let watchId: string | null = null
     const startWatch = async () => {
       try {
         watchId = await Geolocation.watchPosition({ enableHighAccuracy: true }, (pos, err) => {
-          if (err || !pos) return;
+          if (err || !pos) return
           const { latitude: lat, longitude: lng } = pos.coords
           saveMemberLoc(myId, lat, lng)
-          const deviceInfo = (window as any).__DEVICE_MODEL__ || navigator.userAgent;
+          const deviceInfo = (window as any).__DEVICE_MODEL__ || navigator.userAgent
           aegisApi.broadcastLocation(myId, getMyName(), deviceInfo, lat, lng, 100).catch(() => {})
-        });
+        })
       } catch (e) {
-        console.warn("Family GPS error", e);
+        console.warn("Family GPS error", e)
       }
-    };
-    startWatch();
+    }
+    startWatch()
     return () => {
-      if (watchId) Geolocation.clearWatch({ id: watchId }).catch(() => {});
-    };
+      if (watchId) Geolocation.clearWatch({ id: watchId }).catch(() => {})
+    }
   }, [myId])
 
-  // SSE events
+  // Real-time synchronization events
   useAegisSync((event) => {
     if (event.type === 'FAMILY_JOIN' && event.toId === myId) {
       const fromId = event.fromId as string
@@ -347,9 +515,13 @@ export default function FamilyPage({ onBack, onPingClear }: Props) {
       const current = loadFamily()
       if (!current.some(m => m.id === fromId)) {
         const updated = [...current, {
-          id: fromId, name: fromName, role: 'Anggota Keluarga',
+          id: fromId,
+          name: fromName,
+          role: 'Unit Personel',
           initials: fromName.split(' ').map((w: string) => w[0]).join('').slice(0, 2).toUpperCase(),
-          status: 'safe' as const, location: 'Bergabung via QR scan', updatedAgo: 'baru saja',
+          status: 'safe' as const,
+          location: 'Bergabung via QR scan',
+          updatedAgo: 'baru saja',
         }]
         save(updated)
       }
@@ -361,39 +533,27 @@ export default function FamilyPage({ onBack, onPingClear }: Props) {
       if (id && lat && lng) saveMemberLoc(id, lat, lng)
     }
     if (event.type === 'PING' && event.fromId !== myId) {
-      if (!event.role) { // Family ping
-        setIncomingPing({fromId: event.fromId as string, fromName: event.fromName as string})
+      if (!event.role) {
+        setIncomingPing({ fromId: event.fromId as string, fromName: event.fromName as string })
       }
     }
     if (event.type === 'PING_REPLY' && event.toId === myId) {
       const current = loadFamily()
       save(current.map(m => m.id === event.fromId ? { ...m, status: 'safe' as const, updatedAgo: 'baru saja' } : m))
-      setPingBanner(`✅ ${event.fromName as string} membalas ping!`)
-      setTimeout(() => setPingBanner(''), 2500)
+      setPingBanner(`${event.fromName} merespons: SAYA AMAN ✓`)
+      setTimeout(() => setPingBanner(''), 4000)
     }
   })
 
-  // URL invite on mount
-  useEffect(() => {
-    const params = new URLSearchParams(window.location.search)
-    const joinId = params.get('joinFamily'); const joinName = params.get('inviteName')
-    if (joinId && joinName) {
-      const current = loadFamily()
-      if (!current.some(m => m.id === joinId)) {
-        save([...current, { id: joinId, name: joinName, role: 'Anggota Keluarga',
-          initials: joinName.split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase(),
-          status: 'safe', location: 'Bergabung via link', updatedAgo: 'baru saja' }])
-      }
-      aegisApi.notifyFamilyJoin(myId, getMyName(), joinId)
-      const url = new URL(window.location.href)
-      url.searchParams.delete('joinFamily'); url.searchParams.delete('inviteName')
-      window.history.replaceState({}, '', url.toString())
-    }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
+  const handleAdd = (m: FamilyMember) => {
+    const updated = [...members.filter(x => x.id !== m.id), m]
+    save(updated)
+  }
 
-  const handleAdd = (m: FamilyMember) => save([...members, m])
-  const handleDelete = (id: string) => { if (confirm(`Hapus anggota ini dari My Family?`)) save(members.filter(m => m.id !== id)) }
+  const handleDelete = (id: string) => {
+    if (!confirm('Hapus personel ini dari grup unit?')) return
+    save(members.filter(m => m.id !== id))
+  }
 
   const handlePing = () => {
     setPinging(true)
@@ -406,145 +566,236 @@ export default function FamilyPage({ onBack, onPingClear }: Props) {
 
   return (
     <>
-    <motion.div initial={{ opacity: 0, x: 40 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: 40 }}
-      className="fixed inset-0 z-[1800] flex flex-col overflow-y-auto" style={{ background: '#080e1a' }}>
+      <motion.div
+        initial={{ opacity: 0, x: 30 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: 30 }}
+        transition={{ duration: 0.22 }}
+        className="fixed inset-0 z-[1800] flex flex-col overflow-y-auto custom-scrollbar bg-nerv-bg text-slate-200"
+      >
+        {/* NERV Telemetry Header */}
+        <div className="shrink-0 px-4 pt-4 pb-3 border-b border-nerv-border bg-[#0B0F19] flex items-center justify-between">
+          <div className="flex items-center gap-3 min-w-0">
+            {onBack && (
+              <button
+                onClick={onBack}
+                className="w-8 h-8 rounded bg-nerv-card border border-nerv-border flex items-center justify-center shrink-0 hover:border-nerv-orange transition-colors"
+              >
+                <ChevronLeft className="w-4 h-4 text-slate-300" />
+              </button>
+            )}
+            <div className="min-w-0">
+              <div className="flex items-center gap-2 mb-0.5">
+                <div className="w-2 h-2 rounded-full bg-nerv-cyan animate-ping" />
+                <p className="text-[10px] font-mono font-bold tracking-widest text-nerv-cyan uppercase">
+                  A.T.L.A.S // PERSONNEL DIRECTORY
+                </p>
+              </div>
+              <h2 className="text-sm font-mono font-bold text-white truncate">
+                LINKED FAMILY UNITS [{members.length}]
+              </h2>
+            </div>
+          </div>
 
-      {/* Header */}
-      <div className="shrink-0 px-4 pt-4 pb-3 border-b border-slate-800/60 flex items-center gap-3" style={{ background: '#0a1020' }}>
-        {onBack && <button onClick={onBack} className="w-8 h-8 rounded-xl bg-slate-800/60 border border-slate-700/50 flex items-center justify-center shrink-0"><ChevronLeft className="w-4 h-4 text-slate-400"/></button>}
-        <div className="flex-1">
-          {/* Fixed group name — cannot be renamed */}
-          <h2 className="text-xl font-black text-white">My Family</h2>
-          <p className="text-[10px] text-slate-400">
-            {members.length > 0 ? <><span className="text-emerald-400 font-bold">{members.length} anggota</span> dalam grup</> : 'Grup kosong'}
-          </p>
+          <div className="flex items-center gap-2 shrink-0">
+            <button
+              onClick={() => setShowQR(true)}
+              className="px-2.5 py-1.5 rounded bg-black/60 border border-nerv-border hover:border-nerv-cyan flex items-center gap-1.5 font-mono text-xs text-nerv-cyan transition-colors"
+            >
+              <QrCode className="w-3.5 h-3.5" />
+              <span className="text-[10px] font-bold">MY QR</span>
+            </button>
+          </div>
         </div>
-        <button onClick={() => setShowQR(true)} className="w-9 h-9 rounded-xl bg-indigo-500/20 border border-indigo-500/30 flex items-center justify-center">
-          <QrCode className="w-4 h-4 text-indigo-400"/>
-        </button>
-      </div>
 
-      {/* Ping banner */}
+        {/* Tactical Ping Reply Banner */}
+        <AnimatePresence>
+          {pingBanner && (
+            <motion.div
+              initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}
+              className="shrink-0 px-4 py-2 bg-nerv-green/10 border-b border-nerv-green/40 text-center font-mono"
+            >
+              <p className="text-[11px] font-bold text-nerv-green">{pingBanner}</p>
+            </motion.div>
+          )}
+        </AnimatePresence>
+
+        <div className="flex-1 px-4 py-4 space-y-3 pb-24">
+          {/* Tactical Ping Broadcast Button */}
+          {members.length > 0 && (
+            <button
+              onClick={handlePing}
+              disabled={pinging}
+              className={`w-full py-3.5 rounded-lg font-mono font-bold text-xs uppercase tracking-widest flex items-center justify-center gap-2 border transition-all ${
+                pinging
+                  ? 'bg-nerv-orange/20 border-nerv-orange text-nerv-orange animate-pulse'
+                  : 'bg-nerv-orange hover:bg-orange-600 border-orange-400 text-black shadow-[0_0_15px_rgba(255,87,34,0.35)]'
+              }`}
+            >
+              <Radio className={`w-4 h-4 ${pinging ? 'animate-spin' : ''}`} />
+              {pinging ? 'TRANSMITTING SIGNAL TO ALL UNITS...' : 'BROADCAST PING TO ALL UNITS'}
+            </button>
+          )}
+
+          {/* Empty state */}
+          {members.length === 0 && (
+            <div className="py-12 text-center border border-dashed border-nerv-border rounded-lg bg-nerv-card/50 p-6">
+              <div className="w-16 h-16 rounded-lg bg-black/60 border border-nerv-border flex items-center justify-center mx-auto mb-3">
+                <Shield className="w-8 h-8 text-nerv-cyan/60" />
+              </div>
+              <h3 className="text-white font-mono font-bold text-sm mb-1 uppercase tracking-wider">
+                TIDAK ADA PERSONEL TERTAUT
+              </h3>
+              <p className="text-slate-400 text-xs font-sans max-w-xs mx-auto mb-4">
+                Hubungkan anggota keluarga ke jaringan darurat A.T.L.A.S dengan memindai kode QR.
+              </p>
+              <button
+                onClick={() => setShowAdd(true)}
+                className="inline-flex items-center gap-2 px-4 py-2 rounded bg-nerv-cyan/20 border border-nerv-cyan text-nerv-cyan font-mono text-xs font-bold hover:bg-nerv-cyan/30 transition-colors"
+              >
+                <UserPlus className="w-3.5 h-3.5" /> TAUTKAN ANGGOTA SEKARANG
+              </button>
+            </div>
+          )}
+
+          {/* Member cards */}
+          {members.map((m, i) => {
+            const hasLoc = !!locs[m.id]
+            const memberLoc = locs[m.id]
+            return (
+              <motion.div
+                key={m.id}
+                initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.05 }}
+                className={`p-3.5 rounded-lg border bg-nerv-card relative overflow-hidden transition-colors ${
+                  m.status === 'danger'
+                    ? 'border-nerv-red/60 border-l-4 border-l-nerv-red'
+                    : 'border-nerv-border hover:border-nerv-borderActive border-l-4 border-l-nerv-cyan'
+                }`}
+              >
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded bg-black/60 border border-nerv-border flex items-center justify-center font-mono font-bold text-sm text-nerv-cyan shrink-0">
+                    {m.initials}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2">
+                      <p className="text-sm font-mono font-bold text-white truncate">{m.name}</p>
+                      <span className="text-[8px] font-mono text-slate-500 uppercase px-1 rounded bg-black/40 border border-nerv-border">
+                        {m.role || 'PERSONNEL'}
+                      </span>
+                    </div>
+                    <div className="mt-1">
+                      <StatusChip status={m.status} />
+                    </div>
+                  </div>
+                  <div className="flex gap-1.5 shrink-0">
+                    <button
+                      onClick={() => setViewMember(m)}
+                      className={`p-2 rounded border transition-colors ${
+                        hasLoc
+                          ? 'bg-nerv-cyan/15 border-nerv-cyan/50 text-nerv-cyan hover:bg-nerv-cyan/30'
+                          : 'bg-black/40 border-nerv-border text-slate-500'
+                      }`}
+                      title={hasLoc ? 'Lihat telemetri lokasi' : 'Lokasi belum tersedia'}
+                    >
+                      <Navigation2 className="w-3.5 h-3.5" />
+                    </button>
+                    <button
+                      onClick={() => handleDelete(m.id)}
+                      className="p-2 rounded border border-nerv-border bg-black/40 text-slate-500 hover:text-nerv-red hover:border-nerv-red/50 transition-colors"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                </div>
+
+                <div className="flex items-center justify-between mt-2 pt-2 border-t border-nerv-border/60 text-[10px] font-mono">
+                  <div className="text-slate-400">
+                    {hasLoc ? (
+                      <span className="text-nerv-green">
+                        ● GPS: {memberLoc.lat.toFixed(4)}, {memberLoc.lng.toFixed(4)}
+                      </span>
+                    ) : (
+                      <span className="text-slate-500">○ Sinyal koordinat standby</span>
+                    )}
+                  </div>
+                  <div className="flex items-center gap-1 text-slate-500 text-[9px]">
+                    <Clock className="w-3 h-3" />
+                    <span>{m.updatedAgo}</span>
+                  </div>
+                </div>
+              </motion.div>
+            )
+          })}
+
+          {/* Add member button */}
+          {members.length > 0 && (
+            <button
+              onClick={() => setShowAdd(true)}
+              className="w-full p-3 rounded-lg border border-dashed border-nerv-border hover:border-nerv-cyan bg-black/40 flex items-center justify-center gap-2 text-slate-400 hover:text-nerv-cyan font-mono text-xs font-bold transition-colors"
+            >
+              <UserPlus className="w-4 h-4" />
+              <span>+ TAUTKAN UNIT BARU</span>
+            </button>
+          )}
+
+          {/* Info Card */}
+          <div className="p-3.5 rounded-lg border border-nerv-border bg-[#0B0F19] font-mono">
+            <div className="flex items-center gap-2 mb-1.5">
+              <div className="w-1.5 h-1.5 rounded-full bg-nerv-cyan" />
+              <p className="text-[10px] text-nerv-cyan font-bold uppercase tracking-widest">
+                [DATA TELEMETRI // OFFLINE CACHE]
+              </p>
+            </div>
+            <p className="text-[11px] text-slate-400 font-sans leading-relaxed">
+              Posisi personel disimpan secara lokal di perangkat. Saat terhubung sinyal seluler/WiFi, koordinat
+              diperbarui otomatis secara real-time. Jika jaringan putus, titik terakhir tetap dapat diakses di peta.
+            </p>
+          </div>
+        </div>
+      </motion.div>
+
+      {/* Incoming Ping Alarm Modal */}
       <AnimatePresence>
-        {pingBanner && (
-          <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}
-            className="shrink-0 px-4 py-2 bg-emerald-900/40 border-b border-emerald-700/30 text-center">
-            <p className="text-[11px] font-black text-emerald-300">{pingBanner}</p>
+        {incomingPing && (
+          <motion.div
+            initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+            className="fixed inset-0 z-[3000] flex items-center justify-center bg-black/90 backdrop-blur-md p-4"
+          >
+            <motion.div
+              initial={{ scale: 0.9, y: 15 }} animate={{ scale: 1, y: 0 }} exit={{ scale: 0.9, y: 15 }}
+              className="w-full max-w-xs bg-nerv-card border-2 border-nerv-orange rounded-lg p-5 shadow-[0_0_40px_rgba(255,87,34,0.4)] relative overflow-hidden"
+            >
+              <div className="absolute inset-0 bg-nerv-orange/5 animate-pulse pointer-events-none" />
+              <div className="relative z-10 flex flex-col items-center text-center font-mono">
+                <div className="w-14 h-14 bg-nerv-orange/20 rounded-full flex items-center justify-center mb-3 border border-nerv-orange">
+                  <Radio className="w-7 h-7 text-nerv-orange animate-ping" />
+                </div>
+                <p className="text-[10px] text-nerv-orange font-bold uppercase tracking-widest mb-1">
+                  TACTICAL EMERGENCY PING
+                </p>
+                <h2 className="text-base font-bold text-white mb-2">PANGGILAN DARI UNIT</h2>
+                <p className="text-xs text-slate-300 mb-5 font-sans leading-relaxed">
+                  <b className="text-white font-mono">{incomingPing.fromName}</b> mengirimkan sinyal darurat. Segera
+                  kirimkan konfirmasi keselamatan Anda.
+                </p>
+                <button
+                  onClick={() => {
+                    aegisApi.pingReply(myId, getMyName(), incomingPing.fromId)
+                    setIncomingPing(null)
+                  }}
+                  className="w-full py-3.5 bg-nerv-orange hover:bg-orange-600 text-black rounded font-mono font-bold text-xs uppercase tracking-widest shadow-[0_0_20px_rgba(255,87,34,0.5)] transition-all"
+                >
+                  KONFIRMASI: SAYA AMAN ✓
+                </button>
+              </div>
+            </motion.div>
           </motion.div>
         )}
       </AnimatePresence>
 
-      <div className="flex-1 px-4 py-4 space-y-3 pb-24">
-        {/* Ping button */}
-        {members.length > 0 && (
-          <button onClick={handlePing}
-            className={`w-full py-3.5 rounded-2xl font-black text-sm flex items-center justify-center gap-2 border ${pinging ? 'bg-indigo-500/20 border-indigo-500/40 text-indigo-300' : 'bg-indigo-600 border-indigo-500/50 text-white'}`}>
-            <Radio className={`w-4 h-4 ${pinging ? 'animate-pulse' : ''}`}/>
-            {pinging ? 'MENGIRIM PING...' : 'PING ALL MEMBERS'}
-          </button>
-        )}
-
-        {/* Empty state */}
-        {members.length === 0 && (
-          <div className="py-10 text-center">
-            <div className="w-20 h-20 rounded-2xl bg-slate-800/60 border border-slate-700/40 flex items-center justify-center mx-auto mb-4"><span className="text-3xl">👨‍👩‍👧‍👦</span></div>
-            <h3 className="text-white font-black mb-2">My Family Kosong</h3>
-            <p className="text-slate-500 text-sm">Tambahkan anggota keluarga dengan scan QR mereka.</p>
-          </div>
-        )}
-
-        {/* Member cards */}
-        {members.map((m, i) => {
-          const hasLoc = !!locs[m.id]
-          return (
-            <motion.div key={m.id} initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.05 }}
-              className={`p-4 rounded-2xl border ${m.status === 'danger' ? 'border-red-500/40' : 'border-slate-700/40'}`}
-              style={{ background: m.status === 'danger' ? '#150808' : '#0f1a2e' }}>
-              <div className="flex items-center gap-3">
-                <div className={`w-12 h-12 rounded-2xl flex items-center justify-center font-black text-white border shrink-0 ${m.status === 'danger' ? 'bg-red-600/30 border-red-500/40' : 'bg-indigo-600/30 border-indigo-500/40'}`}>
-                  {m.initials}
-                </div>
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm font-bold text-white">{m.name}</p>
-                  <p className="text-[10px] text-slate-500">{m.role}</p>
-                  <div className="mt-0.5"><StatusChip status={m.status}/></div>
-                </div>
-                <div className="flex gap-1.5 shrink-0">
-                  {/* View location button */}
-                  <button onClick={() => setViewMember(m)}
-                    className={`p-1.5 rounded-lg flex items-center gap-1 ${hasLoc ? 'bg-emerald-600/20 border border-emerald-600/30' : 'bg-slate-700/60'}`}
-                    title={hasLoc ? 'Lihat lokasi' : 'Lokasi belum tersedia'}>
-                    <Navigation2 className={`w-3.5 h-3.5 ${hasLoc ? 'text-emerald-400' : 'text-slate-500'}`}/>
-                  </button>
-                  <button onClick={() => handleDelete(m.id)} className="p-1.5 rounded-lg bg-slate-700/60 text-slate-400"><Trash2 className="w-3 h-3"/></button>
-                </div>
-              </div>
-              <div className="flex justify-between mt-2">
-                <p className="text-[10px] text-slate-400">
-                  {hasLoc ? <span className="text-emerald-500">📍 Lokasi tersedia (offline)</span> : '📍 Lokasi belum dibagikan'}
-                </p>
-                <div className="flex items-center gap-1"><Clock className="w-3 h-3 text-slate-500"/><span className="text-[10px] text-slate-500">{m.updatedAgo}</span></div>
-              </div>
-            </motion.div>
-          )
-        })}
-
-        {/* Add member button */}
-        <button onClick={() => setShowAdd(true)}
-          className="w-full p-4 rounded-2xl border border-dashed border-slate-700/40 flex items-center justify-center gap-2 text-slate-400 hover:border-slate-600 transition-colors">
-          <UserPlus className="w-5 h-5"/><span className="text-sm font-bold">Tambah Anggota</span>
-        </button>
-
-        {/* Info card */}
-        <div className="p-4 rounded-2xl border border-slate-700/30" style={{ background: '#0a1020' }}>
-          <p className="text-[10px] text-indigo-400 font-bold uppercase tracking-widest mb-1">ℹ️ Tentang Lokasi Offline</p>
-          <p className="text-[11px] text-slate-500 leading-relaxed">
-            Lokasi anggota disimpan di perangkat Anda. Saat online, lokasi diperbarui otomatis via SSE.
-            Saat offline, lokasi terakhir yang tersimpan tetap bisa dilihat di peta.
-          </p>
-          {/* INCOMING PING MODAL */}
-        </div>
-        <AnimatePresence>
-          {incomingPing && (
-            <motion.div
-              initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-              className="fixed inset-0 z-[3000] flex items-center justify-center bg-black/80 backdrop-blur-md p-4"
-            >
-              <motion.div
-                initial={{ scale: 0.9, y: 20 }} animate={{ scale: 1, y: 0 }} exit={{ scale: 0.9, y: 20 }}
-                className="w-full max-w-xs bg-slate-900 border-2 border-emerald-500/50 rounded-3xl p-6 shadow-[0_0_50px_rgba(16,185,129,0.3)] relative overflow-hidden"
-              >
-                <div className="absolute inset-0 bg-emerald-500/10 animate-pulse pointer-events-none" />
-                <div className="relative z-10 flex flex-col items-center text-center">
-                  <div className="w-16 h-16 bg-emerald-600/20 rounded-full flex items-center justify-center mb-4 border border-emerald-500/50">
-                    <Radio className="w-8 h-8 text-emerald-400 animate-ping" />
-                  </div>
-                  <h2 className="text-xl font-black text-white mb-1 tracking-wide">PING KELUARGA</h2>
-                  <p className="text-sm text-slate-300 mb-6 leading-relaxed">
-                    <b className="text-white">{incomingPing.fromName}</b> memanggil Anda. Segera konfirmasi bahwa Anda aman!
-                  </p>
-                  <button
-                    onClick={() => {
-                      aegisApi.pingReply(myId, getMyName(), incomingPing.fromId);
-                      setIncomingPing(null);
-                    }}
-                    className="w-full py-4 bg-emerald-600 hover:bg-emerald-500 text-white rounded-2xl font-black text-sm tracking-widest shadow-[0_4px_20px_rgba(16,185,129,0.5)] active:scale-95 transition-all"
-                  >
-                    BALAS PING (SAYA AMAN)
-                  </button>
-                </div>
-              </motion.div>
-            </motion.div>
-          )}
-        </AnimatePresence>
-      </div>
-    </motion.div>
-
-    <AnimatePresence>
-      {showQR && <MyQRModal onClose={() => setShowQR(false)}/>}
-      {showAdd && <AddMemberModal onClose={() => setShowAdd(false)} onAdd={handleAdd}/>}
-      {viewMember && <MemberMapModal member={viewMember} onClose={() => setViewMember(null)}/>}
-    </AnimatePresence>
+      <AnimatePresence>
+        {showQR && <MyQRModal onClose={() => setShowQR(false)} />}
+        {showAdd && <AddMemberModal onClose={() => setShowAdd(false)} onAdd={handleAdd} />}
+        {viewMember && <MemberMapModal member={viewMember} onClose={() => setViewMember(null)} />}
+      </AnimatePresence>
     </>
   )
 }

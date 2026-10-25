@@ -99,7 +99,12 @@ export default function NavigatePage({ routes, selectedRoute, tsunamiAlert, user
       } catch (e) {}
     };
     startWatch();
+    // Fallback timer: if after 2.5s no GPS fix on desktop, set Palu center
+    const fallbackTimer = setTimeout(() => {
+      setLocalPos((prev) => prev ?? [-0.8917, 119.8577]);
+    }, 2500);
     return () => {
+      clearTimeout(fallbackTimer);
       if (watchId) Geolocation.clearWatch({ id: watchId }).catch(() => {});
     };
   }, [userPosition])
@@ -208,85 +213,98 @@ export default function NavigatePage({ routes, selectedRoute, tsunamiAlert, user
     }
   }, [effectivePos])
 
-  const headerBg = emergency ? '#0f0505' : '#0a1020'
-  const headerBorder = emergency ? 'border-red-900/40' : 'border-slate-800/60'
+  const headerBg = emergency ? '#160608' : '#0B0F19'
+  const headerBorder = emergency ? 'border-nerv-red' : 'border-nerv-border'
 
   if (showCalibration) return (
-    <div className="fixed inset-0 z-[1900] flex items-center justify-center bg-black/95 p-6">
-      <motion.div initial={{ scale:0.85,opacity:0 }} animate={{ scale:1,opacity:1 }}
-        className="w-full max-w-sm p-6 rounded-3xl border border-indigo-500/40 bg-[#0a1020] text-center">
-        <div className="w-20 h-20 rounded-full bg-indigo-500/20 border border-indigo-500/30 flex items-center justify-center mx-auto mb-6">
-          <svg className="w-10 h-10 text-indigo-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-            <path strokeLinecap="round" strokeLinejoin="round" d="M8 16l2.879-2.879m0 0a3 3 0 104.243-4.242 3 3 0 00-4.243 4.242zM21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-          </svg>
+    <div className="fixed inset-0 z-[1900] flex items-center justify-center bg-black/95 p-6 backdrop-blur-md">
+      <motion.div initial={{ scale:0.95,opacity:0 }} animate={{ scale:1,opacity:1 }}
+        className="w-full max-w-sm p-5 rounded-lg border border-nerv-orange/50 bg-nerv-card text-center font-mono shadow-2xl">
+        <div className="w-16 h-16 rounded-full bg-nerv-orange/20 border border-nerv-orange flex items-center justify-center mx-auto mb-4">
+          <Compass className="w-8 h-8 text-nerv-orange animate-spin" />
         </div>
-        <h2 className="text-xl font-black text-white tracking-wide mb-3">KALIBRASI KOMPAS</h2>
-        <p className="text-sm text-slate-400 leading-relaxed mb-6">
-          Untuk mendapatkan akurasi arah yang maksimal, mohon gerakkan HP Anda membentuk <b>angka 8</b> di udara beberapa kali.
+        <p className="text-[9px] text-nerv-orange uppercase tracking-widest font-bold mb-1">
+          A.T.L.A.S // SENSOR CALIBRATION
+        </p>
+        <h2 className="text-base font-bold text-white mb-2">KALIBRASI KOMPAS & GYRO</h2>
+        <p className="text-xs text-slate-300 font-sans leading-relaxed mb-5">
+          Untuk mendapatkan akurasi orientasi azimuth maksimal, gerakkan perangkat membentuk pola <b>angka 8</b> di udara beberapa kali.
         </p>
         <button onClick={handleCalibrate}
-          className="w-full py-3.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl font-bold tracking-widest text-sm shadow-[0_0_20px_rgba(79,70,229,0.4)]">
-          SAYA MENGERTI
+          className="w-full py-3 bg-nerv-orange hover:bg-orange-600 text-black rounded font-mono font-bold text-xs uppercase tracking-widest shadow-[0_0_15px_rgba(255,87,34,0.4)] transition-all">
+          SISTEM SIAP // SAYA MENGERTI
         </button>
       </motion.div>
     </div>
   )
 
   if (showMedical) return (
-    <div className="fixed inset-0 z-[1900] flex items-center justify-center bg-black/90 p-6">
-      <motion.div initial={{ scale:0.85,opacity:0 }} animate={{ scale:1,opacity:1 }}
-        className="w-full max-w-sm p-6 rounded-3xl border border-red-500/40 bg-[#150808] text-center">
-        <div className="w-16 h-16 rounded-2xl bg-red-500/20 border border-red-500/30 flex items-center justify-center mx-auto mb-4">
-          <Phone className="w-8 h-8 text-red-400"/>
+    <div className="fixed inset-0 z-[1900] flex items-center justify-center bg-black/90 p-6 backdrop-blur-md">
+      <motion.div initial={{ scale:0.95,opacity:0 }} animate={{ scale:1,opacity:1 }}
+        className="w-full max-w-sm p-6 rounded-lg border border-nerv-red bg-nerv-card text-center font-mono shadow-2xl">
+        <div className="w-14 h-14 rounded-full bg-nerv-red/20 border border-nerv-red flex items-center justify-center mx-auto mb-3">
+          <Phone className="w-7 h-7 text-nerv-red animate-pulse"/>
         </div>
-        <h3 className="text-xl font-black text-white mb-2">Bantuan Medis</h3>
-        <p className="text-sm text-slate-400 mb-6">Tim SAR akan dikirimkan ke koordinat GPS Anda saat ini.</p>
-        <button className="w-full py-3.5 bg-red-600 text-white rounded-2xl font-black text-sm mb-3">KIRIM PERMINTAAN BANTUAN</button>
-        <button onClick={()=>setShowMedical(false)} className="w-full py-3 bg-slate-800 text-slate-300 rounded-2xl font-bold text-sm">Batal</button>
+        <p className="text-[9px] text-nerv-red uppercase tracking-widest font-bold mb-1">
+          TACTICAL MEDICAL DISPATCH
+        </p>
+        <h3 className="text-base font-bold text-white mb-2">BANTUAN MEDIS DARURAT</h3>
+        <p className="text-xs text-slate-300 font-sans mb-5 leading-relaxed">
+          Sinyal darurat dan koordinat telemetri GPS Anda akan dikirimkan langsung ke pusat komando evakuasi.
+        </p>
+        <button className="w-full py-3.5 bg-nerv-red hover:bg-red-700 text-white rounded font-mono font-bold text-xs uppercase tracking-widest mb-2 shadow-[0_0_20px_rgba(255,23,68,0.5)] transition-all">
+          TRANSMIT EMERGENCY SOS
+        </button>
+        <button onClick={()=>setShowMedical(false)} className="w-full py-2 bg-black/60 border border-nerv-border text-slate-400 rounded font-mono text-xs hover:text-white transition-colors">
+          BATALKAN
+        </button>
       </motion.div>
     </div>
   )
 
   return (
     <motion.div initial={{opacity:0}} animate={{opacity:1}} exit={{opacity:0}}
-      className="fixed inset-0 z-[1800] flex flex-col" style={{background:'#080e1a'}}>
+      className="fixed inset-0 z-[1800] flex flex-col bg-nerv-bg text-slate-200">
 
       {/* Header */}
       <div className={`shrink-0 flex items-center justify-between px-4 py-3 border-b ${headerBorder}`} style={{background: headerBg}}>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2.5 min-w-0">
           {onBack && (
             <button onClick={onBack}
-              className={`w-8 h-8 rounded-xl flex items-center justify-center border ${
-                emergency ? 'bg-red-900/30 border-red-800/50' : 'bg-slate-800/60 border-slate-700/50'
-              }`}>
-              <ChevronLeft className={`w-4 h-4 ${emergency ? 'text-red-300' : 'text-slate-400'}`}/>
+              className="w-8 h-8 rounded bg-nerv-card border border-nerv-border flex items-center justify-center shrink-0 hover:border-nerv-orange transition-colors">
+              <ChevronLeft className="w-4 h-4 text-slate-300"/>
             </button>
           )}
-          {emergency
-            ? <AlertTriangle className="w-5 h-5 text-amber-400 animate-pulse"/>
-            : <Compass className="w-5 h-5 text-indigo-400"/>
-          }
-          <span className="text-sm font-black text-white tracking-widest">
-            {emergency ? 'RUTE EVAKUASI DARURAT' : 'PETA EVAKUASI'}
-          </span>
+          <div className="min-w-0">
+            <div className="flex items-center gap-1.5 mb-0.5">
+              <div className={`w-1.5 h-1.5 rounded-full ${emergency ? 'bg-nerv-red animate-ping' : 'bg-nerv-cyan animate-pulse'}`} />
+              <span className="text-[9px] font-mono font-bold tracking-widest text-slate-400 uppercase">
+                A.T.L.A.S // NAVIGATION
+              </span>
+            </div>
+            <h2 className="text-sm font-mono font-bold text-white tracking-wide truncate">
+              {emergency ? 'EMERGENCY COCKPIT' : 'TACTICAL MAP'}
+            </h2>
+          </div>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 shrink-0">
           {!emergency && (
             <button onClick={() => setShowRoutePanel(p => !p)}
-              className="px-2 py-1.5 rounded-xl bg-indigo-600/30 border border-indigo-500/40 text-indigo-300 text-[9px] font-black">
-              {showRoutePanel ? 'TUTUP' : 'RUTE'}
+              className="px-2.5 py-1 rounded bg-black/60 border border-nerv-border hover:border-nerv-cyan text-nerv-cyan text-[10px] font-mono font-bold transition-colors">
+              {showRoutePanel ? 'HIDE ROUTES' : 'SELECT ROUTE'}
             </button>
           )}
-          {emergency
-            ? <div className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-red-600 border border-red-500/50">
-                <div className="w-1.5 h-1.5 rounded-full bg-red-200 animate-pulse"/>
-                <span className="text-xs font-black text-white">EMERGENCY</span>
-              </div>
-            : <div className="flex items-center gap-2 px-2 py-1.5 rounded-xl bg-emerald-900/40 border border-emerald-700/40">
-                <div className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"/>
-                <span className="text-xs font-bold text-emerald-300">{shelters.length} SHELTER</span>
-              </div>
-          }
+          {emergency ? (
+            <div className="flex items-center gap-1.5 px-2.5 py-1 rounded bg-nerv-red/20 border border-nerv-red text-nerv-red font-mono font-bold text-[10px] animate-pulse">
+              <AlertTriangle className="w-3.5 h-3.5" />
+              <span>DEFCON 1</span>
+            </div>
+          ) : (
+            <div className="flex items-center gap-1.5 px-2.5 py-1 rounded bg-black/60 border border-nerv-border text-nerv-green font-mono font-bold text-[10px]">
+              <div className="w-1.5 h-1.5 rounded-full bg-nerv-green" />
+              <span>{shelters.length} SHELTER</span>
+            </div>
+          )}
         </div>
       </div>
 
@@ -475,8 +493,10 @@ export default function NavigatePage({ routes, selectedRoute, tsunamiAlert, user
         </div>
 
         {!effectivePos && (
-          <div className="absolute bottom-3 left-1/2 -translate-x-1/2 z-[500] px-3 py-1.5 rounded-xl bg-amber-900/80 border border-amber-700/60">
-            <p className="text-[10px] font-bold text-amber-300">⏳ Mendeteksi GPS...</p>
+          <div className="absolute bottom-3 left-1/2 -translate-x-1/2 z-[500] px-3.5 py-1.5 rounded bg-nerv-card border border-nerv-orange shadow-2xl">
+            <p className="text-[10px] font-mono font-bold text-nerv-orange tracking-wider">
+              ⏳ MENYINKRONKAN TELEMETRI GPS...
+            </p>
           </div>
         )}
 
