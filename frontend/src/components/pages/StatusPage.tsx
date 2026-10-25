@@ -3,12 +3,26 @@
 // ═══════════════════════════════════════════════════════════════
 import { useState, useEffect } from 'react'
 import { Map, MapMarker, MarkerContent } from '@/components/ui/map'
-import { MapPin, Users, BookOpen, ChevronRight, CheckCircle, Heart, Activity, ChevronLeft, Radio, AlertTriangle, Globe } from 'lucide-react'
+import { MapPin, Users, BookOpen, ChevronRight, CheckCircle, Heart, Activity, ChevronLeft, Radio, AlertTriangle, Globe, Clock } from 'lucide-react'
 import { motion, AnimatePresence } from 'motion/react'
 import { loadFamily } from './FamilyPage'
 import { useLanguage } from '../../lib/i18n'
 
 const PALU_CENTER: [number, number] = [-0.8917, 119.8577]
+
+function formatFullDateTime(raw?: string | null): string {
+  if (!raw) {
+    const d = new Date()
+    const days = ['Minggu', 'Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat', 'Sabtu']
+    const months = ['Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun', 'Jul', 'Agu', 'Sep', 'Okt', 'Nov', 'Des']
+    return `${days[d.getDay()]}, ${d.getDate()} ${months[d.getMonth()]} ${d.getFullYear()} · ${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}:${String(d.getSeconds()).padStart(2, '0')} WITA`
+  }
+  const d = new Date(raw)
+  if (isNaN(d.getTime())) return raw
+  const days = ['Minggu', 'Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat', 'Sabtu']
+  const months = ['Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun', 'Jul', 'Agu', 'Sep', 'Okt', 'Nov', 'Des']
+  return `${days[d.getDay()]}, ${d.getDate()} ${months[d.getMonth()]} ${d.getFullYear()} · ${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}:${String(d.getSeconds()).padStart(2, '0')} WITA`
+}
 
 function MiniMap({ userPosition }: { userPosition?: [number, number] | null }) {
   const { t } = useLanguage()
@@ -226,6 +240,10 @@ export default function StatusPage({ onNavigate, userLocation, onBack, userName,
                 <p className="text-sm font-bold text-white leading-snug line-clamp-2">
                   {latestQuake.location || t('quakeDetected')}
                 </p>
+                <div className="flex items-center gap-1.5 text-[9px] font-mono text-slate-400 mt-1">
+                  <Clock className="w-3 h-3 text-nerv-cyan shrink-0" />
+                  <span className="text-slate-300 font-bold">{formatFullDateTime(latestQuake.report_datetime)}</span>
+                </div>
                 {latestQuake.potensi && (
                   <p className="text-[10px] font-mono text-nerv-yellow mt-1 font-semibold">
                     {latestQuake.potensi}

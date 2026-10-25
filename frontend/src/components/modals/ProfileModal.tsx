@@ -5,7 +5,7 @@ import { useState, useEffect } from 'react'
 import { motion, AnimatePresence } from 'motion/react'
 import {
   Shield, Smartphone, Monitor, User, Globe, AlertOctagon,
-  X, Check, Lock, RefreshCw, Cpu, CreditCard
+  X, Check, Lock, RefreshCw, Cpu, CreditCard, Copy
 } from 'lucide-react'
 import { useLanguage } from '../../lib/i18n'
 import { fetchClientIp } from '../../lib/geocode'
@@ -43,6 +43,7 @@ export default function ProfileModal({ isOpen, onClose, userName, userNik, termi
   const [{ device, mobile, browser }] = useState(detectDevice)
   const [clientIp, setClientIp] = useState<string>('Mendeteksi IP...')
   const [showConfirmReset, setShowConfirmReset] = useState(false)
+  const [copiedField, setCopiedField] = useState<'name' | 'nik' | null>(null)
 
   useEffect(() => {
     let active = true
@@ -51,6 +52,15 @@ export default function ProfileModal({ isOpen, onClose, userName, userNik, termi
     })
     return () => { active = false }
   }, [])
+
+  const handleCopy = (text: string, field: 'name' | 'nik') => {
+    if (!text) return
+    navigator.clipboard.writeText(text)
+    setCopiedField(field)
+    setTimeout(() => {
+      setCopiedField((curr) => (curr === field ? null : curr))
+    }, 2000)
+  }
 
   const handleResetDevice = () => {
     try {
@@ -122,36 +132,78 @@ export default function ProfileModal({ isOpen, onClose, userName, userNik, termi
               <div className="flex items-center justify-between mb-1.5">
                 <span className="text-[9px] text-slate-400 uppercase font-bold flex items-center gap-1 font-mono">
                   <User className="w-3 h-3 text-nerv-orange" />
-                  {lang === 'id' ? 'NAMA LENGKAP TERDAFTAR (KTP)' : 'REGISTERED FULL NAME (ID)'}
+                  {lang === 'id' ? 'NAMA LENGKAP TERDAFTAR' : 'REGISTERED FULL NAME'}
                 </span>
-                <span className="text-[8px] bg-nerv-orange/20 border border-nerv-orange/50 text-nerv-orange px-2 py-0.5 rounded flex items-center gap-1 font-mono">
-                  <Lock className="w-2.5 h-2.5" />
-                  TERKUNCI
-                </span>
+                <div className="flex items-center gap-1.5">
+                  {copiedField === 'name' && (
+                    <span className="text-[8px] bg-nerv-green/20 border border-nerv-green/50 text-nerv-green px-1.5 py-0.5 rounded animate-pulse">
+                      {lang === 'id' ? 'Tersalin!' : 'Copied!'}
+                    </span>
+                  )}
+                  <span className="text-[8px] bg-nerv-orange/20 border border-nerv-orange/50 text-nerv-orange px-2 py-0.5 rounded flex items-center gap-1 font-mono">
+                    <Lock className="w-2.5 h-2.5" />
+                    TERKUNCI
+                  </span>
+                </div>
               </div>
-              <div className="text-base font-bold text-white tracking-wide truncate font-mono">
-                {userName || 'PERSONEL ATLAS'}
+              <div className="flex items-center justify-between gap-2">
+                <div className="text-base font-bold text-white tracking-wide truncate font-mono select-text cursor-text">
+                  {userName || 'PERSONEL ATLAS'}
+                </div>
+                <button
+                  type="button"
+                  onClick={() => handleCopy(userName || 'PERSONEL ATLAS', 'name')}
+                  title={lang === 'id' ? 'Salin Nama' : 'Copy Name'}
+                  className="p-1.5 rounded bg-black/60 border border-nerv-border hover:border-nerv-orange text-slate-400 hover:text-white transition-colors shrink-0"
+                >
+                  {copiedField === 'name' ? (
+                    <Check className="w-3.5 h-3.5 text-nerv-green" />
+                  ) : (
+                    <Copy className="w-3.5 h-3.5" />
+                  )}
+                </button>
               </div>
             </div>
 
-            {/* Locked NIK KTP */}
+            {/* Locked NIK / Passport ID */}
             <div className="p-3 rounded-lg bg-black/40 border border-nerv-border relative">
               <div className="flex items-center justify-between mb-1.5">
                 <span className="text-[9px] text-slate-400 uppercase font-bold flex items-center gap-1 font-mono">
                   <CreditCard className="w-3 h-3 text-nerv-cyan" />
-                  {lang === 'id' ? 'NOMOR INDUK KEPENDUDUKAN (NIK KTP)' : 'REGISTERED CITIZEN ID (NIK)'}
+                  {lang === 'id' ? 'NOMOR IDENTITAS RESMI (NIK / PASPOR)' : 'OFFICIAL IDENTITY NUMBER (ID / PASSPORT)'}
                 </span>
-                <span className="text-[8px] bg-nerv-cyan/20 border border-nerv-cyan/50 text-nerv-cyan px-2 py-0.5 rounded flex items-center gap-1 font-mono">
-                  16 DIGIT
-                </span>
+                <div className="flex items-center gap-1.5">
+                  {copiedField === 'nik' && (
+                    <span className="text-[8px] bg-nerv-green/20 border border-nerv-green/50 text-nerv-green px-1.5 py-0.5 rounded animate-pulse">
+                      {lang === 'id' ? 'Tersalin!' : 'Copied!'}
+                    </span>
+                  )}
+                  <span className="text-[8px] bg-nerv-cyan/20 border border-nerv-cyan/50 text-nerv-cyan px-2 py-0.5 rounded flex items-center gap-1 font-mono">
+                    VERIFIED
+                  </span>
+                </div>
               </div>
-              <div className="text-sm font-bold text-nerv-cyan tracking-widest font-mono">
-                {userNik || '72710XXXXXXXXXXX'}
+              <div className="flex items-center justify-between gap-2">
+                <div className="text-sm font-bold text-nerv-cyan tracking-widest font-mono select-text cursor-text">
+                  {userNik || '72710XXXXXXXXXXX'}
+                </div>
+                <button
+                  type="button"
+                  onClick={() => handleCopy(userNik || '72710XXXXXXXXXXX', 'nik')}
+                  title={lang === 'id' ? 'Salin Nomor Identitas' : 'Copy Identity Number'}
+                  className="p-1.5 rounded bg-black/60 border border-nerv-border hover:border-nerv-cyan text-slate-400 hover:text-white transition-colors shrink-0"
+                >
+                  {copiedField === 'nik' ? (
+                    <Check className="w-3.5 h-3.5 text-nerv-green" />
+                  ) : (
+                    <Copy className="w-3.5 h-3.5" />
+                  )}
+                </button>
               </div>
-              <p className="text-[10px] text-slate-500 font-sans mt-1">
+              <p className="text-[10px] text-slate-500 font-sans mt-1.5">
                 {lang === 'id'
-                  ? 'Identitas KTP terkunci permanen pada perangkat ini untuk validasi koordinasi evakuasi SAR.'
-                  : 'Citizen ID is locked permanently to this device for SAR evacuation coordination.'}
+                  ? 'Identitas resmi terkunci permanen pada perangkat ini untuk validasi koordinasi evakuasi SAR.'
+                  : 'Official ID is locked permanently to this device for SAR evacuation coordination.'}
               </p>
             </div>
 

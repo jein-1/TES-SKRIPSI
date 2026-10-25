@@ -93,6 +93,10 @@ import {
   Target,
   Search,
   CreditCard,
+  Waves,
+  Droplets,
+  Wind,
+  Flame,
 } from "lucide-react";
 import { motion, AnimatePresence, useDragControls } from "motion/react";
 
@@ -364,6 +368,13 @@ function App() {
   }, [tsunamiAlert]);
   const [alarmMuted, setAlarmMuted] = useState(false);
   const [showTsunamiConfirm, setShowTsunamiConfirm] = useState(false);
+  const [selectedSimDisaster, setSelectedSimDisaster] = useState<'tsunami' | 'earthquake' | 'flood' | 'flashflood' | 'cyclone' | 'volcano'>('tsunami');
+  const [activeDisasterType, setActiveDisasterType] = useState<string>(() => {
+    if (typeof window !== "undefined") {
+      return sessionStorage.getItem("atlasActiveDisasterType") || "tsunami";
+    }
+    return "tsunami";
+  });
   const [showShelters, setShowShelters] = useState(false);
   const [showAddShelter, setShowAddShelter] = useState(false);
   const [newShelter, setNewShelter] = useState({ name: '', lat: '', lng: '', capacity: '', radius: '50' });
@@ -691,6 +702,14 @@ function App() {
       return name.includes(q) || nik.includes(q) || id.includes(q);
     });
   }, [adminUserSearch, activeUsers]);
+
+  // Privasi Lokasi User: Dalam kondisi normal, peta admin tidak menampilkan marker user secara bebas.
+  // User hanya muncul jika dicari secara spesifik di kolom pencarian atau saat darurat/simulasi aktif.
+  const usersToRenderOnMap = useMemo(() => {
+    if (adminUserSearch.trim()) return adminFilteredUsers;
+    if (tsunamiAlert) return Object.values(activeUsers);
+    return [];
+  }, [adminUserSearch, adminFilteredUsers, tsunamiAlert, activeUsers]);
 
   // â”€â”€ Navigation â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   // Admin starts on 'map', public user starts on 'status'
@@ -1272,10 +1291,12 @@ function App() {
   }, [settings.autoStartGPS, startGpsTracking]);
 
   // â”€â”€ Tsunami â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-  const activateTsunamiAlert = useCallback(() => {
+  const activateTsunamiAlert = useCallback((disasterType: string = 'tsunami') => {
+    setActiveDisasterType(disasterType);
     setTsunamiAlert(true);
     if (typeof window !== "undefined") {
       sessionStorage.setItem("aegisSimulating", "true");
+      sessionStorage.setItem("atlasActiveDisasterType", disasterType);
     }
     setShowTsunamiConfirm(false);
     if (!alarmMuted && settings.soundAlert) alarmRef.current.start();
@@ -1295,8 +1316,10 @@ function App() {
 
   const deactivateTsunamiAlert = useCallback(() => {
     setTsunamiAlert(false);
+    setActiveDisasterType('tsunami');
     if (typeof window !== "undefined") {
       sessionStorage.removeItem("aegisSimulating");
+      sessionStorage.removeItem("atlasActiveDisasterType");
     }
     alarmRef.current.stop();
     aegisApi.setTsunami(false);
@@ -2912,7 +2935,7 @@ function App() {
                   panelUserClosedRef.current = false;
                   setShowPanel(true);
                 }}
-                className="md:hidden fixed bottom-[68px] left-1/2 -translate-x-1/2 z-[1800] flex items-center gap-2 px-5 py-3 rounded-2xl font-bold text-sm bg-indigo-600 text-white shadow-[0_4px_24px_rgba(99,102,241,0.6)] border border-indigo-400/30 active:scale-95 transition-transform"
+                className="flex md:hidden fixed bottom-[68px] left-1/2 -translate-x-1/2 z-[1800] items-center gap-2 px-5 py-3 rounded-2xl font-bold text-sm bg-indigo-600 text-white shadow-[0_4px_24px_rgba(99,102,241,0.6)] border border-indigo-400/30 active:scale-95 transition-transform"
               >
                 <ArrowRight className="w-4 h-4" />
                 LIHAT RUTE EVAKUASI
@@ -3420,8 +3443,8 @@ function App() {
               );
             })}
 
-            {/* -- LOKASI USER AKTIF -- */}
-            {Object.values(activeUsers).map((u) => (
+            {/* -- LOKASI USER AKTIF (Hanya Ditampilkan Saat Darurat Aktif / Simulasi / Dicari Resmi) -- */}
+            {usersToRenderOnMap.map((u) => (
               <MapMarker
                 key={`user-${u.id}`}
                 longitude={u.lng}
@@ -3947,43 +3970,101 @@ function App() {
       {/* MODALS                                                    */}
       {/* â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• */}
 
-      {/* Tsunami confirm */}
+      {/* Multi-Disaster Simulation Modal */}
       <AnimatePresence>
         {showTsunamiConfirm && (
           <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            className="fixed inset-0 z-[2000] bg-black/80 backdrop-blur-sm flex items-center justify-center p-4"
+            className="fixed inset-0 z-[2000] bg-black/85 backdrop-blur-md flex items-center justify-center p-4 font-mono"
           >
             <motion.div
-              initial={{ scale: 0.9, opacity: 0 }}
+              initial={{ scale: 0.95, opacity: 0 }}
               animate={{ scale: 1, opacity: 1 }}
-              exit={{ scale: 0.9, opacity: 0 }}
-              className="bg-slate-900 border border-slate-800 p-8 rounded-2xl shadow-2xl max-w-sm w-full text-center"
+              exit={{ scale: 0.95, opacity: 0 }}
+              className="bg-[#0b101c] border border-nerv-border p-6 rounded-2xl shadow-2xl max-w-lg w-full text-left overflow-hidden"
             >
-              <div className="w-16 h-16 bg-red-900/30 rounded-full flex items-center justify-center mx-auto mb-4 border border-red-500/30">
-                <AlertTriangle className="w-8 h-8 text-red-500" />
-              </div>
-              <h2 className="text-2xl font-bold text-white mb-2">
-                Simulasi Tsunami?
-              </h2>
-              <p className="text-sm text-slate-400 mb-8">
-                Sistem akan membunyikan sirine peringatan dini dan menyiagakan
-                rute evakuasi darurat.
-              </p>
-              <div className="flex flex-col gap-3">
-                <button
-                  onClick={activateTsunamiAlert}
-                  className="w-full py-3 bg-red-600 hover:bg-red-500 text-white rounded-xl font-bold transition-colors"
-                >
-                  MULAI SIMULASI
-                </button>
+              <div className="flex items-center justify-between pb-3 border-b border-nerv-border mb-4">
+                <div className="flex items-center gap-2.5">
+                  <div className="w-2.5 h-2.5 rounded-full bg-nerv-red animate-ping" />
+                  <div>
+                    <span className="text-[9px] font-bold text-nerv-red tracking-widest uppercase block">
+                      A.T.L.A.S // COMMAND SIMULATION
+                    </span>
+                    <h2 className="text-sm font-bold text-white uppercase tracking-wider">
+                      SIMULASI 6 ANCAMAN BENCANA NASIONAL
+                    </h2>
+                  </div>
+                </div>
                 <button
                   onClick={() => setShowTsunamiConfirm(false)}
-                  className="w-full py-3 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-xl font-bold transition-colors"
+                  className="w-7 h-7 rounded bg-black/60 border border-nerv-border flex items-center justify-center text-slate-400 hover:text-white"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+
+              <p className="text-[11px] text-slate-300 font-sans mb-3.5 leading-relaxed">
+                Pilih skenario bencana darurat untuk menguji respons sirine, kesiapsiagaan titik kumpul aman (TES), dan algoritma rute evakuasi mandiri:
+              </p>
+
+              {/* 6 Disaster Options */}
+              <div className="grid grid-cols-2 gap-2 mb-4">
+                {[
+                  { id: 'tsunami', name: 'Tsunami Laut', badge: 'DEFCON 1', icon: Waves, color: '#FF1744', desc: 'Evakuasi ke Tempat Tinggi (≥20m) / Shelter TES' },
+                  { id: 'earthquake', name: 'Gempa Bumi', badge: 'SEISMIC', icon: Activity, color: '#FF5722', desc: 'Evakuasi ke Lapangan Terbuka Bebas Reruntuhan' },
+                  { id: 'flood', name: 'Banjir Genangan', badge: 'HYDRO', icon: Droplets, color: '#00E5FF', desc: 'Evakuasi ke Lantai Atas / Posko Pengungsian Air' },
+                  { id: 'flashflood', name: 'Banjir Bandang', badge: 'FLASH SURGE', icon: Waves, color: '#FF9100', desc: 'Evakuasi Tegak Lurus Menjauhi Aliran Sungai' },
+                  { id: 'cyclone', name: 'Angin Topan', badge: 'VORTEX', icon: Wind, color: '#E040FB', desc: 'Berlindung di Ruang Tengah Gedung Beton' },
+                  { id: 'volcano', name: 'Gunung Meletus', badge: 'MAGMA', icon: Flame, color: '#FF3D00', desc: 'Keluar Radius KRB & Kenakan Masker Basah' },
+                ].map((dis) => {
+                  const isSelected = selectedSimDisaster === dis.id;
+                  const IconComp = dis.icon;
+                  return (
+                    <button
+                      key={dis.id}
+                      type="button"
+                      onClick={() => setSelectedSimDisaster(dis.id as any)}
+                      className={`p-2.5 rounded-xl border text-left transition-all flex flex-col justify-between ${
+                        isSelected
+                          ? 'border-nerv-orange bg-nerv-orange/15 shadow-[0_0_12px_rgba(255,87,34,0.3)] ring-1 ring-nerv-orange'
+                          : 'border-slate-800 bg-black/40 hover:border-slate-700'
+                      }`}
+                    >
+                      <div className="flex items-center justify-between mb-1.5">
+                        <div className="flex items-center gap-1.5">
+                          <IconComp className="w-3.5 h-3.5" style={{ color: dis.color }} />
+                          <span className="text-[11px] font-bold text-white uppercase">{dis.name}</span>
+                        </div>
+                        <span className="text-[8px] font-mono font-bold px-1.5 py-0.2 rounded bg-black/80 border border-slate-700 text-slate-300">
+                          {dis.badge}
+                        </span>
+                      </div>
+                      <p className="text-[9px] text-slate-400 font-sans leading-tight">
+                        {dis.desc}
+                      </p>
+                    </button>
+                  );
+                })}
+              </div>
+
+              {/* Action Buttons */}
+              <div className="grid grid-cols-2 gap-3 pt-2 border-t border-nerv-border">
+                <button
+                  type="button"
+                  onClick={() => setShowTsunamiConfirm(false)}
+                  className="py-2.5 px-3 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold text-xs uppercase tracking-wider transition-colors"
                 >
                   BATALKAN
+                </button>
+                <button
+                  type="button"
+                  onClick={() => activateTsunamiAlert(selectedSimDisaster)}
+                  className="py-2.5 px-3 rounded-xl bg-red-600 hover:bg-red-500 text-white font-bold text-xs uppercase tracking-widest transition-all shadow-[0_0_15px_rgba(239,68,68,0.5)] flex items-center justify-center gap-1.5"
+                >
+                  <AlertTriangle className="w-4 h-4 shrink-0" />
+                  <span>MULAI SIMULASI</span>
                 </button>
               </div>
             </motion.div>
@@ -4428,15 +4509,6 @@ function App() {
                 <div className="space-y-2">
                   {[
                     ["Versi Aplikasi", "v1.0.0 (A.T.L.A.S Enterprise)"],
-                    ["Platform", "React 18 + Vite"],
-                    ["Routing Engine", "Leaflet + OSM"],
-                    ["Jarak Hitung", "Haversine Formula"],
-                    [
-                      "Algoritma Aktif",
-                      settings.algorithm === "haversine"
-                        ? "Haversine"
-                        : "Dijkstra",
-                    ],
                     ["Terminal ID", terminalId],
                   ].map(([label, value]) => (
                     <div

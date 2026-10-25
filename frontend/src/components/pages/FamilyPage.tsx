@@ -219,17 +219,25 @@ function MyQRModal({ onClose }: { onClose: () => void }) {
         initial={{ scale: 0.95 }} animate={{ scale: 1 }}
         className="w-full max-w-xs p-5 rounded-xl border border-nerv-border bg-nerv-card relative shadow-2xl"
       >
-        <button
-          onClick={onClose}
-          className="absolute top-4 right-4 w-7 h-7 rounded bg-black/60 border border-nerv-border flex items-center justify-center hover:border-nerv-orange transition-colors"
-        >
-          <X className="w-4 h-4 text-slate-300" />
-        </button>
+        {/* Modal Header with Close Button */}
+        <div className="flex items-start justify-between gap-2 mb-3 pb-2 border-b border-nerv-border/60">
+          <div className="text-left font-mono">
+            <span className="text-[9px] text-nerv-orange uppercase tracking-wider font-bold block">
+              A.T.L.A.S // PERSONNEL ID QR
+            </span>
+            <span className="text-[10px] text-nerv-cyan font-bold block">
+              SECURITY KEY &amp; PAIRING
+            </span>
+          </div>
+          <button
+            onClick={onClose}
+            className="w-7 h-7 shrink-0 rounded bg-black/60 border border-nerv-border flex items-center justify-center hover:border-nerv-orange transition-colors text-slate-300 hover:text-white"
+          >
+            <X className="w-4 h-4" />
+          </button>
+        </div>
 
         <div className="text-center font-mono">
-          <p className="text-[9px] text-nerv-orange uppercase tracking-widest font-bold mb-1">
-            A.T.L.A.S // PERSONNEL ID QR & SECURITY KEY
-          </p>
           <p className="text-base font-bold text-white mb-2 truncate">{myName}</p>
 
           <div className="p-3 bg-white rounded-lg inline-block shadow-inner mx-auto">
