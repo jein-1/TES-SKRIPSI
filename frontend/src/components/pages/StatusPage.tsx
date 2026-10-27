@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════
-// A.T.L.A.S // STATUS PAGE — NERV TACTICAL TELEMETRY
+// A.T.L.A.S // STATUS PAGE — A.T.L.A.S TACTICAL TELEMETRY
 // ═══════════════════════════════════════════════════════════════
 import { useState, useEffect } from 'react'
 import { Map, MapMarker, MarkerContent } from '@/components/ui/map'
@@ -7,6 +7,7 @@ import { MapPin, Users, BookOpen, ChevronRight, CheckCircle, Heart, Activity, Ch
 import { motion, AnimatePresence } from 'motion/react'
 import { loadFamily } from './FamilyPage'
 import { useLanguage } from '../../lib/i18n'
+import type { GempaData } from '../../lib/useBMKG'
 
 const PALU_CENTER: [number, number] = [-0.8917, 119.8577]
 
@@ -124,6 +125,8 @@ interface Props {
   tsunamiAlert?: boolean
   onOpenProfile?: () => void
   userPosition?: [number, number] | null
+  terminalId?: string
+  gempa?: GempaData | null
 }
 
 interface DisasterEvent {
@@ -136,25 +139,109 @@ interface DisasterEvent {
   report_datetime?: string
 }
 
-export default function StatusPage({ onNavigate, userLocation, onBack, userName, onRequestGps, gpsTracking, tsunamiAlert, onOpenProfile, userPosition }: Props) {
+export default function StatusPage({ onNavigate, userLocation, onBack, userName, onRequestGps, gpsTracking, tsunamiAlert, onOpenProfile, userPosition, terminalId, gempa }: Props) {
   const { lang, setLanguage, t } = useLanguage()
   const [safePressed, setSafePressed] = useState(false)
   const [lastUpdated, setLastUpdated] = useState<string | null>(null)
   const [pulseKey, setPulseKey] = useState(0)
-  const [latestQuake, setLatestQuake] = useState<DisasterEvent | null>(null)
+  const [latestQuake, setLatestQuake] = useState<DisasterEvent | null>(() => {
+    try {
+      const historyKey = 'atlas_earthquake_news_history'
+      const existing = JSON.parse(localStorage.getItem(historyKey) || '[]')
+      if (existing.length > 0) {
+        const item = existing[0]
+        return {
+          source: item.source || 'BMKG',
+          type: 'earthquake',
+          magnitude: item.magnitude,
+          depth: item.depth,
+          location: item.location,
+          potensi: item.potensi,
+          report_datetime: item.eventTime
+        }
+      }
+    } catch {}
+    return null
+  })
 
-  // Fetch live disaster telemetry from integrated backend
+  // Sinkronisasi data gempa langsung dari useBMKG (mobile & web identik)
   useEffect(() => {
-    fetch('/api/disaster/home')
+    if (gempa) {
+      setLatestQuake({
+        source: 'SIARAN SEISMIK LANGSUNG • BMKG // PUSAT GEMPA',
+        type: 'earthquake',
+        magnitude: gempa.Magnitude,
+        depth: gempa.Kedalaman,
+        location: gempa.Wilayah,
+        potensi: gempa.Potensi,
+        report_datetime: `${gempa.Tanggal} • ${gempa.Jam}`
+      })
+      try {
+        const historyKey = 'atlas_earthquake_news_history'
+        const existing = JSON.parse(localStorage.getItem(historyKey) || '[]')
+        const quakeId = `${gempa.DateTime || (gempa.Tanggal + '_' + gempa.Jam)}_${gempa.Magnitude}_${gempa.Wilayah}`
+        const cleaned = existing.filter((item: any) => item.id !== 'eq-palu-01' && item.id !== 'eq-donggala-02')
+        if (!cleaned.some((item: any) => item.id === quakeId)) {
+          const newItem = {
+            id: quakeId,
+            source: 'SIARAN SEISMIK LANGSUNG • BMKG // PUSAT GEMPA',
+            location: gempa.Wilayah,
+            magnitude: gempa.Magnitude,
+            depth: gempa.Kedalaman,
+            eventTime: `${gempa.Tanggal} • ${gempa.Jam}`,
+            receivedAt: Date.now(),
+            potensi: gempa.Potensi || gempa.Dirasakan || 'Tidak berpotensi tsunami'
+          }
+          const updated = [newItem, ...cleaned].slice(0, 30)
+          localStorage.setItem(historyKey, JSON.stringify(updated))
+          localStorage.setItem('atlas_has_unread_earthquake_news', 'true')
+          window.dispatchEvent(new CustomEvent('atlas_earthquake_news_updated'))
+        } else if (cleaned.length !== existing.length) {
+          localStorage.setItem(historyKey, JSON.stringify(cleaned))
+        }
+      } catch {}
+      return
+    }
+
+    // Backend fallback
+    const isLocal = typeof window !== 'undefined' && (window.location.origin.includes('localhost') || window.location.origin.includes('127.0.0.1'))
+    const baseUrl = isLocal ? (import.meta.env.VITE_API_URL || 'https://tsunami-dimss.vercel.app') : ''
+    fetch(`${baseUrl}/api/disaster/home`)
       .then(r => r.json())
       .then(d => {
         if (d?.informations && d.informations.length > 0) {
           const quake = d.informations.find((i: any) => i.type === 'earthquake')
-          if (quake) setLatestQuake(quake)
+          if (quake) {
+            setLatestQuake(quake)
+            try {
+              const historyKey = 'atlas_earthquake_news_history'
+              const existing = JSON.parse(localStorage.getItem(historyKey) || '[]')
+              const quakeId = `${quake.report_datetime || ''}_${quake.magnitude || ''}_${quake.location || ''}`
+              const cleaned = existing.filter((item: any) => item.id !== 'eq-palu-01' && item.id !== 'eq-donggala-02')
+              if (!cleaned.some((item: any) => item.id === quakeId)) {
+                const newItem = {
+                  id: quakeId,
+                  source: 'SIARAN SEISMIK LANGSUNG • BMKG // PUSAT GEMPA',
+                  location: quake.location || 'Pusat Gempa Terdeteksi',
+                  magnitude: quake.magnitude || '5.0',
+                  depth: quake.depth || '10 km',
+                  eventTime: quake.report_datetime || new Date().toLocaleString('id-ID'),
+                  receivedAt: Date.now(),
+                  potensi: quake.potensi || 'Tidak berpotensi tsunami'
+                }
+                const updated = [newItem, ...cleaned].slice(0, 30)
+                localStorage.setItem(historyKey, JSON.stringify(updated))
+                localStorage.setItem('atlas_has_unread_earthquake_news', 'true')
+                window.dispatchEvent(new CustomEvent('atlas_earthquake_news_updated'))
+              } else if (cleaned.length !== existing.length) {
+                localStorage.setItem(historyKey, JSON.stringify(cleaned))
+              }
+            } catch {}
+          }
         }
       })
       .catch(() => {})
-  }, [])
+  }, [gempa])
 
   useEffect(() => {
     const t = setInterval(() => setPulseKey(k => k + 1), 3000)
@@ -174,25 +261,30 @@ export default function StatusPage({ onNavigate, userLocation, onBack, userName,
       exit={{ opacity: 0, x: -40 }} transition={{ duration: 0.22 }}
       className="fixed inset-0 z-[1800] flex flex-col overflow-y-auto custom-scrollbar bg-nerv-bg text-slate-200"
     >
-      {/* NERV Telemetry Header */}
-      <div className="shrink-0 px-4 pt-4 pb-3 border-b border-nerv-border bg-[#0B0F19] flex items-center justify-between">
-        <div className="flex items-center gap-3 min-w-0">
+      {/* A.T.L.A.S Telemetry Header */}
+      <div className="shrink-0 px-4 pt-[max(env(safe-area-inset-top,0px),1rem)] pb-3 border-b border-nerv-border bg-[#0B0F19] flex items-center justify-between">
+        <div className="flex items-center gap-2.5 min-w-0">
           {onBack && (
             <button onClick={onBack}
               className="w-8 h-8 rounded bg-nerv-card border border-nerv-border flex items-center justify-center shrink-0 hover:border-nerv-orange transition-colors">
               <ChevronLeft className="w-4 h-4 text-slate-300" />
             </button>
           )}
+          <img
+            src="/atlas-logo-user.png"
+            alt="A.T.L.A.S"
+            className="w-9 h-9 object-contain shrink-0 filter drop-shadow-[0_0_8px_rgba(255,87,34,0.4)]"
+          />
           <div className="min-w-0">
-            <div className="flex items-center gap-2 mb-0.5">
-              <div className="w-2 h-2 rounded-full bg-nerv-orange animate-ping" />
-              <p className="text-[8px] sm:text-[9px] font-mono font-bold tracking-wider text-nerv-orange uppercase truncate">
-                A.T.L.A.S // AUTONOMOUS THREAT LOCATION & ALERT SYSTEM
-              </p>
+            <div className="flex items-center gap-1.5 mb-0.5">
+              <div className="w-1.5 h-1.5 rounded-full bg-nerv-orange animate-ping shrink-0" />
+              <h1 className="text-xs sm:text-sm font-mono font-black tracking-widest text-nerv-orange uppercase">
+                A.T.L.A.S //
+              </h1>
             </div>
-            <div className="flex items-center gap-1.5">
-              <MapPin className="w-3.5 h-3.5 text-nerv-cyan shrink-0" />
-              <h2 className="text-xs sm:text-sm font-mono font-bold text-white truncate">
+            <div className="flex items-center gap-1">
+              <MapPin className="w-3 h-3 text-nerv-cyan shrink-0" />
+              <h2 className="text-[11px] sm:text-xs font-mono font-bold text-white truncate">
                 {userLocation || t('detectingLocation')}
               </h2>
             </div>
@@ -201,29 +293,25 @@ export default function StatusPage({ onNavigate, userLocation, onBack, userName,
 
         <div className="flex items-center gap-2 shrink-0">
           <button
-            onClick={() => setLanguage(lang === 'id' ? 'en' : 'id')}
-            className="flex items-center gap-1 px-2 py-1 rounded bg-black/60 border border-nerv-border hover:border-nerv-orange text-[10px] font-mono font-bold text-slate-300 transition-colors"
-            title="Switch Language (ID/EN)"
-          >
-            <Globe className="w-3 h-3 text-nerv-cyan" />
-            <span className={lang === 'id' ? 'text-nerv-orange' : 'text-slate-500'}>ID</span>
-            <span className="text-slate-600">/</span>
-            <span className={lang === 'en' ? 'text-nerv-orange' : 'text-slate-500'}>EN</span>
-          </button>
-          <button
             onClick={onOpenProfile}
             className="px-2.5 py-1 rounded bg-black/60 border border-nerv-border hover:border-nerv-cyan text-right font-mono transition-colors"
-            title="Pengaturan Profil"
+            title={lang === 'id' ? 'Pengaturan Profil' : 'Profile Settings'}
           >
             <span className="text-[8px] text-slate-500 block uppercase leading-none">NODE</span>
-            <span className="text-xs font-bold text-nerv-cyan">#{userName ? userName.slice(0, 4).toUpperCase() : 'CIV-01'}</span>
+            <span className={`text-xs font-bold ${
+              terminalId === 'NODE-01' ? 'text-amber-400' : 'text-nerv-cyan'
+            }`}>
+              {terminalId === 'NODE-01'
+                ? 'NODE-01'
+                : (terminalId ? (terminalId.startsWith('NODE-P') ? terminalId : `NODE-P#${terminalId.slice(-3)}`) : 'NODE-P')}
+            </span>
           </button>
         </div>
       </div>
 
       <div className="flex-1 px-4 py-4 space-y-3 font-sans">
 
-        {/* NERV Live Disaster Broadcast Card */}
+        {/* A.T.L.A.S Live Disaster Broadcast Card */}
         {latestQuake && (
           <motion.div
             initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}

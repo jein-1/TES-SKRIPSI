@@ -132,3 +132,125 @@ a, button, [role="button"], input, select, textarea {
 
 .hide-scrollbar::-webkit-scrollbar { display: none; }
 .hide-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+
+/* ═══════════════════════════════════════════════════════════
+   GLOBAL APPEARANCE & ACCESSIBILITY SYSTEM
+   ═══════════════════════════════════════════════════════════ */
+
+/* ══════════════════════════════════════════════════════════════
+   A.T.L.A.S — PERMANENT NERV TACTICAL DARK CANVAS SYSTEM
+   Enforces solid #07090E dark canvas across all views, eliminating
+   all white background bars and preserving high-contrast logo & text.
+   ══════════════════════════════════════════════════════════════ */
+html,
+body {
+  background-color: #07090E !important;
+  color: #F8FAFC !important;
+}
+
+/* Ensure all full-screen views, video player, and docks retain #07090E */
+.bg-nerv-bg,
+.bg-\[\#07090E\],
+.bg-\[\#080e1a\],
+.bg-\[\#090D18\],
+.bg-\[\#0A0E17\],
+.bg-\[\#0b1120\],
+[class*="bg-nerv-bg"] {
+  background-color: #07090E !important;
+}
+
+/* Headers and Navigation Docks */
+.bg-\[\#0B0F19\],
+.bg-\[\#0a1020\],
+.bg-\[\#0a1020\]\/95 {
+  background-color: #0B0F19 !important;
+}
+
+nav,
+nav.fixed.bottom-0,
+.bg-\[\#07090E\]\/95 {
+  background-color: rgba(7, 9, 14, 0.96) !important;
+  border-top-color: #1E293B !important;
+}
+
+/* Cards & Tactical Panels */
+.bg-nerv-card,
+.bg-\[\#0F1424\],
+.bg-\[\#0D121F\],
+.bg-\[\#131722\],
+.bg-\[\#0E121B\],
+.bg-\[\#0f1a2e\] {
+  background-color: #0E121B !important;
+  border-color: #1E293B !important;
+}
+
+/* High Contrast Mode for Outdoor Daylight Visibility (Preserves Dark Canvas) */
+html.high-contrast {
+  filter: contrast(1.25);
+}
+
+html.high-contrast .border-\[\#1A2333\],
+html.high-contrast .border-\[\#1E293B\],
+html.high-contrast .border-nerv-border {
+  border-color: #475569 !important;
+  border-width: 1.5px !important;
+}
+
+html.high-contrast .text-slate-400,
+html.high-contrast .text-slate-500 {
+  color: #CBD5E1 !important;
+}
+
+/* High Contrast Mode */
+html.high-contrast {
+  filter: contrast(1.25);
+}
+
+html.high-contrast .border-\[\#1A2333\],
+html.high-contrast .border-\[\#1E293B\],
+html.high-contrast .border-nerv-border {
+  border-width: 1.5px !important;
+}
+
+/* Font Size Scaling */
+html.font-size-small {
+  font-size: 14px;
+}
+html.font-size-medium {
+  font-size: 16px;
+}
+html.font-size-large {
+  font-size: 18px;
+}
+
+/* Font Weight / Thickness */
+html.font-weight-regular {
+  font-weight: 400;
+}
+html.font-weight-bold {
+  font-weight: 600;
+}
+
+/* Color Vision Accessibility */
+html.color-protanopia {
+  filter: url('data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg"><filter id="f"><feColorMatrix type="matrix" values="0.567, 0.433, 0, 0, 0 0.558, 0.442, 0, 0, 0 0, 0.242, 0.758, 0, 0 0, 0, 0, 1, 0"/></filter></svg>#f');
+}
+html.color-deuteranopia {
+  filter: url('data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg"><filter id="f"><feColorMatrix type="matrix" values="0.625, 0.375, 0, 0, 0 0.7, 0.3, 0, 0, 0 0, 0.3, 0.7, 0, 0 0, 0, 0, 1, 0"/></filter></svg>#f');
+}
+html.color-tritanopia {
+  filter: url('data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg"><filter id="f"><feColorMatrix type="matrix" values="0.95, 0.05, 0, 0, 0 0, 0.433, 0.567, 0, 0 0, 0.475, 0.525, 0, 0 0, 0, 0, 1, 0"/></filter></svg>#f');
+}
+
+/* Suppress all native browser/webview video controls and overlay play buttons */
+video::-webkit-media-controls,
+video::-webkit-media-controls-enclosure,
+video::-webkit-media-controls-panel,
+video::-webkit-media-controls-play-button,
+video::-webkit-media-controls-start-playback-button,
+video::-webkit-media-controls-overlay-play-button {
+  display: none !important;
+  -webkit-appearance: none !important;
+  opacity: 0 !important;
+  visibility: hidden !important;
+}

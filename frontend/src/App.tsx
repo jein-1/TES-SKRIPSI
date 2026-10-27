@@ -35,6 +35,7 @@ import { ZRB_REFERENCE, type ZRBLevel } from "./lib/evacuation/zrbReference";
 import LoginPage from "./components/pages/LoginPage";
 import FirstVisitModal from "./components/modals/FirstVisitModal";
 import ProfileModal from "./components/modals/ProfileModal";
+import { VideoSplash } from "./components/modals/VideoSplash";
 import type { UserRole } from "./types";
 // â”€â”€ New Pages â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 import SensorsPage from "./components/pages/SensorsPage";
@@ -42,6 +43,7 @@ import StatusPage from "./components/pages/StatusPage";
 import NavigatePage from "./components/pages/NavigatePage";
 import FamilyPage from "./components/pages/FamilyPage";
 import GuidesPage from "./components/pages/GuidesPage";
+import MenuPage from "./components/pages/MenuPage";
 import { fetchLocationName, fetchIpLocation } from "./lib/geocode";
 import { useLanguage } from "./lib/i18n";
 import { useAegisSync, aegisApi } from "./lib/useAegisSync";
@@ -53,6 +55,7 @@ import {
 import { useEmergencyNotification } from "./lib/useEmergencyNotification";
 import { registerWebPush } from "./lib/usePushNotification";
 import { Geolocation } from "@capacitor/geolocation";
+import { Capacitor } from "@capacitor/core";
 import { Haptics, ImpactStyle } from "@capacitor/haptics";
 // â”€â”€ UI Libraries â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 import {
@@ -312,18 +315,11 @@ function App() {
   const [gpsError, setGpsError] = useState<string | null>(null);
   const [userLocationName, setUserLocationName] = useState<string>("Mendeteksi lokasi...");
 
-  // Instant IP Geolocation baseline — guarantees user's city & coords are detected immediately
+  // Instant IP Geolocation baseline — for displaying textual city name only (NEVER sets coordinates)
   useEffect(() => {
     let active = true;
-    const hasSavedPos = !!localStorage.getItem('atlas_user_position');
     fetchIpLocation().then((loc) => {
       if (active && loc) {
-        if (!hasSavedPos) {
-          setUserPosition((prev) => {
-            if (prev) return prev; // Keep precise GPS fix if already acquired
-            return [loc.lat, loc.lng];
-          });
-        }
         setUserLocationName((prev) => {
           if (prev && !prev.toLowerCase().includes("mendeteksi") && !prev.toLowerCase().includes("izin")) {
             return prev;
@@ -652,6 +648,25 @@ function App() {
     message?: string;
   } | null>(null);
   const [hasFamilyPing, setHasFamilyPing] = useState(false);
+  const [incomingFamilyPing, setIncomingFamilyPing] = useState<{
+    fromId: string;
+    fromName: string;
+    nik?: string;
+  } | null>(null);
+
+  const [showVideoSplash, setShowVideoSplash] = useState<boolean>(() => {
+    if (typeof window !== "undefined" && sessionStorage.getItem("atlas_splash_done") === "true") {
+      return false;
+    }
+    return true;
+  });
+
+  const handleSplashFinish = useCallback(() => {
+    if (typeof window !== "undefined") {
+      sessionStorage.setItem("atlas_splash_done", "true");
+    }
+    setShowVideoSplash(false);
+  }, []);
 
   const [userRole, setUserRole] = useState<AppUserRole>(() => {
     if (!isAdminURL) return "user"; // Regular URL → instant user mode
@@ -724,6 +739,36 @@ function App() {
     return role === "user" ? "status" : "map";
   });
   const { gempa } = useBMKG();
+
+  // Sinkronisasi Telemetri Gempa BMKG Real-Time ke News Gempa Sistem
+  useEffect(() => {
+    if (!gempa) return;
+    try {
+      const historyKey = 'atlas_earthquake_news_history';
+      const existing = JSON.parse(localStorage.getItem(historyKey) || '[]');
+      const quakeId = `${gempa.DateTime || (gempa.Tanggal + '_' + gempa.Jam)}_${gempa.Magnitude}_${gempa.Wilayah}`;
+      const cleaned = existing.filter((item: any) => item.id !== 'eq-palu-01' && item.id !== 'eq-donggala-02');
+      if (!cleaned.some((item: any) => item.id === quakeId)) {
+        const newItem = {
+          id: quakeId,
+          source: 'SIARAN SEISMIK LANGSUNG • BMKG // PUSAT GEMPA',
+          location: gempa.Wilayah,
+          magnitude: gempa.Magnitude,
+          depth: gempa.Kedalaman,
+          eventTime: `${gempa.Tanggal} • ${gempa.Jam}`,
+          receivedAt: Date.now(),
+          potensi: gempa.Potensi || gempa.Dirasakan || 'Tidak berpotensi tsunami'
+        };
+        const updated = [newItem, ...cleaned].slice(0, 30);
+        localStorage.setItem(historyKey, JSON.stringify(updated));
+        localStorage.setItem('atlas_has_unread_earthquake_news', 'true');
+        window.dispatchEvent(new CustomEvent('atlas_earthquake_news_updated'));
+      } else if (cleaned.length !== existing.length) {
+        localStorage.setItem(historyKey, JSON.stringify(cleaned));
+      }
+    } catch {}
+  }, [gempa]);
+
   const [historyFilter, setHistoryFilter] = useState<HistoryFilter>("all");
   const [dismissedGempaTime, setDismissedGempaTime] = useState<string | null>(null);
 
@@ -765,20 +810,99 @@ function App() {
     setDismissedGempaTime(gempa.DateTime);
   }, [gempa]);
 
-  // â”€â”€ Persistent Terminal ID â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // ── Persistent Terminal ID (NODE-01 for Developer vs NODE-P for Public) ──
   const [terminalId, setTerminalId] = useState<string>(() => {
+    const isNode01 = localStorage.getItem("atlas_is_node_01") === "true";
+    if (isNode01) {
+      localStorage.setItem("atlasTerminalId", "NODE-01");
+      localStorage.setItem("aegisTerminalId", "NODE-01");
+      return "NODE-01";
+    }
+
     let s = localStorage.getItem("atlasTerminalId") || localStorage.getItem("aegisTerminalId");
     if (s) {
-      s = s.replace(/^(AEGIS|ATLAS)-?/i, "A.T.L.A.S-");
+      if (s.startsWith("NODE-01")) return s;
+      s = s.replace(/^(AEGIS|ATLAS)-?/i, "NODE-P");
       localStorage.setItem("atlasTerminalId", s);
       localStorage.setItem("aegisTerminalId", s);
       return s;
     }
-    const fallbackId = `A.T.L.A.S-${Math.floor(Math.random() * 900 + 100)}`;
+    const fallbackId = `NODE-P${Math.floor(Math.random() * 900 + 100)}`;
     localStorage.setItem("atlasTerminalId", fallbackId);
     localStorage.setItem("aegisTerminalId", fallbackId);
     return fallbackId;
   });
+
+  useEffect(() => {
+    // Apply saved appearance & accessibility settings (Always NERV Tactical Dark)
+    const applySavedSettings = () => {
+      try {
+        const root = document.documentElement;
+        root.classList.add('dark');
+        root.classList.remove('light');
+        localStorage.setItem('atlas_theme_mode', 'dark');
+
+        const savedContrast = localStorage.getItem('atlas_contrast');
+        if (savedContrast === 'high') {
+          root.classList.add('high-contrast');
+        } else {
+          root.classList.remove('high-contrast');
+        }
+
+        const savedCv = localStorage.getItem('atlas_color_vision');
+        root.classList.remove('color-protanopia', 'color-deuteranopia', 'color-tritanopia');
+        if (savedCv && savedCv !== 'normal') {
+          root.classList.add(`color-${savedCv}`);
+        }
+
+        const savedFs = localStorage.getItem('atlas_font_size');
+        root.classList.remove('font-size-small', 'font-size-medium', 'font-size-large');
+        if (savedFs && savedFs !== 'device') {
+          root.classList.add(`font-size-${savedFs}`);
+        }
+
+        const savedFt = localStorage.getItem('atlas_font_thickness');
+        root.classList.remove('font-weight-regular', 'font-weight-bold');
+        if (savedFt && savedFt !== 'device') {
+          root.classList.add(`font-weight-${savedFt}`);
+        }
+
+        const savedTb = localStorage.getItem('atlas_screen_reader_mode');
+        if (savedTb === 'talkback') {
+          root.setAttribute('data-talkback', 'true');
+        } else {
+          root.removeAttribute('data-talkback');
+        }
+      } catch (_) {}
+    };
+
+    applySavedSettings();
+
+    const handleThemeEvent = () => {
+      applySavedSettings();
+    };
+    window.addEventListener('atlas_theme_changed', handleThemeEvent);
+    return () => {
+      window.removeEventListener('atlas_theme_changed', handleThemeEvent);
+    };
+  }, []);
+
+  const [hasUnreadNews, setHasUnreadNews] = useState(() => {
+    return localStorage.getItem('atlas_has_unread_earthquake_news') === 'true';
+  });
+
+  useEffect(() => {
+    const handleNewsRead = () => setHasUnreadNews(false);
+    const handleNewsUpdate = () => {
+      setHasUnreadNews(localStorage.getItem('atlas_has_unread_earthquake_news') === 'true');
+    };
+    window.addEventListener('atlas_news_read', handleNewsRead);
+    window.addEventListener('atlas_earthquake_news_updated', handleNewsUpdate);
+    return () => {
+      window.removeEventListener('atlas_news_read', handleNewsRead);
+      window.removeEventListener('atlas_earthquake_news_updated', handleNewsUpdate);
+    };
+  }, []);
 
   useEffect(() => {
     // Migrate any legacy AEGIS IDs across localStorage on startup
@@ -786,7 +910,7 @@ function App() {
       ["aegisTerminalId", "aegisId"].forEach((key) => {
         const val = localStorage.getItem(key);
         if (val) {
-          const migrated = val.replace(/^(AEGIS|ATLAS)-?/i, "A.T.L.A.S-");
+          const migrated = val.replace(/^(AEGIS|ATLAS)-?/i, "NODE-P");
           localStorage.setItem(key, migrated);
           localStorage.setItem(key.replace("aegis", "atlas"), migrated);
         }
@@ -797,12 +921,20 @@ function App() {
       if (Capacitor.isNativePlatform()) {
         import("@capacitor/device").then(({ Device }) => {
           Device.getId().then((info) => {
+            const isNode01 = localStorage.getItem("atlas_is_node_01") === "true";
+            if (isNode01) return;
             if (info.identifier) {
-              setTerminalId(info.identifier);
-              localStorage.setItem("atlasTerminalId", info.identifier);
-              localStorage.setItem("aegisTerminalId", info.identifier);
+              const pubId = `NODE-P${info.identifier.slice(-4).toUpperCase()}`;
+              setTerminalId(pubId);
+              localStorage.setItem("atlasTerminalId", pubId);
+              localStorage.setItem("aegisTerminalId", pubId);
             }
           });
+        });
+        import('./lib/nativeSettings').then(({ NativeSettings }) => {
+          if (localStorage.getItem('atlas_sentinel_active') !== 'false') {
+            NativeSettings.startSentinel().catch(() => {});
+          }
         });
       }
     });
@@ -923,6 +1055,18 @@ function App() {
     setUserName(name);
     setUserNik(nik);
     setShowFirstVisit(false);
+
+    // Langsung klaim NIK & identitas terminal ke database Supabase
+    aegisApi.broadcastLocation(
+      terminalId,
+      name,
+      (window as any).__DEVICE_MODEL__ || "Terminal A.T.L.A.S",
+      -0.8917,
+      119.8577,
+      100,
+      nik
+    ).catch(() => {});
+
     setTimeout(() => startGpsTracking(), 800);
   };
 
@@ -1009,95 +1153,122 @@ function App() {
     setGpsError(null);
     setIsCalculating(true);
 
-    // 1. Instant IP geolocation fallback so the UI immediately shows the real city
-    const hasSavedPos = !!localStorage.getItem('atlas_user_position');
+    // 1. Instant IP geolocation fallback untuk teks nama kota saja (TIDAK PERNAH mengubah koordinat)
     fetchIpLocation().then((loc) => {
-      if (loc && !hasFirstGPSFixRef.current && !hasSavedPos) {
-        setUserPosition((prev) => prev ?? [loc.lat, loc.lng]);
+      if (loc && !hasFirstGPSFixRef.current) {
         setUserLocationName((prev) => {
           if (prev && !prev.toLowerCase().includes("mendeteksi") && !prev.toLowerCase().includes("izin")) {
             return prev;
           }
           return loc.formatted;
         });
-        const routeResults = findOptimalEvacuationRoutes(
-          loc.lat,
-          loc.lng,
-          99,
-          settings.algorithm as 'dijkstra' | 'haversine',
-        );
-        lastRouteCalcResultsRef.current = routeResults;
-        setRoutes(routeResults);
-        setIsCalculating(false);
       }
     }).catch(() => {});
 
-    // 2. Fast initial position fix via browser network/WiFi positioning
-    if (typeof window !== "undefined" && "geolocation" in navigator) {
-      navigator.geolocation.getCurrentPosition(
-        (pos) => {
-          hasFirstGPSFixRef.current = true;
-          const newPos: [number, number] = [
-            pos.coords.latitude,
-            pos.coords.longitude,
-          ];
-          setGpsAccuracy(pos.coords.accuracy);
-          setUserPosition(newPos);
-          setFlyToPos(newPos);
-          fetchLocationName(newPos[0], newPos[1]).then((name) => {
-            if (name) setUserLocationName(name);
+    // 2. Fast initial position fix via Fused Location (Native Google Play Services & Web Geolocation)
+    const isNativePlatform = typeof window !== "undefined" && Capacitor.isNativePlatform();
+    const hasManualPin = typeof window !== "undefined" && localStorage.getItem('atlas_manual_pinned') === 'true';
+
+    if (!hasManualPin) {
+      if (isNativePlatform) {
+        Geolocation.getCurrentPosition({ enableHighAccuracy: true, timeout: 8000, maximumAge: 30000 })
+          .then((pos) => {
+            if (localStorage.getItem('atlas_manual_pinned') === 'true') return;
+            const acc = pos.coords.accuracy || 15;
+            if (acc > 50) return; // Tolak BTS seluler kasar (> 50m)
+            hasFirstGPSFixRef.current = true;
+            const newPos: [number, number] = [pos.coords.latitude, pos.coords.longitude];
+            setGpsAccuracy(acc);
+            setUserPosition(newPos);
+            setFlyToPos(newPos);
+            fetchLocationName(newPos[0], newPos[1]).then((name) => {
+              if (name) setUserLocationName(name);
+            });
+            const routeResults = findOptimalEvacuationRoutes(
+              newPos[0],
+              newPos[1],
+              99,
+              settings.algorithm as 'dijkstra' | 'haversine',
+            );
+            lastRouteCalcResultsRef.current = routeResults;
+            setRoutes(routeResults);
+            setSelectedRoute(0);
+            setIsCalculating(false);
+          })
+          .catch((err) => {
+            console.warn("Native fast GPS acquisition failed:", err);
           });
-          const routeResults = findOptimalEvacuationRoutes(
-            newPos[0],
-            newPos[1],
-            99,
-            settings.algorithm as 'dijkstra' | 'haversine',
-          );
-          lastRouteCalcResultsRef.current = routeResults;
-          setRoutes(routeResults);
-          setSelectedRoute(0);
-          setIsCalculating(false);
-        },
-        (err) => {
-          console.warn("Initial GPS acquisition failed:", err);
-          if (err.code === 1) {
-            setGpsError("Izin lokasi ditolak oleh browser.");
-          }
-        },
-        { enableHighAccuracy: true, timeout: 12000, maximumAge: 0 }
-      );
+      } else if (typeof window !== "undefined" && "geolocation" in navigator) {
+        navigator.geolocation.getCurrentPosition(
+          (pos) => {
+            if (localStorage.getItem('atlas_manual_pinned') === 'true') return;
+            const acc = pos.coords.accuracy || 15;
+            if (acc > 50) return;
+            hasFirstGPSFixRef.current = true;
+            const newPos: [number, number] = [
+              pos.coords.latitude,
+              pos.coords.longitude,
+            ];
+            setGpsAccuracy(acc);
+            setUserPosition(newPos);
+            setFlyToPos(newPos);
+            fetchLocationName(newPos[0], newPos[1]).then((name) => {
+              if (name) setUserLocationName(name);
+            });
+            const routeResults = findOptimalEvacuationRoutes(
+              newPos[0],
+              newPos[1],
+              99,
+              settings.algorithm as 'dijkstra' | 'haversine',
+            );
+            lastRouteCalcResultsRef.current = routeResults;
+            setRoutes(routeResults);
+            setSelectedRoute(0);
+            setIsCalculating(false);
+          },
+          (err) => {
+            console.warn("Browser GPS acquisition failed:", err);
+            if (err.code === 1) {
+              setGpsError("Izin lokasi ditolak oleh browser.");
+            }
+          },
+          { enableHighAccuracy: true, timeout: 8000, maximumAge: 30000 }
+        );
+      }
     }
 
     try {
       const watchId = await Geolocation.watchPosition(
-        { enableHighAccuracy: true, maximumAge: 0, timeout: 20000 },
+        { enableHighAccuracy: true, maximumAge: 5000, timeout: 20000 },
         (pos, err) => {
           if (err) {
             console.warn("GPS Error:", err);
             return;
           }
-          if (!pos) return;
+          if (!pos || !pos.coords) return;
 
-          setGpsAccuracy(pos.coords.accuracy);
+          // If the user manually pinned their location, do NOT overwrite it
+          const isCurrentlyPinned = typeof window !== "undefined" && localStorage.getItem('atlas_manual_pinned') === 'true';
+          if (isCurrentlyPinned) return;
+
+          // Saring akurasi: tolak BTS kasar (> 50m), terima Fused Wi-Fi indoor / Satelit GNSS (<= 50m)
+          const acc = pos.coords.accuracy || 15;
+          if (acc > 50) return;
+
+          setGpsAccuracy(acc);
           const newPos: [number, number] = [
             pos.coords.latitude,
             pos.coords.longitude,
           ];
 
-          // If the user calibrated their position manually, don't overwrite it with coarse laptop GPS
-          const hasManualPin = !!localStorage.getItem('atlas_user_position');
-          if (!hasManualPin) {
-            setUserPosition(newPos);
-            fetchLocationName(newPos[0], newPos[1]).then((name) => {
-              if (name) setUserLocationName(name);
-            });
-          }
+          setUserPosition(newPos);
+          fetchLocationName(newPos[0], newPos[1]).then((name) => {
+            if (name) setUserLocationName(name);
+          });
 
           if (!hasFirstGPSFixRef.current) {
             hasFirstGPSFixRef.current = true;
-            if (!hasManualPin) {
-              setFlyToPos(newPos);
-            }
+            setFlyToPos(newPos);
           }
           
           // ── THROTTLE ROUTE CALCULATION ──
@@ -1558,6 +1729,19 @@ function App() {
           }
         } else {
           setHasFamilyPing(true);
+          setIncomingFamilyPing({
+            fromId: ev.fromId,
+            fromName: ev.fromName || 'Unit Anggota',
+            nik: ev.nik,
+          });
+          try {
+            localStorage.setItem('atlas_pending_family_ping', JSON.stringify({
+              fromId: ev.fromId,
+              fromName: ev.fromName || 'Unit Anggota',
+              nik: ev.nik,
+              ts: Date.now()
+            }));
+          } catch {}
         }
       }
     }
@@ -1575,10 +1759,17 @@ function App() {
         });
       }
     }
-    // Track lokasi user aktif untuk peta admin
+    // Track lokasi user aktif untuk peta admin dan cache unit keluarga
     if (event.type === "LOCATION_UPDATE") {
       const ev = event as any;
       if (ev.id && ev.lat && ev.lng) {
+        // Simpan ke cache lokal unit keluarga agar PC dan HP langsung bisa melihat lokasi
+        try {
+          const locs = JSON.parse(localStorage.getItem('aegisMemberLocs') ?? '{}');
+          locs[ev.id] = { lat: ev.lat, lng: ev.lng, ts: Date.now() };
+          localStorage.setItem('aegisMemberLocs', JSON.stringify(locs));
+        } catch {}
+
         const updatedUser = {
           id: ev.id,
           name: ev.name || ev.id,
@@ -1710,22 +1901,42 @@ function App() {
         .catch(() => {});
     });
 
-    // 1. Izin notifikasi Capacitor
-    requestNotifPermission();
-    // 2. Web Push agar notif masuk saat app ditutup
-    registerWebPush().catch(() => {});
-    // 3. Minta izin GPS (foreground + background) sebelum mulai tracking
-    Geolocation.requestPermissions().catch(() => {});
-    // 4. AUTO-START GPS saat app dibuka (user mode selalu, tanpa syarat registrasi)
+    // Sembunyikan splash screen bawaan Capacitor begitu React termuat
+    import('@capacitor/splash-screen').then(({ SplashScreen }) => {
+      SplashScreen.hide().catch(() => {});
+    }).catch(() => {});
+
+    // Konfigurasi Status Bar agar tidak menimpa header (overlaysWebView: false)
+    import('@capacitor/core').then(({ Capacitor }) => {
+      if (Capacitor.isNativePlatform()) {
+        import('@capacitor/status-bar').then(({ StatusBar, Style }) => {
+          StatusBar.setOverlaysWebView({ overlay: false }).catch(() => {});
+          StatusBar.setStyle({ style: Style.Dark }).catch(() => {});
+          StatusBar.setBackgroundColor({ color: '#07090E' }).catch(() => {});
+        }).catch(() => {});
+      }
+    }).catch(() => {});
+
+    // Inisialisasi izin & pelacakan secara tertib agar tidak memicu race condition pada dialog Android
     if (!isAdminURL) {
-      setTimeout(() => startGpsTracking(), 600);
+      setTimeout(() => {
+        startGpsTracking();
+      }, 700);
     }
+
+    // Izin notifikasi darurat dijalankan setelah inisialisasi awal
+    setTimeout(() => {
+      requestNotifPermission();
+      registerWebPush().catch(() => {});
+    }, 2500);
     // 4b. Load custom shelters dari Supabase & Road Network
     loadRoadNetwork().then(success => setNetworkFailed(!success));
     aegisApi.fetchCustomShelters().then(data => {
-      shelters.length = 0;
-      data.forEach(s => addCustomShelter(s as any));
-      setShelterVersion(v => v + 1);
+      if (Array.isArray(data) && data.length > 0) {
+        shelters.length = 0;
+        data.forEach(s => addCustomShelter(s as any));
+        setShelterVersion(v => v + 1);
+      }
       const curPos = userPosition || (typeof window !== "undefined" && localStorage.getItem('atlas_user_position') ? JSON.parse(localStorage.getItem('atlas_user_position')!) : null);
       if (curPos) {
         const routeResults = findOptimalEvacuationRoutes(
@@ -1775,11 +1986,47 @@ function App() {
       }
     };
     fetchTsunamiState();
-    // 6. Minta agar tidak dimatikan oleh battery optimizer (Android)
-    try {
-      const { App: CapApp } = require('@capacitor/app');
+    // 6. Listener status app & Deep Link URL Open (Capacitor & Web)
+    import('@capacitor/app').then(({ App: CapApp }) => {
       CapApp.addListener('appStateChange', () => {});
-    } catch {}
+      CapApp.addListener('appUrlOpen', (event) => {
+        if (!event?.url) return;
+        try {
+          const parsed = new URL(event.url);
+          const joinFamily = parsed.searchParams.get('joinFamily');
+          const code = parsed.searchParams.get('code') || parsed.searchParams.get('verifyCode');
+          const inviteName = parsed.searchParams.get('inviteName');
+          if (joinFamily) {
+            localStorage.setItem('atlas_pending_join_family', joinFamily);
+            if (code) localStorage.setItem('atlas_pending_join_code', code);
+            if (inviteName) localStorage.setItem('atlas_pending_join_name', inviteName);
+            setActivePage('family');
+            window.dispatchEvent(new CustomEvent('atlas_deep_link_join', {
+              detail: { joinFamily, code, inviteName }
+            }));
+          }
+        } catch (_) {}
+      });
+    }).catch(() => {});
+
+    // Web URL query param check
+    if (typeof window !== 'undefined' && window.location.search) {
+      try {
+        const params = new URLSearchParams(window.location.search);
+        const joinFamily = params.get('joinFamily');
+        const code = params.get('code') || params.get('verifyCode');
+        const inviteName = params.get('inviteName');
+        if (joinFamily) {
+          localStorage.setItem('atlas_pending_join_family', joinFamily);
+          if (code) localStorage.setItem('atlas_pending_join_code', code);
+          if (inviteName) localStorage.setItem('atlas_pending_join_name', inviteName);
+          setActivePage('family');
+          window.dispatchEvent(new CustomEvent('atlas_deep_link_join', {
+            detail: { joinFamily, code, inviteName }
+          }));
+        }
+      } catch (_) {}
+    }
   }, []);
 
   // â”€â”€ PUBLIC USER layout â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
@@ -1804,6 +2051,8 @@ function App() {
               tsunamiAlert={tsunamiAlert}
               onOpenProfile={() => setShowProfileModal(true)}
               userPosition={userPosition}
+              terminalId={terminalId}
+              gempa={gempa}
             />
           )}
           {activePage === "navigate" && (
@@ -1840,6 +2089,18 @@ function App() {
               onBack={() => setActivePage("status")}
             />
           )}
+          {activePage === "menu" && (
+            <MenuPage
+              key="menu"
+              onBack={() => setActivePage("status")}
+              onNavigateHistory={() => setActivePage("history")}
+              onCalibrateCompass={() => {
+                // Calibration modal removed — navigates directly to tactical map
+                setActivePage("navigate");
+              }}
+              userLocation={userLocationName}
+            />
+          )}
         </AnimatePresence>
         {/* HISTORY PAGE â€” "TACTICAL ARCHIVE"                        */}
         {/* â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• */}
@@ -1852,7 +2113,7 @@ function App() {
               transition={{ duration: 0.22 }}
               className="fixed inset-0 z-[1800] flex flex-col bg-nerv-bg text-slate-200"
             >
-              {/* NERV top bar */}
+              {/* A.T.L.A.S top bar */}
               <div className="flex items-center justify-between px-4 py-3 border-b border-nerv-border bg-[#0B0F19] shrink-0">
                 <button
                   onClick={() => setActivePage("status")}
@@ -2139,9 +2400,9 @@ function App() {
           )}
         </AnimatePresence>
 
-        {/* USER BOTTOM NAV — NERV Tactical Dock */}
+        {/* USER BOTTOM NAV — A.T.L.A.S Tactical Dock */}
         <nav
-          className="fixed bottom-0 left-0 right-0 z-[1900] flex items-center justify-around px-2 border-t bg-[#07090E]/95 border-nerv-border backdrop-blur-xl"
+          className="fixed bottom-0 left-0 right-0 z-[1900] flex items-center justify-around px-2 border-t backdrop-blur-xl bg-[#07090E]/95 border-nerv-border shadow-[0_-4px_20px_rgba(0,0,0,0.5)]"
           style={{
             paddingBottom: "env(safe-area-inset-bottom)",
             height: "64px",
@@ -2155,12 +2416,13 @@ function App() {
               label: lang === 'id' ? 'NAVIGASI' : 'NAVIGATE',
               code: "02"
             },
-            { page: "history" as ActivePage, Icon: History, label: lang === 'id' ? 'ARSIP' : 'ARCHIVE', code: "03" },
-            { page: "family" as ActivePage, Icon: Users, label: lang === 'id' ? 'UNIT' : 'UNITS', code: "04" },
-            { page: "guides" as ActivePage, Icon: BookOpen, label: lang === 'id' ? 'PANDUAN' : 'MANUAL', code: "05" },
+            { page: "family" as ActivePage, Icon: Users, label: lang === 'id' ? 'UNIT' : 'UNITS', code: "03" },
+            { page: "guides" as ActivePage, Icon: BookOpen, label: lang === 'id' ? 'PANDUAN' : 'MANUAL', code: "04" },
+            { page: "menu" as ActivePage, Icon: Menu, label: lang === 'id' ? 'MENU' : 'MENU', code: "05" },
           ].map(({ page, Icon, label, code }) => {
             const isAlert = page === "navigate" && tsunamiAlert;
             const isFamilyAlert = page === "family" && hasFamilyPing;
+            const isMenuUpdate = false;
             const isActive = activePage === page;
             return (
               <button
@@ -2170,7 +2432,7 @@ function App() {
                   isAlert
                     ? "text-nerv-red"
                     : isActive
-                      ? "text-nerv-orange"
+                      ? "text-nerv-orange font-bold"
                       : "text-slate-500 hover:text-slate-300"
                 }`}
               >
@@ -2192,9 +2454,11 @@ function App() {
                   {isFamilyAlert && (
                     <span className="absolute -top-1 -right-1 w-2.5 h-2.5 rounded-full bg-nerv-red block border-2 border-black" />
                   )}
+                  {isMenuUpdate && (
+                    <span className="absolute -top-1 -right-1.5 w-2.5 h-2.5 rounded-full bg-red-500 border-2 border-[#07090E] animate-pulse block shadow-[0_0_8px_rgba(239,68,68,0.9)]" />
+                  )}
                 </div>
-                <div className="flex items-center gap-0.5">
-                  <span className="text-[7px] font-mono text-slate-600 block leading-none">[{code}]</span>
+                <div className="flex items-center justify-center">
                   <span className="text-[9px] font-mono font-bold tracking-wider uppercase leading-none">
                     {label}
                   </span>
@@ -2211,8 +2475,7 @@ function App() {
             <div className="relative mb-0.5">
               <Shield className="w-4 h-4 transition-transform group-hover:scale-110 text-nerv-cyan" />
             </div>
-            <div className="flex items-center gap-0.5">
-              <span className="text-[7px] font-mono text-slate-600 block leading-none">[06]</span>
+            <div className="flex items-center justify-center">
               <span className="text-[9px] font-mono font-bold tracking-wider uppercase leading-none">
                 {lang === 'id' ? 'PROFIL' : 'PROFILE'}
               </span>
@@ -2410,6 +2673,9 @@ function App() {
           terminalId={terminalId}
         />
       </div>
+      {showVideoSplash && (
+        <VideoSplash isAdmin={isAdminURL} onFinish={handleSplashFinish} />
+      )}
       <AlertModal state={alertModal} onClose={() => setAlertModal(null)} />
       </>
     );
@@ -2443,7 +2709,7 @@ function App() {
                 A.T.L.A.S
               </h1>
               <p className="text-[9px] text-nerv-orange font-mono mt-0.5 truncate">
-                AUTONOMOUS THREAT LOCATION & ALERT SYSTEM · {userLocationName ? userLocationName.split(' // ')[0] : 'PALU'}
+                AUTONOMOUS THREAT LOCATION & ALERT SYSTEM · {userLocationName ? userLocationName.split(' // ')[0] : 'REGIONAL NODE'}
               </p>
             </div>
           </div>
@@ -2533,7 +2799,7 @@ function App() {
               </span>
             </div>
             <p className="text-[9px] text-nerv-orange font-mono mt-0.5">
-              AUTONOMOUS THREAT LOCATION & ALERT SYSTEM · {userLocationName ? userLocationName.split(' // ')[0] : 'PALU'}
+              AUTONOMOUS THREAT LOCATION & ALERT SYSTEM · {userLocationName ? userLocationName.split(' // ')[0] : 'REGIONAL NODE'}
             </p>
           </div>
         </div>
@@ -2631,7 +2897,7 @@ function App() {
               initial={{ width: 0, opacity: 0 }}
               animate={{ width: 220, opacity: 1 }}
               exit={{ width: 0, opacity: 0 }}
-              className="bg-[#0b1120] border-r border-slate-800 flex flex-col z-40 relative hidden lg:flex shrink-0 overflow-hidden whitespace-nowrap"
+              className="bg-[#0b1120] border-r border-slate-800 hidden lg:flex flex-col z-40 relative shrink-0 overflow-hidden whitespace-nowrap"
             >
               <div className="w-[220px]">
                 <div className="p-6 pb-2">
@@ -2713,7 +2979,7 @@ function App() {
         <main className="flex-1 relative z-0 bg-[#0b1120]">
           {/* Admin: GPS badges dihapus - admin hanya memantau, tidak navigasi */}
 
-          {/* Admin NERV Tactical Search Bar */}
+          {/* Admin A.T.L.A.S Tactical Search Bar */}
           {isAdminURL && (
             <div className="absolute top-4 left-4 z-[900] w-72 sm:w-80 pointer-events-auto">
               <div className="relative">
@@ -4508,7 +4774,7 @@ function App() {
                 </div>
                 <div className="space-y-2">
                   {[
-                    ["Versi Aplikasi", "v1.0.0 (A.T.L.A.S Enterprise)"],
+                    ["Versi Aplikasi", "v1.0.1 (A.T.L.A.S Enterprise)"],
                     ["Terminal ID", terminalId],
                   ].map(([label, value]) => (
                     <div
@@ -4591,6 +4857,72 @@ function App() {
                 >
                   SAYA AMAN
                 </button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* ─── GLOBAL FAMILY PING MODAL (when on other pages) ─── */}
+      <AnimatePresence>
+        {incomingFamilyPing && activePage !== "family" && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-[3000] flex items-center justify-center bg-black/85 backdrop-blur-md p-4"
+          >
+            <motion.div
+              initial={{ scale: 0.9, y: 15 }}
+              animate={{ scale: 1, y: 0 }}
+              exit={{ scale: 0.9, y: 15 }}
+              className="w-full max-w-xs bg-[#0F1424] border-2 border-nerv-orange rounded-xl p-5 shadow-[0_0_40px_rgba(255,87,34,0.4)] relative overflow-hidden font-mono text-center"
+            >
+              <div className="absolute inset-0 bg-nerv-orange/5 animate-pulse pointer-events-none" />
+              <div className="relative z-10 flex flex-col items-center">
+                <div className="w-14 h-14 bg-nerv-orange/20 rounded-full flex items-center justify-center mb-3 border border-nerv-orange">
+                  <Radio className="w-7 h-7 text-nerv-orange animate-ping" />
+                </div>
+                <p className="text-[10px] text-nerv-orange font-bold uppercase tracking-widest mb-1">
+                  TACTICAL EMERGENCY PING
+                </p>
+                <h2 className="text-base font-bold text-white mb-2">PANGGILAN DARI UNIT</h2>
+                <p className="text-xs text-slate-300 mb-2 font-sans leading-relaxed">
+                  <b className="text-white font-mono">{incomingFamilyPing.fromName}</b> mengirimkan sinyal darurat ke perangkat Anda.
+                </p>
+                {incomingFamilyPing.nik && (
+                  <p className="text-[9px] text-nerv-cyan font-mono mb-4">
+                    NIK: {incomingFamilyPing.nik}
+                  </p>
+                )}
+                <div className="w-full space-y-2.5">
+                  <button
+                    onClick={() => {
+                      aegisApi.pingReply(terminalId, userName || "Pengguna", incomingFamilyPing.fromId, userNik);
+                      setIncomingFamilyPing(null);
+                      setHasFamilyPing(false);
+                      localStorage.removeItem("atlas_pending_family_ping");
+                    }}
+                    className="w-full py-3.5 bg-emerald-500 hover:bg-emerald-600 text-black rounded font-mono font-bold text-xs uppercase tracking-widest shadow-[0_0_20px_rgba(34,197,94,0.4)] transition-all flex items-center justify-center gap-2 cursor-pointer"
+                  >
+                    <CheckCircle2 className="w-4 h-4" />
+                    <span>KONFIRMASI: SAYA AMAN ✓</span>
+                  </button>
+                  <button
+                    onClick={() => {
+                      const targetId = incomingFamilyPing.fromId;
+                      setIncomingFamilyPing(null);
+                      setHasFamilyPing(false);
+                      localStorage.removeItem("atlas_pending_family_ping");
+                      if ("vibrate" in navigator) navigator.vibrate([200, 100, 200]);
+                      aegisApi.pingHelp(terminalId, userName || "Pengguna", targetId, userPosition?.[0], userPosition?.[1], userNik);
+                    }}
+                    className="w-full py-3.5 bg-red-600 hover:bg-red-700 text-white rounded font-mono font-bold text-xs uppercase tracking-widest shadow-[0_0_20px_rgba(239,68,68,0.5)] transition-all flex items-center justify-center gap-2 cursor-pointer animate-pulse"
+                  >
+                    <AlertTriangle className="w-4 h-4" />
+                    <span>⚠️ MEMERLUKAN BANTUAN DARURAT</span>
+                  </button>
+                </div>
               </div>
             </motion.div>
           </motion.div>
@@ -5843,6 +6175,9 @@ function App() {
       )}
     </AnimatePresence>
 
+    {showVideoSplash && (
+      <VideoSplash isAdmin={isAdminURL} onFinish={handleSplashFinish} />
+    )}
     <AlertModal state={alertModal} onClose={() => setAlertModal(null)} />
     </>
   );

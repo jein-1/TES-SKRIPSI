@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════
-// FAMILY PAGE — NERV Tactical Personnel Directory & Location Telemetry
+// FAMILY PAGE — A.T.L.A.S Tactical Personnel Directory & Location Telemetry
 // ═══════════════════════════════════════════════════════════════
 import { useState, useEffect, useRef, useCallback } from 'react'
 import {
@@ -11,23 +11,55 @@ import { Map, MapMarker, MarkerContent } from '@/components/ui/map'
 import QRCode from 'qrcode'
 import { Geolocation } from '@capacitor/geolocation'
 import { useAegisSync, aegisApi } from '../../lib/useAegisSync'
+import { supabase } from '../../lib/supabaseClient'
+import { useLanguage } from '../../lib/i18n'
 import type { FamilyMember } from '../../types'
 
 // ── Storage helpers ────────────────────────────────────────────
 export function getMyAegisId(): string {
+  const isNode01 = localStorage.getItem('atlas_is_node_01') === 'true'
+  if (isNode01) return 'NODE-01'
+
+  const terminalId = localStorage.getItem('atlasTerminalId') || localStorage.getItem('aegisTerminalId')
+  if (terminalId) {
+    if (terminalId.startsWith('NODE-01')) return terminalId
+    const pub = terminalId.replace(/^(AEGIS|ATLAS)-?/i, 'NODE-P')
+    return pub
+  }
+
   let id = localStorage.getItem('atlasId') || localStorage.getItem('aegisId')
   if (id) {
-    id = id.replace(/^(AEGIS|ATLAS)-?/i, 'A.T.L.A.S-')
+    id = id.replace(/^(AEGIS|ATLAS)-?/i, 'NODE-P')
   } else {
-    id = `A.T.L.A.S-${Date.now().toString(36).toUpperCase()}`
+    id = `NODE-P${Math.floor(Math.random() * 900 + 100)}`
   }
   localStorage.setItem('atlasId', id)
   localStorage.setItem('aegisId', id)
+  localStorage.setItem('atlasTerminalId', id)
   return id
 }
 
 export function getMyName(): string {
-  return localStorage.getItem('aegisUserName') ?? 'Personnel-01'
+  return localStorage.getItem('atlasUserName') ?? localStorage.getItem('aegisUserName') ?? 'Personnel-01'
+}
+
+export function getMyNik(): string {
+  return localStorage.getItem('atlasUserNik') ?? localStorage.getItem('aegisUserNik') ?? ''
+}
+
+export function formatLastSeen(m: FamilyMember, locTs?: number): string {
+  if (m.status === 'danger') return 'DARURAT! BUTUH BANTUAN'
+  if (m.status === 'waiting') return 'menunggu respon...'
+  const ts = locTs || m.lastSeenTs
+  if (!ts) return m.updatedAgo || 'baru saja'
+  const diffSec = Math.floor((Date.now() - ts) / 1000)
+  if (diffSec < 60) return 'baru saja'
+  const diffMin = Math.floor(diffSec / 60)
+  if (diffMin < 60) return `${diffMin} mnt lalu`
+  const diffHours = Math.floor(diffMin / 60)
+  if (diffHours < 24) return `${diffHours} jam lalu`
+  const diffDays = Math.floor(diffHours / 24)
+  return `${diffDays} hari lalu`
 }
 
 export function loadFamily(): FamilyMember[] {
@@ -56,14 +88,15 @@ function saveMemberLoc(id: string, lat: number, lng: number) {
   localStorage.setItem('aegisMemberLocs', JSON.stringify(locs))
 }
 
-// ── NERV Status chip ───────────────────────────────────────────
+// ── A.T.L.A.S Status chip ───────────────────────────────────────────
 function StatusChip({ status }: { status: FamilyMember['status'] }) {
+  const { lang } = useLanguage()
   if (status === 'safe') {
     return (
       <div className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded bg-nerv-green/10 border border-nerv-green/30">
         <CheckCircle className="w-3 h-3 text-nerv-green" />
         <span className="text-[9px] font-mono font-bold tracking-wider text-nerv-green uppercase">
-          SECURE // AMAN
+          {lang === 'id' ? 'SECURE // AMAN ✓' : 'SECURE // SAFE ✓'}
         </span>
       </div>
     )
@@ -73,7 +106,17 @@ function StatusChip({ status }: { status: FamilyMember['status'] }) {
       <div className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded bg-nerv-red/10 border border-nerv-red/50 animate-pulse">
         <AlertTriangle className="w-3 h-3 text-nerv-red" />
         <span className="text-[9px] font-mono font-bold tracking-wider text-nerv-red uppercase">
-          HAZARD // BAHAYA
+          {lang === 'id' ? 'HAZARD // BUTUH BANTUAN ⚠️' : 'HAZARD // NEED ASSISTANCE ⚠️'}
+        </span>
+      </div>
+    )
+  }
+  if (status === 'waiting') {
+    return (
+      <div className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded bg-yellow-500/10 border border-yellow-500/40 animate-pulse">
+        <Radio className="w-3 h-3 text-yellow-400 animate-spin" />
+        <span className="text-[9px] font-mono font-bold tracking-wider text-yellow-400 uppercase">
+          {lang === 'id' ? 'WAITING // MENUNGGU RESPON...' : 'WAITING // AWAITING RESPONSE...'}
         </span>
       </div>
     )
@@ -82,7 +125,7 @@ function StatusChip({ status }: { status: FamilyMember['status'] }) {
     <div className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded bg-black/40 border border-nerv-border">
       <Clock className="w-3 h-3 text-slate-500" />
       <span className="text-[9px] font-mono font-bold tracking-wider text-slate-400 uppercase">
-        STANDBY // MENUNGGU
+        {lang === 'id' ? 'STANDBY // MENUNGGU' : 'STANDBY // IDLE'}
       </span>
     </div>
   )
@@ -188,10 +231,11 @@ function MyQRModal({ onClose }: { onClose: () => void }) {
     setVerifyCode(gen)
   }
 
+  const myNik = getMyNik()
   const baseOrigin = (typeof window !== 'undefined' && !window.location.origin.includes('localhost') && !window.location.origin.includes('127.0.0.1'))
     ? window.location.origin
     : (import.meta.env.VITE_PUBLIC_URL || 'https://tsunami-dimss.vercel.app');
-  const inviteUrl = `${baseOrigin}/?joinFamily=${encodeURIComponent(atlasId)}&inviteName=${encodeURIComponent(myName)}&code=${verifyCode}`
+  const inviteUrl = `${baseOrigin}/?joinFamily=${encodeURIComponent(atlasId)}&inviteName=${encodeURIComponent(myName)}&code=${verifyCode}${myNik ? `&nik=${encodeURIComponent(myNik)}` : ''}`
 
   useEffect(() => {
     QRCode.toDataURL(inviteUrl, {
@@ -251,8 +295,14 @@ function MyQRModal({ onClose }: { onClose: () => void }) {
           </div>
 
           <p className="text-[10px] text-slate-400 mt-2 font-mono break-all px-2 bg-black/50 py-1 rounded border border-nerv-border">
-            {atlasId}
+            ID: #{atlasId}
           </p>
+
+          {myNik && (
+            <p className="text-[10px] text-nerv-cyan mt-1 font-mono break-all px-2 bg-nerv-cyan/10 py-1 rounded border border-nerv-cyan/30">
+              NIK: {myNik}
+            </p>
+          )}
 
           {/* Verification Code Box */}
           <div className="mt-3 p-3 rounded-lg bg-black/70 border border-nerv-cyan/50 text-center">
@@ -290,8 +340,9 @@ function MyQRModal({ onClose }: { onClose: () => void }) {
   )
 }
 
-// ── Add Member Modal (QR scan + Gallery upload + 2-Way Code Verification) ──
+// ── Add Member Modal (QR scan + Gallery upload + 2-Way Code Verification + Role Setup) ──
 function AddMemberModal({ onClose, onAdd }: { onClose: () => void; onAdd: (m: FamilyMember) => void }) {
+  const [step, setStep] = useState<'scan' | 'verify' | 'role'>('scan')
   const [scanning, setScanning] = useState(false)
   const [camErr, setCamErr] = useState('')
   const [galleryErr, setGalleryErr] = useState('')
@@ -301,15 +352,18 @@ function AddMemberModal({ onClose, onAdd }: { onClose: () => void; onAdd: (m: Fa
   const streamRef = useRef<MediaStream | null>(null)
   const rafRef = useRef(0)
 
-  // Verification Challenge State
+  // Verification & Role State
   const [pendingMember, setPendingMember] = useState<{
     id: string
     name: string
     expectedCode: string
+    nik?: string
   } | null>(null)
   const [enteredCode, setEnteredCode] = useState('')
   const [verifyErr, setVerifyErr] = useState('')
   const [verifySuccess, setVerifySuccess] = useState(false)
+  const [customRole, setCustomRole] = useState('')
+  const [roleErr, setRoleErr] = useState('')
 
   const stopCam = () => {
     cancelAnimationFrame(rafRef.current)
@@ -318,7 +372,29 @@ function AddMemberModal({ onClose, onAdd }: { onClose: () => void; onAdd: (m: Fa
     setScanning(false)
   }
 
-  useEffect(() => () => stopCam(), [])
+  useEffect(() => {
+    const handleFill = (e: any) => {
+      if (e?.detail?.joinId && e?.detail?.joinName) {
+        stopCam()
+        setPendingMember({
+          id: e.detail.joinId,
+          name: e.detail.joinName,
+          expectedCode: (e.detail.code || '').trim(),
+          nik: (e.detail.nik || '').trim() || undefined
+        })
+        setEnteredCode('')
+        setVerifyErr('')
+        setCustomRole('')
+        setRoleErr('')
+        setStep('verify')
+      }
+    }
+    window.addEventListener('atlas_modal_fill_join', handleFill)
+    return () => {
+      stopCam()
+      window.removeEventListener('atlas_modal_fill_join', handleFill)
+    }
+  }, [])
 
   const processQRData = (data: string): boolean => {
     try {
@@ -326,22 +402,27 @@ function AddMemberModal({ onClose, onAdd }: { onClose: () => void; onAdd: (m: Fa
       const joinId = url.searchParams.get('joinFamily')
       const joinName = url.searchParams.get('inviteName')
       const code = url.searchParams.get('code') || url.searchParams.get('verifyCode') || ''
+      const nik = url.searchParams.get('nik') || ''
       if (joinId && joinName) {
         stopCam()
         setPendingMember({
           id: joinId,
           name: joinName,
           expectedCode: code.trim(),
+          nik: nik.trim() || undefined
         })
         setEnteredCode('')
         setVerifyErr('')
+        setCustomRole('')
+        setRoleErr('')
+        setStep('verify')
         return true
       }
     } catch { }
     return false
   }
 
-  const handleVerifyAndLink = () => {
+  const handleVerifyAndProceed = () => {
     if (!pendingMember) return
     const cleanEntered = enteredCode.replace(/\s+/g, '')
 
@@ -355,22 +436,40 @@ function AddMemberModal({ onClose, onAdd }: { onClose: () => void; onAdd: (m: Fa
       return
     }
 
-    // Match success!
+    // Match success! Move to Step 3: Role Assignment
     setVerifySuccess(true)
     setTimeout(() => {
-      const newMember: FamilyMember = {
-        id: pendingMember.id,
-        name: pendingMember.name,
-        role: 'Unit Personel',
-        initials: pendingMember.name.split(' ').map((w: string) => w[0]).join('').slice(0, 2).toUpperCase(),
-        status: 'safe',
-        location: 'Terverifikasi via QR',
-        updatedAgo: 'baru saja',
-      }
-      onAdd(newMember)
-      aegisApi.notifyFamilyJoin(getMyAegisId(), getMyName(), pendingMember.id)
-      onClose()
-    }, 1000)
+      setVerifySuccess(false)
+      setStep('role')
+    }, 500)
+  }
+
+  const handleFinishLinking = () => {
+    if (!pendingMember) return
+    const roleClean = customRole.trim()
+    if (roleClean.length < 3) {
+      setRoleErr('Peran minimal 3 karakter.')
+      return
+    }
+    if (roleClean.length > 20) {
+      setRoleErr('Peran maksimal 20 karakter.')
+      return
+    }
+
+    const newMember: FamilyMember = {
+      id: pendingMember.id,
+      name: pendingMember.name,
+      role: roleClean,
+      initials: pendingMember.name.split(' ').map((w: string) => w[0]).join('').slice(0, 2).toUpperCase(),
+      status: 'unknown',
+      location: 'Terverifikasi via QR',
+      updatedAgo: 'baru saja',
+      nik: pendingMember.nik,
+      lastSeenTs: Date.now()
+    }
+    onAdd(newMember)
+    aegisApi.notifyFamilyJoin(getMyAegisId(), getMyName(), pendingMember.id)
+    onClose()
   }
 
   const startCam = async () => {
@@ -481,13 +580,77 @@ function AddMemberModal({ onClose, onAdd }: { onClose: () => void; onAdd: (m: Fa
           </button>
         </div>
 
-        {/* STEP 2: VERIFICATION CHALLENGE */}
-        {pendingMember ? (
+        {/* STEP 3: ROLE ASSIGNMENT */}
+        {step === 'role' && pendingMember ? (
+          <div className="font-mono space-y-3">
+            <div className="p-3 rounded-lg bg-black/60 border border-nerv-cyan/50 text-center">
+              <span className="text-[9px] text-slate-400 uppercase block">TARGET UNIT TERVERIFIKASI</span>
+              <span className="text-sm font-bold text-nerv-cyan block truncate">{pendingMember.name}</span>
+              <span className="text-[9px] text-slate-500 block">ID: #{pendingMember.id}</span>
+              {pendingMember.nik && (
+                <span className="text-[9px] text-nerv-cyan/80 block mt-0.5">NIK: {pendingMember.nik}</span>
+              )}
+            </div>
+
+            <div className="space-y-1.5">
+              <label className="text-[10px] text-slate-200 block font-bold uppercase tracking-wider">
+                TENTUKAN PERAN UNIT INI:
+              </label>
+              <p className="text-[10px] text-slate-400 font-sans leading-tight">
+                Minimal 3 karakter, maksimal 20 karakter. Hanya boleh ada huruf dan angka.
+              </p>
+              <input
+                type="text"
+                maxLength={20}
+                value={customRole}
+                onChange={(e) => {
+                  const val = e.target.value.replace(/[^a-zA-Z0-9 ]/g, '').slice(0, 20)
+                  setCustomRole(val)
+                  setRoleErr('')
+                }}
+                placeholder="Contoh: Ayah / Ibu"
+                className="w-full mt-2 px-3 py-2.5 rounded bg-black/80 border border-nerv-border focus:border-nerv-cyan text-sm font-bold text-white placeholder:text-slate-500 focus:outline-none"
+              />
+              <div className="flex justify-between items-center text-[9px] text-slate-500 font-mono">
+                <span>{customRole.trim().length} / 20 Karakter</span>
+                {customRole.trim().length >= 3 && <span className="text-nerv-green">✓ Valid</span>}
+              </div>
+            </div>
+
+            {roleErr && (
+              <p className="text-nerv-red font-mono text-[11px] text-center font-bold bg-nerv-red/10 p-2 rounded border border-nerv-red/30">
+                {roleErr}
+              </p>
+            )}
+
+            <div className="flex gap-2 pt-2">
+              <button
+                type="button"
+                onClick={handleFinishLinking}
+                disabled={customRole.trim().length < 3 || customRole.trim().length > 20}
+                className="flex-1 py-2.5 rounded bg-nerv-cyan hover:bg-cyan-400 disabled:opacity-40 text-black font-mono font-bold text-xs uppercase tracking-wider transition-colors shadow-[0_0_12px_rgba(0,229,255,0.4)]"
+              >
+                SIMPAN &amp; SELESAIKAN
+              </button>
+              <button
+                type="button"
+                onClick={() => setStep('verify')}
+                className="px-3 py-2.5 rounded bg-black/60 border border-nerv-border text-slate-400 hover:text-white text-xs font-mono"
+              >
+                KEMBALI
+              </button>
+            </div>
+          </div>
+        ) : step === 'verify' && pendingMember ? (
+          /* STEP 2: VERIFICATION CHALLENGE */
           <div className="font-mono space-y-3">
             <div className="p-3 rounded-lg bg-black/60 border border-nerv-cyan/50 text-center">
               <span className="text-[9px] text-slate-400 uppercase block">TARGET UNIT TERDETEKSI</span>
               <span className="text-sm font-bold text-nerv-cyan block truncate">{pendingMember.name}</span>
-              <span className="text-[9px] text-slate-500 block">ID: #{pendingMember.id.slice(0, 10)}</span>
+              <span className="text-[9px] text-slate-500 block">ID: #{pendingMember.id}</span>
+              {pendingMember.nik && (
+                <span className="text-[9px] text-nerv-cyan/80 block mt-0.5">NIK: {pendingMember.nik}</span>
+              )}
             </div>
 
             <div className="space-y-1">
@@ -518,18 +681,18 @@ function AddMemberModal({ onClose, onAdd }: { onClose: () => void; onAdd: (m: Fa
 
             {verifySuccess && (
               <p className="text-nerv-green font-mono text-[11px] text-center font-bold bg-nerv-green/10 p-2 rounded border border-nerv-green/30 animate-pulse">
-                ✓ KODE COCOK! UNIT BERHASIL DITAUTKAN...
+                ✓ KODE COCOK! MELANJUTKAN KE PENGATURAN PERAN...
               </p>
             )}
 
             <div className="flex gap-2 pt-2">
               <button
                 type="button"
-                onClick={handleVerifyAndLink}
+                onClick={handleVerifyAndProceed}
                 disabled={verifySuccess || enteredCode.length < 6}
                 className="flex-1 py-2.5 rounded bg-nerv-cyan hover:bg-cyan-400 disabled:opacity-40 text-black font-mono font-bold text-xs uppercase tracking-wider transition-colors shadow-[0_0_12px_rgba(0,229,255,0.4)]"
               >
-                VERIFIKASI & TAUTKAN
+                VERIFIKASI KODE
               </button>
               <button
                 type="button"
@@ -537,6 +700,7 @@ function AddMemberModal({ onClose, onAdd }: { onClose: () => void; onAdd: (m: Fa
                   setPendingMember(null)
                   setEnteredCode('')
                   setVerifyErr('')
+                  setStep('scan')
                 }}
                 className="px-3 py-2.5 rounded bg-black/60 border border-nerv-border text-slate-400 hover:text-white text-xs font-mono"
               >
@@ -559,16 +723,29 @@ function AddMemberModal({ onClose, onAdd }: { onClose: () => void; onAdd: (m: Fa
               </p>
             )}
 
-            <div className="relative w-full aspect-video rounded-lg overflow-hidden bg-black border border-nerv-border mb-3">
-              <video ref={videoRef} className="w-full h-full object-cover" playsInline muted />
+            <div className="relative w-full aspect-square max-h-72 rounded-lg overflow-hidden bg-black border border-nerv-border mb-3">
+              <video
+                ref={videoRef}
+                className={`w-full h-full object-cover ${scanning ? 'block' : 'hidden'}`}
+                playsInline
+                autoPlay
+                muted
+                controls={false}
+                style={{ pointerEvents: 'none' }}
+              />
               <canvas ref={canvasRef} className="hidden" />
 
               {!scanning && !camErr && (
-                <div className="absolute inset-0 flex flex-col items-center justify-center gap-2">
-                  <Camera className="w-8 h-8 text-slate-600" />
+                <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-[#0a0f1d] p-4 text-center">
+                  <div className="w-14 h-14 rounded-full bg-nerv-cyan/10 border border-nerv-cyan/40 flex items-center justify-center">
+                    <Camera className="w-7 h-7 text-nerv-cyan animate-pulse" />
+                  </div>
+                  <p className="text-[11px] font-mono text-slate-300">
+                    Kamera belum aktif. Tekan tombol di bawah untuk memindai QR code.
+                  </p>
                   <button
                     onClick={startCam}
-                    className="px-3 py-1.5 rounded bg-nerv-cyan/20 border border-nerv-cyan text-nerv-cyan font-mono font-bold text-xs hover:bg-nerv-cyan/30 transition-colors"
+                    className="px-4 py-2 rounded bg-nerv-cyan hover:bg-cyan-400 text-black font-mono font-bold text-xs uppercase tracking-wider transition-colors shadow-[0_0_15px_rgba(6,182,212,0.4)]"
                   >
                     AKTIFKAN SCANNER KAMERA
                   </button>
@@ -603,14 +780,33 @@ interface Props {
 }
 
 export default function FamilyPage({ onBack, onPingClear }: Props) {
+  const { lang, t } = useLanguage()
   const myId = getMyAegisId()
+  const myName = getMyName()
+  const myNik = getMyNik()
+
   const [members, setMembers] = useState<FamilyMember[]>(loadFamily)
   const [showQR, setShowQR] = useState(false)
   const [showAdd, setShowAdd] = useState(false)
   const [viewMember, setViewMember] = useState<FamilyMember | null>(null)
+  const [deleteConfirmMember, setDeleteConfirmMember] = useState<FamilyMember | null>(null)
   const [pinging, setPinging] = useState(false)
   const [pingBanner, setPingBanner] = useState('')
-  const [incomingPing, setIncomingPing] = useState<{ fromId: string; fromName: string } | null>(null)
+  const [, setTicker] = useState(0)
+
+  const [incomingPing, setIncomingPing] = useState<{ fromId: string; fromName: string; nik?: string } | null>(() => {
+    try {
+      const raw = localStorage.getItem('atlas_pending_family_ping')
+      if (raw) {
+        const parsed = JSON.parse(raw)
+        if (parsed?.ts && Date.now() - parsed.ts < 300000) {
+          return parsed
+        }
+      }
+    } catch {}
+    return null
+  })
+
   const alarmRef = useRef<HTMLAudioElement | null>(null)
   const familyPingIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
@@ -620,6 +816,35 @@ export default function FamilyPage({ onBack, onPingClear }: Props) {
     alarmRef.current.loop = true
     return () => alarmRef.current?.pause()
   }, [onPingClear])
+
+  // Dynamic relative time ticker (updates every 30s)
+  useEffect(() => {
+    const t = setInterval(() => setTicker(k => k + 1), 30000)
+    return () => clearInterval(t)
+  }, [])
+
+  // Deep Link Receiver for Unit Join Link
+  useEffect(() => {
+    const handleDeepLink = (e?: any) => {
+      const joinId = e?.detail?.joinFamily || localStorage.getItem('atlas_pending_join_family')
+      const joinName = e?.detail?.inviteName || localStorage.getItem('atlas_pending_join_name') || 'Personel Unit'
+      const code = e?.detail?.code || localStorage.getItem('atlas_pending_join_code') || ''
+      const nik = e?.detail?.nik || localStorage.getItem('atlas_pending_join_nik') || ''
+      if (joinId) {
+        localStorage.removeItem('atlas_pending_join_family')
+        localStorage.removeItem('atlas_pending_join_name')
+        localStorage.removeItem('atlas_pending_join_code')
+        localStorage.removeItem('atlas_pending_join_nik')
+        setShowAdd(true)
+        setTimeout(() => {
+          window.dispatchEvent(new CustomEvent('atlas_modal_fill_join', { detail: { joinId, joinName, code, nik } }))
+        }, 150)
+      }
+    }
+    handleDeepLink()
+    window.addEventListener('atlas_deep_link_join', handleDeepLink)
+    return () => window.removeEventListener('atlas_deep_link_join', handleDeepLink)
+  }, [])
 
   useEffect(() => {
     if (incomingPing) {
@@ -641,6 +866,32 @@ export default function FamilyPage({ onBack, onPingClear }: Props) {
     saveFamily(m)
   }, [])
 
+  // Sync latest location of all family members from database on mount
+  useEffect(() => {
+    const fetchMemberLocations = async () => {
+      const current = loadFamily()
+      const ids = current.map(m => m.id).filter(Boolean)
+      if (ids.length === 0) return
+      try {
+        const { data } = await supabase
+          .from('location_updates')
+          .select('id, lat, lng, updated_at')
+          .in('id', ids)
+        if (data && data.length > 0) {
+          const locs = loadMemberLocs()
+          data.forEach((r: any) => {
+            if (r.lat && r.lng) {
+              locs[r.id] = { lat: r.lat, lng: r.lng, ts: new Date(r.updated_at).getTime() }
+            }
+          })
+          localStorage.setItem('aegisMemberLocs', JSON.stringify(locs))
+          setTicker(k => k + 1)
+        }
+      } catch {}
+    }
+    fetchMemberLocations()
+  }, [])
+
   // Broadcast my location to all linked members
   useEffect(() => {
     let watchId: string | null = null
@@ -652,7 +903,7 @@ export default function FamilyPage({ onBack, onPingClear }: Props) {
               const { latitude: lat, longitude: lng } = pos.coords
               saveMemberLoc(myId, lat, lng)
               const deviceInfo = (window as any).__DEVICE_MODEL__ || navigator.userAgent
-              aegisApi.broadcastLocation(myId, getMyName(), deviceInfo, lat, lng, 100).catch(() => {})
+              aegisApi.broadcastLocation(myId, myName, deviceInfo, lat, lng, 100, myNik).catch(() => {})
             },
             () => {},
             { enableHighAccuracy: false, timeout: 6000 }
@@ -663,7 +914,7 @@ export default function FamilyPage({ onBack, onPingClear }: Props) {
           const { latitude: lat, longitude: lng } = pos.coords
           saveMemberLoc(myId, lat, lng)
           const deviceInfo = (window as any).__DEVICE_MODEL__ || navigator.userAgent
-          aegisApi.broadcastLocation(myId, getMyName(), deviceInfo, lat, lng, 100).catch(() => {})
+          aegisApi.broadcastLocation(myId, myName, deviceInfo, lat, lng, 100, myNik).catch(() => {})
         })
       } catch (e) {
         console.warn("Family GPS error", e)
@@ -673,7 +924,7 @@ export default function FamilyPage({ onBack, onPingClear }: Props) {
     return () => {
       if (watchId) Geolocation.clearWatch({ id: watchId }).catch(() => {})
     }
-  }, [myId])
+  }, [myId, myName, myNik])
 
   // Real-time synchronization events
   useAegisSync((event) => {
@@ -687,9 +938,10 @@ export default function FamilyPage({ onBack, onPingClear }: Props) {
           name: fromName,
           role: 'Unit Personel',
           initials: fromName.split(' ').map((w: string) => w[0]).join('').slice(0, 2).toUpperCase(),
-          status: 'safe' as const,
+          status: 'unknown' as const,
           location: 'Bergabung via QR scan',
           updatedAgo: 'baru saja',
+          lastSeenTs: Date.now()
         }]
         save(updated)
       }
@@ -698,18 +950,28 @@ export default function FamilyPage({ onBack, onPingClear }: Props) {
       const id = event.id as string
       const lat = event.lat as number
       const lng = event.lng as number
-      if (id && lat && lng) saveMemberLoc(id, lat, lng)
+      if (id && lat && lng) {
+        saveMemberLoc(id, lat, lng)
+        setTicker(k => k + 1)
+      }
     }
     if (event.type === 'PING' && event.fromId !== myId) {
       if (!event.role) {
-        setIncomingPing({ fromId: event.fromId as string, fromName: event.fromName as string })
+        setIncomingPing({ fromId: event.fromId as string, fromName: event.fromName as string, nik: event.nik })
       }
     }
     if (event.type === 'PING_REPLY' && event.toId === myId) {
       const current = loadFamily()
-      save(current.map(m => m.id === event.fromId ? { ...m, status: 'safe' as const, updatedAgo: 'baru saja' } : m))
+      save(current.map(m => m.id === event.fromId ? { ...m, status: 'safe' as const, updatedAgo: 'baru saja', lastSeenTs: Date.now() } : m))
       setPingBanner(`${event.fromName} merespons: SAYA AMAN ✓`)
       setTimeout(() => setPingBanner(''), 4000)
+    }
+    if (event.type === 'PING_HELP' && event.toId === myId) {
+      const current = loadFamily()
+      save(current.map(m => m.id === event.fromId ? { ...m, status: 'danger' as const, updatedAgo: 'DARURAT! BUTUH BANTUAN', lastSeenTs: Date.now() } : m))
+      setPingBanner(`⚠️ ${event.fromName} MEMERLUKAN BANTUAN DARURAT!`)
+      if ('vibrate' in navigator) navigator.vibrate([300, 100, 300, 100, 300])
+      setTimeout(() => setPingBanner(''), 8000)
     }
   })
 
@@ -718,15 +980,16 @@ export default function FamilyPage({ onBack, onPingClear }: Props) {
     save(updated)
   }
 
-  const handleDelete = (id: string) => {
-    if (!confirm('Hapus personel ini dari grup unit?')) return
-    save(members.filter(m => m.id !== id))
+  const handleDelete = (member: FamilyMember) => {
+    setDeleteConfirmMember(member)
   }
 
   const handlePing = () => {
     setPinging(true)
     if ('vibrate' in navigator) navigator.vibrate([100, 50, 100])
-    aegisApi.ping(myId, getMyName())
+    const current = loadFamily()
+    save(current.map(m => ({ ...m, status: 'waiting' as const, updatedAgo: 'menunggu respon...' })))
+    aegisApi.ping(myId, myName)
     setTimeout(() => setPinging(false), 3000)
   }
 
@@ -739,8 +1002,8 @@ export default function FamilyPage({ onBack, onPingClear }: Props) {
         transition={{ duration: 0.22 }}
         className="fixed inset-0 z-[1800] flex flex-col overflow-y-auto custom-scrollbar bg-nerv-bg text-slate-200"
       >
-        {/* NERV Telemetry Header */}
-        <div className="shrink-0 px-4 pt-4 pb-3 border-b border-nerv-border bg-[#0B0F19] flex items-center justify-between">
+        {/* A.T.L.A.S Telemetry Header */}
+        <div className="shrink-0 px-4 pt-[max(env(safe-area-inset-top,0px),1rem)] pb-3 border-b border-nerv-border bg-[#0B0F19] flex items-center justify-between">
           <div className="flex items-center gap-3 min-w-0">
             {onBack && (
               <button
@@ -758,7 +1021,7 @@ export default function FamilyPage({ onBack, onPingClear }: Props) {
                 </p>
               </div>
               <h2 className="text-sm font-mono font-bold text-white truncate">
-                LINKED FAMILY UNITS [{members.length}]
+                {lang === 'id' ? `UNIT KELUARGA TERTAUT [${members.length}]` : `LINKED FAMILY UNITS [${members.length}]`}
               </h2>
             </div>
           </div>
@@ -769,7 +1032,7 @@ export default function FamilyPage({ onBack, onPingClear }: Props) {
               className="px-2.5 py-1.5 rounded bg-black/60 border border-nerv-border hover:border-nerv-cyan flex items-center gap-1.5 font-mono text-xs text-nerv-cyan transition-colors"
             >
               <QrCode className="w-3.5 h-3.5" />
-              <span className="text-[10px] font-bold">MY QR</span>
+              <span className="text-[10px] font-bold">{lang === 'id' ? 'QR SAYA' : 'MY QR'}</span>
             </button>
           </div>
         </div>
@@ -787,6 +1050,30 @@ export default function FamilyPage({ onBack, onPingClear }: Props) {
         </AnimatePresence>
 
         <div className="flex-1 px-4 py-4 space-y-3 pb-24">
+          {/* USER'S OWN UNIT IDENTITY CARD (TOP OF DIRECTORY) */}
+          <div className="p-3.5 rounded-lg border border-nerv-cyan/40 bg-nerv-card/90 border-l-4 border-l-nerv-cyan relative overflow-hidden shadow-lg">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded bg-nerv-cyan/15 border border-nerv-cyan/50 flex items-center justify-center font-mono font-bold text-sm text-nerv-cyan shrink-0">
+                {myName.split(' ').map((w: string) => w[0]).join('').slice(0, 2).toUpperCase()}
+              </div>
+              <div className="flex-1 min-w-0">
+                <div className="flex flex-wrap items-center gap-1.5">
+                  <p className="text-sm font-mono font-bold text-white break-words">{myName} (Anda)</p>
+                  <span className="text-[8px] font-mono text-nerv-cyan uppercase px-1.5 py-0.5 rounded bg-nerv-cyan/10 border border-nerv-cyan/30 shrink-0 font-bold">
+                    UNIT UTAMA // PERANGKAT INI
+                  </span>
+                </div>
+                <p className="text-[10px] font-mono text-slate-400 mt-1 select-all">
+                  {myNik ? `NIK: ${myNik}` : `ID: #${myId}`}
+                </p>
+              </div>
+              <div className="flex items-center gap-1.5 px-2 py-0.5 rounded bg-nerv-green/10 border border-nerv-green/30 shrink-0">
+                <div className="w-1.5 h-1.5 rounded-full bg-nerv-green animate-pulse" />
+                <span className="text-[9px] font-mono font-bold text-nerv-green uppercase">ONLINE</span>
+              </div>
+            </div>
+          </div>
+
           {/* Tactical Ping Broadcast Button */}
           {members.length > 0 && (
             <button
@@ -799,7 +1086,9 @@ export default function FamilyPage({ onBack, onPingClear }: Props) {
               }`}
             >
               <Radio className={`w-4 h-4 ${pinging ? 'animate-spin' : ''}`} />
-              {pinging ? 'TRANSMITTING SIGNAL TO ALL UNITS...' : 'BROADCAST PING TO ALL UNITS'}
+              {pinging 
+                ? (lang === 'id' ? 'MENTRANSMISIKAN SINYAL KE SEMUA UNIT...' : 'TRANSMITTING SIGNAL TO ALL UNITS...')
+                : (lang === 'id' ? 'SIARKAN PING KE SEMUA UNIT' : 'BROADCAST PING TO ALL UNITS')}
             </button>
           )}
 
@@ -810,16 +1099,18 @@ export default function FamilyPage({ onBack, onPingClear }: Props) {
                 <Shield className="w-8 h-8 text-nerv-cyan/60" />
               </div>
               <h3 className="text-white font-mono font-bold text-sm mb-1 uppercase tracking-wider">
-                TIDAK ADA PERSONEL TERTAUT
+                {lang === 'id' ? 'TIDAK ADA PERSONEL TERTAUT' : 'NO LINKED PERSONNEL'}
               </h3>
               <p className="text-slate-400 text-xs font-sans max-w-xs mx-auto mb-4">
-                Hubungkan anggota keluarga ke jaringan darurat A.T.L.A.S dengan memindai kode QR.
+                {lang === 'id' 
+                  ? 'Hubungkan anggota keluarga ke jaringan darurat A.T.L.A.S dengan memindai kode QR.'
+                  : 'Connect family members to A.T.L.A.S emergency network by scanning QR code.'}
               </p>
               <button
                 onClick={() => setShowAdd(true)}
                 className="inline-flex items-center gap-2 px-4 py-2 rounded bg-nerv-cyan/20 border border-nerv-cyan text-nerv-cyan font-mono text-xs font-bold hover:bg-nerv-cyan/30 transition-colors"
               >
-                <UserPlus className="w-3.5 h-3.5" /> TAUTKAN ANGGOTA SEKARANG
+                <UserPlus className="w-3.5 h-3.5" /> {lang === 'id' ? 'TAUTKAN ANGGOTA SEKARANG' : 'LINK MEMBERS NOW'}
               </button>
             </div>
           )}
@@ -843,12 +1134,16 @@ export default function FamilyPage({ onBack, onPingClear }: Props) {
                     {m.initials}
                   </div>
                   <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2">
-                      <p className="text-sm font-mono font-bold text-white truncate">{m.name}</p>
-                      <span className="text-[8px] font-mono text-slate-500 uppercase px-1 rounded bg-black/40 border border-nerv-border">
-                        {m.role || 'PERSONNEL'}
+                    <div className="flex flex-wrap items-center gap-1.5">
+                      <p className="text-sm font-mono font-bold text-white break-words">{m.name}</p>
+                      <span className="text-[9px] font-mono text-nerv-cyan font-bold uppercase px-1.5 py-0.5 rounded bg-nerv-cyan/10 border border-nerv-cyan/30 shrink-0">
+                        {m.role || 'UNIT PERSONEL'}
                       </span>
                     </div>
+                    {/* FULL NIK DISPLAY UNDER NAME */}
+                    <p className="text-[10px] font-mono text-slate-400 mt-0.5 select-all font-semibold">
+                      {m.nik ? `NIK: ${m.nik}` : `ID: #${m.id}`}
+                    </p>
                     <div className="mt-1">
                       <StatusChip status={m.status} />
                     </div>
@@ -866,8 +1161,9 @@ export default function FamilyPage({ onBack, onPingClear }: Props) {
                       <Navigation2 className="w-3.5 h-3.5" />
                     </button>
                     <button
-                      onClick={() => handleDelete(m.id)}
+                      onClick={() => handleDelete(m)}
                       className="p-2 rounded border border-nerv-border bg-black/40 text-slate-500 hover:text-nerv-red hover:border-nerv-red/50 transition-colors"
+                      title="Hapus unit"
                     >
                       <Trash2 className="w-3.5 h-3.5" />
                     </button>
@@ -884,9 +1180,9 @@ export default function FamilyPage({ onBack, onPingClear }: Props) {
                       <span className="text-slate-500">○ Sinyal koordinat standby</span>
                     )}
                   </div>
-                  <div className="flex items-center gap-1 text-slate-500 text-[9px]">
-                    <Clock className="w-3 h-3" />
-                    <span>{m.updatedAgo}</span>
+                  <div className="flex items-center gap-1 text-slate-400 text-[9px]">
+                    <Clock className="w-3 h-3 text-nerv-cyan shrink-0" />
+                    <span>{formatLastSeen(m, memberLoc?.ts)}</span>
                   </div>
                 </div>
               </motion.div>
@@ -940,18 +1236,125 @@ export default function FamilyPage({ onBack, onPingClear }: Props) {
                   TACTICAL EMERGENCY PING
                 </p>
                 <h2 className="text-base font-bold text-white mb-2">PANGGILAN DARI UNIT</h2>
-                <p className="text-xs text-slate-300 mb-5 font-sans leading-relaxed">
+                <p className="text-xs text-slate-300 mb-1 font-sans leading-relaxed">
                   <b className="text-white font-mono">{incomingPing.fromName}</b> mengirimkan sinyal darurat. Segera
                   kirimkan konfirmasi keselamatan Anda.
                 </p>
+                {incomingPing.nik && (
+                  <p className="text-[9px] text-nerv-cyan font-mono mb-4">
+                    NIK: {incomingPing.nik}
+                  </p>
+                )}
+                <div className="w-full space-y-2.5">
+                  <button
+                    onClick={() => {
+                      const targetId = incomingPing.fromId
+                      setIncomingPing(null)
+                      localStorage.removeItem('atlas_pending_family_ping')
+                      if (familyPingIntervalRef.current) {
+                        clearInterval(familyPingIntervalRef.current)
+                        familyPingIntervalRef.current = null
+                      }
+                      alarmRef.current?.pause?.()
+                      aegisApi.pingReply(myId, myName, targetId, myNik)
+                      setPingBanner('KONFIRMASI TERKIRIM: SAYA AMAN ✓')
+                      setTimeout(() => setPingBanner(''), 4000)
+                    }}
+                    className="w-full py-3.5 bg-nerv-green hover:bg-emerald-600 text-black rounded font-mono font-bold text-xs uppercase tracking-widest shadow-[0_0_20px_rgba(34,197,94,0.4)] transition-all flex items-center justify-center gap-2"
+                  >
+                    <CheckCircle className="w-4 h-4" />
+                    <span>KONFIRMASI: SAYA AMAN ✓</span>
+                  </button>
+                  <button
+                    onClick={() => {
+                      const targetId = incomingPing.fromId
+                      const targetName = incomingPing.fromName
+                      // Instant response: dismiss modal & stop alarm immediately!
+                      setIncomingPing(null)
+                      localStorage.removeItem('atlas_pending_family_ping')
+                      if (familyPingIntervalRef.current) {
+                        clearInterval(familyPingIntervalRef.current)
+                        familyPingIntervalRef.current = null
+                      }
+                      alarmRef.current?.pause?.()
+                      setPingBanner(`⚠️ SINYAL MEMERLUKAN BANTUAN DIKIRIM KE ${targetName}!`)
+                      if ('vibrate' in navigator) navigator.vibrate([200, 100, 200])
+                      setTimeout(() => setPingBanner(''), 6000)
+
+                      // Dispatch in background with fallback coordinates
+                      ;(async () => {
+                        let lat: number | undefined
+                        let lng: number | undefined
+                        try {
+                          const savedPos = localStorage.getItem('atlas_user_position')
+                          if (savedPos) {
+                            const parsed = JSON.parse(savedPos)
+                            if (Array.isArray(parsed) && parsed.length >= 2) {
+                              lat = parsed[0]
+                              lng = parsed[1]
+                            }
+                          }
+                          const pos = await Geolocation.getCurrentPosition({ timeout: 4000 }).catch(() => null)
+                          if (pos?.coords) {
+                            lat = pos.coords.latitude
+                            lng = pos.coords.longitude
+                          }
+                        } catch {}
+                        aegisApi.pingHelp(myId, myName, targetId, lat, lng, myNik)
+                      })()
+                    }}
+                    className="w-full py-3.5 bg-nerv-red hover:bg-red-700 text-white rounded font-mono font-bold text-xs uppercase tracking-widest shadow-[0_0_20px_rgba(239,68,68,0.5)] transition-all flex items-center justify-center gap-2 animate-pulse"
+                  >
+                    <AlertTriangle className="w-4 h-4" />
+                    <span>⚠️ MEMERLUKAN BANTUAN DARURAT</span>
+                  </button>
+                </div>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Delete Confirmation Modal */}
+      <AnimatePresence>
+        {deleteConfirmMember && (
+          <motion.div
+            initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+            className="fixed inset-0 z-[3000] flex items-center justify-center bg-black/80 backdrop-blur-sm p-4"
+          >
+            <motion.div
+              initial={{ scale: 0.95 }} animate={{ scale: 1 }} exit={{ scale: 0.95 }}
+              className="w-full max-w-xs bg-nerv-card border border-nerv-red/60 rounded-lg p-5 shadow-2xl font-mono text-center"
+            >
+              <div className="w-12 h-12 rounded-full bg-nerv-red/20 border border-nerv-red flex items-center justify-center mx-auto mb-3">
+                <Trash2 className="w-6 h-6 text-nerv-red" />
+              </div>
+              <h3 className="text-sm font-bold text-white uppercase mb-1">HAPUS UNIT DARI DAFTAR?</h3>
+              <p className="text-xs text-slate-300 font-sans mb-1">
+                Apakah Anda yakin ingin memutuskan tautan dengan <b className="text-white font-mono">{deleteConfirmMember.name}</b>?
+              </p>
+              {deleteConfirmMember.nik && (
+                <p className="text-[10px] text-nerv-cyan font-mono mb-4">
+                  NIK: {deleteConfirmMember.nik}
+                </p>
+              )}
+              <div className="flex gap-2 pt-2">
                 <button
+                  type="button"
                   onClick={() => {
-                    aegisApi.pingReply(myId, getMyName(), incomingPing.fromId)
-                    setIncomingPing(null)
+                    save(members.filter(m => m.id !== deleteConfirmMember.id))
+                    setDeleteConfirmMember(null)
                   }}
-                  className="w-full py-3.5 bg-nerv-orange hover:bg-orange-600 text-black rounded font-mono font-bold text-xs uppercase tracking-widest shadow-[0_0_20px_rgba(255,87,34,0.5)] transition-all"
+                  className="flex-1 py-2.5 rounded bg-nerv-red hover:bg-red-600 text-white font-bold text-xs uppercase tracking-wider transition-colors"
                 >
-                  KONFIRMASI: SAYA AMAN ✓
+                  HAPUS UNIT
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setDeleteConfirmMember(null)}
+                  className="px-4 py-2.5 rounded bg-black/60 border border-nerv-border text-slate-300 hover:text-white text-xs"
+                >
+                  BATAL
                 </button>
               </div>
             </motion.div>

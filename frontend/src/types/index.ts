@@ -2,7 +2,7 @@
 // GLOBAL TYPES — Semua tipe data yang digunakan di seluruh app
 // ═══════════════════════════════════════════════════════════════
 
-export type ActivePage = 'map' | 'history' | 'settings' | 'sensors' | 'status' | 'navigate' | 'family' | 'guides'
+export type ActivePage = 'map' | 'history' | 'settings' | 'sensors' | 'status' | 'navigate' | 'family' | 'guides' | 'menu'
 export type UserRole = 'admin' | 'user'
 export type AppUserRole = UserRole | null
 export type HistoryFilter = 'all' | 'real' | 'simulation'
@@ -45,7 +45,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
 }
 
 // ── Public User Types ──────────────────────────────────────────
-export type FamilyMemberStatus = 'safe' | 'danger' | 'unknown'
+export type FamilyMemberStatus = 'safe' | 'danger' | 'unknown' | 'waiting'
 
 export interface FamilyMember {
   id: string
@@ -56,6 +56,8 @@ export interface FamilyMember {
   location: string
   updatedAgo: string
   alertLabel?: string
+  nik?: string
+  lastSeenTs?: number
 }
 
 export type SensorStatus = 'online' | 'degraded' | 'offline'

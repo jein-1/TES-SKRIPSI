@@ -9,6 +9,7 @@ import {
   Heart, AlertTriangle, CheckCircle2, Shield
 } from 'lucide-react'
 import { motion, AnimatePresence } from 'motion/react'
+import { useLanguage } from '../../lib/i18n'
 
 interface DirectiveItem {
   id: string
@@ -210,6 +211,7 @@ const FIRST_AID_PROTOCOLS = [
 ]
 
 export default function GuidesPage({ onNavigateMap, onBack }: { onNavigateMap: () => void; onBack?: () => void }) {
+  const { lang, t } = useLanguage()
   const [activeTab, setActiveTab] = useState<'disaster' | 'medical'>('disaster')
   const [expandedId, setExpandedId] = useState<string>('tsunami')
 
@@ -221,8 +223,8 @@ export default function GuidesPage({ onNavigateMap, onBack }: { onNavigateMap: (
       transition={{ duration: 0.22 }}
       className="fixed inset-0 z-[1800] flex flex-col overflow-y-auto custom-scrollbar bg-nerv-bg text-slate-200"
     >
-      {/* NERV Header */}
-      <div className="shrink-0 px-4 pt-4 pb-3 border-b border-nerv-border bg-[#0B0F19] flex items-center justify-between sticky top-0 z-30 backdrop-blur-md">
+      {/* A.T.L.A.S Header */}
+      <div className="shrink-0 px-4 pt-[max(env(safe-area-inset-top,0px),1rem)] pb-3 border-b border-nerv-border bg-[#0B0F19] flex items-center justify-between sticky top-0 z-30 backdrop-blur-md">
         <div className="flex items-center gap-3 min-w-0">
           {onBack && (
             <button
@@ -240,7 +242,7 @@ export default function GuidesPage({ onNavigateMap, onBack }: { onNavigateMap: (
               </p>
             </div>
             <h2 className="text-sm font-mono font-bold text-white truncate uppercase">
-              BUKU PANDUAN 6 BENCANA &amp; P3K
+              {lang === 'id' ? 'BUKU PANDUAN 6 BENCANA & P3K' : '6 DISASTER DIRECTIVES & FIRST AID'}
             </h2>
           </div>
         </div>
@@ -262,7 +264,7 @@ export default function GuidesPage({ onNavigateMap, onBack }: { onNavigateMap: (
             }`}
           >
             <ShieldAlert className="w-3.5 h-3.5" />
-            <span>6 PROTOKOL BENCANA</span>
+            <span>{lang === 'id' ? '6 PROTOKOL BENCANA' : '6 DISASTER DIRECTIVES'}</span>
           </button>
 
           <button
@@ -274,7 +276,7 @@ export default function GuidesPage({ onNavigateMap, onBack }: { onNavigateMap: (
             }`}
           >
             <Heart className="w-3.5 h-3.5" />
-            <span>PANDUAN MEDIS P3K</span>
+            <span>{lang === 'id' ? 'PANDUAN MEDIS P3K' : 'FIRST AID PROTOCOLS'}</span>
           </button>
         </div>
 
@@ -435,13 +437,17 @@ export default function GuidesPage({ onNavigateMap, onBack }: { onNavigateMap: (
           className="w-full py-3.5 rounded-lg bg-nerv-orange hover:bg-orange-600 text-black font-mono font-bold text-xs uppercase tracking-widest flex items-center justify-center gap-2 shadow-[0_0_20px_rgba(255,87,34,0.35)] transition-all"
         >
           <ArrowRight className="w-4 h-4" />
-          BUKA KOKPIT PETA RUTE EVAKUASI
+          {lang === 'id' ? 'BUKA KOKPIT PETA RUTE EVAKUASI' : 'OPEN EVACUATION MAP COCKPIT'}
         </button>
 
         {/* Offline Cache Assurance */}
         <div className="flex items-center justify-center gap-2 pt-1 font-mono text-[10px] text-slate-500">
           <div className="w-1.5 h-1.5 rounded-full bg-nerv-green animate-pulse" />
-          <span>OFFLINE LOCAL CACHE VERIFIED // SELURUH DOKUMEN AKTIF TANPA INTERNET</span>
+          <span>
+            {lang === 'id' 
+              ? 'OFFLINE LOCAL CACHE VERIFIED // SELURUH DOKUMEN AKTIF TANPA INTERNET'
+              : 'OFFLINE LOCAL CACHE VERIFIED // ALL DIRECTIVES OFFLINE READY'}
+          </span>
         </div>
       </div>
     </motion.div>

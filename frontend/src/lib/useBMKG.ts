@@ -56,14 +56,18 @@ export function useBMKG() {
           setGempa((prev) => {
             // Jika ada gempa baru (berdasarkan DateTime) yang mag >= 4.0
             if (prev && prev.DateTime !== data.DateTime && data.Magnitude && parseFloat(data.Magnitude) >= 4.0) {
-              if (Notification.permission === "granted") {
-                new Notification("Info Gempa BMKG Terkini", {
-                  body: `Mag: ${data.Magnitude}, Kd: ${data.Kedalaman}. ${data.Wilayah}`,
-                });
+              if (typeof window !== 'undefined' && 'Notification' in window && typeof Notification !== 'undefined' && Notification.permission === "granted") {
+                try {
+                  new Notification("Info Gempa BMKG Terkini", {
+                    body: `Mag: ${data.Magnitude}, Kd: ${data.Kedalaman}. ${data.Wilayah}`,
+                  });
+                } catch {}
               }
-            } else if (!prev && Notification.permission !== "denied" && Notification.permission !== "granted") {
-              // Minta izin notifikasi saat load pertama (bisa diabaikan oleh browser modern jika tidak di-trigger oleh user click)
-              Notification.requestPermission().catch(() => {});
+            } else if (!prev && typeof window !== 'undefined' && 'Notification' in window && typeof Notification !== 'undefined' && Notification.permission !== "denied" && Notification.permission !== "granted") {
+              // Minta izin notifikasi browser jika didukung
+              try {
+                Notification.requestPermission().catch(() => {});
+              } catch {}
             }
             return data as GempaData;
           });

@@ -12,6 +12,7 @@ import {
 } from 'lucide-react'
 import { useLanguage } from '../../lib/i18n'
 import { fetchClientIp } from '../../lib/geocode'
+import { supabase } from '../../lib/supabaseClient'
 
 interface Props {
   onComplete: (name: string, nik: string) => void
@@ -200,12 +201,61 @@ export default function FirstVisitModal({ onComplete }: Props) {
       .join(' ')
   }
 
-  const handleSubmit = () => {
+  const handleSubmit = async () => {
     const err = validate()
     if (err) { setError(err); return }
     setSubmitting(true)
+    setError('')
+
+    const cleanId = idNumber.trim()
+    const myTerminalId = localStorage.getItem("atlasTerminalId") || localStorage.getItem("aegisTerminalId") || ""
+
+    try {
+      // Validasi NIK unik di server/database Supabase
+      const { data: existingUsers } = await supabase
+        .from('location_updates')
+        .select('id, name, nik')
+        .eq('nik', cleanId)
+        .limit(1)
+
+      if (existingUsers && existingUsers.length > 0) {
+        const existing = existingUsers[0]
+        const inputCleanName = name.trim().toLowerCase()
+        const registeredName = (existing.name || '').trim().toLowerCase()
+
+        // Pemulihan sesi terminal: Jika nama cocok, izinkan registrasi ulang setelah Clear Data / Reset
+        if (registeredName && registeredName === inputCleanName) {
+          if (existing.id && (existing.id.toUpperCase().includes('NODE-01') || existing.id === 'NODE-01')) {
+            localStorage.setItem('atlas_is_node_01', 'true')
+            localStorage.setItem('atlasTerminalId', 'NODE-01')
+            localStorage.setItem('aegisTerminalId', 'NODE-01')
+          }
+          if (myTerminalId && existing.id !== myTerminalId) {
+            try {
+              await supabase
+                .from('location_updates')
+                .update({ id: myTerminalId, updated_at: new Date().toISOString() })
+                .eq('nik', cleanId)
+            } catch (upErr) {
+              console.warn("Reclaim NIK update notice:", upErr)
+            }
+          }
+        } else if (myTerminalId && existing.id !== myTerminalId) {
+          setError(
+            lang === 'id'
+              ? `NIK [${cleanId}] sudah terdaftar atas nama pengguna lain (${existing.name}). Pastikan ejaan nama lengkap sesuai e-KTP.`
+              : `NIK [${cleanId}] is already registered under another name (${existing.name}). Verification rejected.`
+          )
+          setSubmitting(false)
+          return
+        }
+      }
+    } catch (e) {
+      console.warn("NIK uniqueness check warning:", e)
+    }
+
     setTimeout(() => {
-      onComplete(toTitleCase(name), idNumber.trim())
+      onComplete(toTitleCase(name), cleanId)
     }, 400)
   }
 
@@ -357,8 +407,8 @@ export default function FirstVisitModal({ onComplete }: Props) {
                   <AlertOctagon className="w-4 h-4 shrink-0 mt-0.5" />
                   <span>
                     {lang === 'id'
-                      ? 'Persetujuan protokol keselamatan darurat diperlukan untuk mengakses sistem telemetri pertahanan A.T.L.A.S.'
-                      : 'Acceptance of the emergency safety protocol is required to access the A.T.L.A.S defense telemetry network.'}
+                      ? 'Persetujuan protokol keselamatan darurat diperlukan untuk mengakses sistem A.T.L.A.S (Sistem Otonom Pemetaan Ancaman Bahaya dan Peringatan Darurat).'
+                      : 'Acceptance of the emergency safety protocol is required to access the A.T.L.A.S network (Autonomous Threat Location & Alert System).'}
                   </span>
                 </motion.div>
               )}

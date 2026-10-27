@@ -1,6 +1,6 @@
 {
   "name": "atlas-disaster-system",
-  "version": "0.0.30",
+  "version": "1.0.5",
   "type": "module",
   "scripts": {
     "dev:frontend": "cd frontend && npm run dev",

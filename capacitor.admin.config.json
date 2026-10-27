@@ -1,19 +1,19 @@
 {
-  "appId": "com.dimsstsu.admin",
-  "appName": "AEGIS ADMIN",
+  "appId": "id.atlass.app",
+  "appName": "// A.T.L.A.S",
   "webDir": "www",
   "plugins": {
     "SplashScreen": {
       "launchShowDuration": 2000,
       "launchAutoHide": true,
-      "backgroundColor": "#080e1a",
+      "backgroundColor": "#07090e",
       "androidSplashResourceName": "splash",
       "androidScaleType": "CENTER_CROP",
       "showSpinner": false
     },
     "StatusBar": {
       "style": "Dark",
-      "backgroundColor": "#0a1020"
+      "backgroundColor": "#07090e"
     },
     "Geolocation": {},
     "Camera": {}

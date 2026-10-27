@@ -14,8 +14,8 @@ const API_BASE: string = IS_NATIVE
 
 /** Daftarkan browser ke Web Push server */
 export async function registerWebPush(): Promise<boolean> {
-  if (!('serviceWorker' in navigator) || !('PushManager' in window)) {
-    console.log('[Push] Web Push tidak didukung di browser ini')
+  if (typeof window === 'undefined' || !('serviceWorker' in navigator) || !('PushManager' in window) || !('Notification' in window) || typeof Notification === 'undefined') {
+    console.log('[Push] Web Push tidak didukung di lingkungan ini')
     return false
   }
   try {

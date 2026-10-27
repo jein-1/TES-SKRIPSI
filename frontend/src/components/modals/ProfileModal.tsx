@@ -44,6 +44,30 @@ export default function ProfileModal({ isOpen, onClose, userName, userNik, termi
   const [clientIp, setClientIp] = useState<string>('Mendeteksi IP...')
   const [showConfirmReset, setShowConfirmReset] = useState(false)
   const [copiedField, setCopiedField] = useState<'name' | 'nik' | null>(null)
+  
+  // Developer Node-01 Authentication State
+  const [isNode01, setIsNode01] = useState(() => {
+    return localStorage.getItem('atlas_is_node_01') === 'true' || 
+           (terminalId && (terminalId.includes('01') || terminalId.toUpperCase().includes('NODE-01')))
+  })
+  const [showClaimPin, setShowClaimPin] = useState(false)
+  const [claimPin, setClaimPin] = useState('')
+  const [pinError, setPinError] = useState(false)
+
+  const handleClaimNode01 = () => {
+    const clean = claimPin.trim()
+    if (clean === '0101' || clean === '7271' || clean === '1945') {
+      localStorage.setItem('atlas_is_node_01', 'true')
+      localStorage.setItem('atlasTerminalId', 'NODE-01')
+      localStorage.setItem('aegisTerminalId', 'NODE-01')
+      setIsNode01(true)
+      setShowClaimPin(false)
+      setPinError(false)
+      window.location.reload()
+    } else {
+      setPinError(true)
+    }
+  }
 
   useEffect(() => {
     let active = true
@@ -111,20 +135,90 @@ export default function ProfileModal({ isOpen, onClose, userName, userNik, termi
 
           <div className="space-y-4 font-mono">
             {/* Terminal ID & Node Status */}
-            <div className="p-3 rounded-lg bg-black/60 border border-nerv-border flex items-center justify-between">
-              <div>
-                <span className="text-[9px] text-slate-500 uppercase block">NODE IDENTITY</span>
-                <span className="text-xs font-bold text-nerv-cyan tracking-wider">
-                  #{terminalId ? terminalId.toUpperCase() : 'CIV-01-NODE'}
-                </span>
+            <div className="p-3 rounded-lg bg-black/60 border border-nerv-border space-y-2">
+              <div className="flex items-center justify-between">
+                <div>
+                  <span className="text-[9px] text-slate-500 uppercase block font-mono">
+                    {lang === 'id' ? 'IDENTITAS NODE' : 'NODE IDENTITY'}
+                  </span>
+                  <div className="flex items-center gap-2 mt-0.5">
+                    <span className={`text-xs font-black tracking-wider ${
+                      isNode01 ? 'text-amber-400 font-mono' : 'text-nerv-cyan font-mono'
+                    }`}>
+                      {isNode01 
+                        ? (lang === 'id' ? 'NODE-01 // KOMANDO' : 'NODE-01 // COMMAND') 
+                        : (lang === 'id' 
+                            ? `NODE-P // WARGA #${terminalId ? (terminalId.startsWith('NODE-P') ? terminalId.replace('NODE-P', '') : terminalId.slice(-4).toUpperCase()) : '001'}` 
+                            : `NODE-P // CITIZEN #${terminalId ? (terminalId.startsWith('NODE-P') ? terminalId.replace('NODE-P', '') : terminalId.slice(-4).toUpperCase()) : '001'}`)}
+                    </span>
+                    <span className={`text-[8px] font-bold px-1.5 py-0.5 rounded uppercase font-mono ${
+                      isNode01 
+                        ? 'bg-amber-500/20 border border-amber-500/50 text-amber-300'
+                        : 'bg-nerv-cyan/20 border border-nerv-cyan/40 text-nerv-cyan'
+                    }`}>
+                      {isNode01 
+                        ? (lang === 'id' ? 'OPERATOR KOMANDO' : 'COMMAND OPERATOR')
+                        : (lang === 'id' ? 'TERDAFTAR RESMI' : 'OFFICIALLY REGISTERED')}
+                    </span>
+                  </div>
+                </div>
+
+                <div className="text-right">
+                  <span className="text-[9px] text-slate-500 uppercase block">STATUS</span>
+                  <span className="text-[10px] font-bold text-nerv-green inline-flex items-center gap-1">
+                    <span className="w-1.5 h-1.5 rounded-full bg-nerv-green animate-ping inline-block" />
+                    AUTHENTICATED
+                  </span>
+                </div>
               </div>
-              <div className="text-right">
-                <span className="text-[9px] text-slate-500 uppercase block">TERMINAL STATUS</span>
-                <span className="text-[10px] font-bold text-nerv-green inline-flex items-center gap-1">
-                  <span className="w-1.5 h-1.5 rounded-full bg-nerv-green animate-ping inline-block" />
-                  AUTHENTICATED
-                </span>
-              </div>
+
+              {/* Node-01 Verification (for command device setup) */}
+              {!isNode01 && (
+                <div className="pt-2 border-t border-white/5 flex items-center justify-between">
+                  <span className="text-[9px] text-slate-500">
+                    {lang === 'id' ? 'Pindah perangkat dinas?' : 'Transferred command device?'}
+                  </span>
+                  {!showClaimPin ? (
+                    <button
+                      type="button"
+                      onClick={() => setShowClaimPin(true)}
+                      className="text-[9px] font-mono text-nerv-orange hover:underline font-bold"
+                    >
+                      {lang === 'id' ? '[ Verifikasi Node-01 ]' : '[ Verify Node-01 ]'}
+                    </button>
+                  ) : (
+                    <div className="flex items-center gap-1.5">
+                      <input
+                        type="password"
+                        maxLength={6}
+                        placeholder="PIN"
+                        value={claimPin}
+                        onChange={(e) => setClaimPin(e.target.value)}
+                        className="w-16 px-1.5 py-0.5 text-xs bg-black border border-nerv-border rounded text-center text-white font-mono outline-none"
+                      />
+                      <button
+                        type="button"
+                        onClick={handleClaimNode01}
+                        className="px-2 py-0.5 text-[9px] bg-nerv-orange text-black font-bold rounded uppercase hover:brightness-110"
+                      >
+                        OK
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => { setShowClaimPin(false); setPinError(false); }}
+                        className="px-1 text-[9px] text-slate-400"
+                      >
+                        ✕
+                      </button>
+                    </div>
+                  )}
+                </div>
+              )}
+              {pinError && (
+                <p className="text-[9px] text-red-400 font-sans">
+                  {lang === 'id' ? 'PIN Komando tidak valid.' : 'Invalid Command PIN.'}
+                </p>
+              )}
             </div>
 
             {/* Locked User Identity */}
@@ -230,45 +324,6 @@ export default function ProfileModal({ isOpen, onClose, userName, userNik, termi
               </div>
             </div>
 
-            {/* Language Switcher */}
-            <div className="p-3 rounded-lg bg-black/40 border border-nerv-border flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <Globe className="w-4 h-4 text-nerv-cyan" />
-                <div>
-                  <span className="text-[10px] font-bold text-white uppercase block">
-                    {lang === 'id' ? 'BAHASA APLIKASI' : 'SYSTEM LANGUAGE'}
-                  </span>
-                  <span className="text-[9px] text-slate-400 font-sans">
-                    {lang === 'id' ? 'Pilih bahasa antarmuka sistem' : 'Select interface language'}
-                  </span>
-                </div>
-              </div>
-
-              <div className="flex items-center gap-1 bg-black/80 p-1 rounded border border-nerv-border">
-                <button
-                  type="button"
-                  onClick={() => setLanguage('id')}
-                  className={`px-2.5 py-1 text-[10px] font-bold rounded transition-colors ${
-                    lang === 'id'
-                      ? 'bg-nerv-orange text-black font-black'
-                      : 'text-slate-400 hover:text-white'
-                  }`}
-                >
-                  ID
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setLanguage('en')}
-                  className={`px-2.5 py-1 text-[10px] font-bold rounded transition-colors ${
-                    lang === 'en'
-                      ? 'bg-nerv-orange text-black font-black'
-                      : 'text-slate-400 hover:text-white'
-                  }`}
-                >
-                  EN
-                </button>
-              </div>
-            </div>
 
             {/* Danger Zone: Reset Device */}
             <div className="pt-2 border-t border-nerv-border">

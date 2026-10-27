@@ -1,0 +1,52 @@
+PROPRIETARY AND CONFIDENTIAL SOFTWARE LICENSE
+COPYRIGHT (C) 2026 A.T.L.A.S — ALL RIGHTS RESERVED
+(Autonomous Threat Location & Alert System)
+
+═══════════════════════════════════════════════════════════════════════════════
+PERINGATAN HAK CIPTA & LISENSI KEPEMILIKAN TERTUTUP (PROPRIETARY LICENSE)
+═══════════════════════════════════════════════════════════════════════════════
+
+PERANGKAT LUNAK INI BUKAN MERUPAKAN PERANGKAT LUNAK SUMBER TERBUKA (NOT OPEN SOURCE).
+
+Seluruh kode sumber, arsitektur sistem, modul algoritma penentuan posisi telemetri,
+desain antarmuka taktis (UI/UX), skema basis data, aset visual, dan dokumentasi 
+terkait proyek A.T.L.A.S (Autonomous Threat Location & Alert System) adalah hak milik 
+eksklusif dan berhak cipta penuh dari Pemilik Hak Cipta.
+
+Dengan mengakses, melihat, atau mengunduh repositori atau kode program ini, Anda 
+secara hukum terikat pada ketentuan dan larangan mutlak berikut:
+
+1. LARANGAN MENYALIN DAN MENGGANDAKAN (NO COPYING / DUPLICATION)
+   Dilarang keras menyalin, memperbanyak, mereplikasi, mencadangkan ke pihak ketiga,
+   atau menggandakan sebagian maupun seluruh kode sumber, file aset, atau dokumen
+   proyek ini dalam bentuk media apa pun.
+
+2. LARANGAN MENGKLONING DAN MEMBUAT TURUNAN (NO CLONING / DERIVATIVE WORKS)
+   Dilarang keras melakukan kloning (cloning), forking publik, membuat ulang, 
+   mengadaptasi, menerjemahkan, atau menghasilkan karya turunan (derivative works) 
+   yang didasarkan pada logika, algoritma, atau desain arsitektur A.T.L.A.S.
+
+3. LARANGAN DEKOMPILASI DAN REVERSE ENGINEERING (NO REVERSE ENGINEERING)
+   Dilarang keras membongkar, mereverse-engineer, mendekompilasi, mendisensambel, 
+   atau berupaya merekonstruksi kode sumber dari berkas instalasi biner (APK, Web bundle,
+   atau build artifact) dari perangkat lunak ini.
+
+4. LARANGAN DISTRIBUSI DAN KOMERSIALISASI (NO REDISTRIBUTION / COMMERCIAL USE)
+   Dilarang keras mempublikasikan, melisensikan ulang (sub-licensing), mendistribusikan,
+   menyewakan, menjual, membagikan ulang, atau mengomersialkan sistem ini kepada 
+   pihak mana pun tanpa izin tertulis resmi dan sah dari Pemilik Hak Cipta.
+
+5. PENEGAKAN HUKUM DAN SANKSI
+   Segala bentuk pelanggaran terhadap hak cipta dan lisensi proprietary ini akan
+   dikenakan tindakan hukum perdata maupun pidana sesuai dengan ketentuan hukum 
+   perlindungan hak kekayaan intelektual (HAKI) Republik Indonesia dan konvensi 
+   hak cipta internasional (Bern Convention).
+
+═══════════════════════════════════════════════════════════════════════════════
+ENGLISH SUMMARY:
+This software and associated documentation files are proprietary and confidential.
+This project is NOT open-source software. Unauthorized copying, cloning, modification, 
+reverse-engineering, sublicensing, redistribution, or commercial exploitation of any 
+part of this repository is strictly prohibited without prior written authorization 
+from the copyright holder. All rights reserved.
+═══════════════════════════════════════════════════════════════════════════════

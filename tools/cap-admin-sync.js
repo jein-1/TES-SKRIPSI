@@ -34,8 +34,8 @@ console.log('✅ Web assets copied')
 
 // ── 3. Generate capacitor.config.json untuk android-admin ─────
 const capConfig = {
-  appId:   'com.dimsstsu.admin',
-  appName: 'AEGIS ADMIN',
+  appId:   'id.atlass.app',
+  appName: '// A.T.L.A.S',
   webDir:  'dist-admin',
   android: { path: 'android-admin' },
   plugins: {

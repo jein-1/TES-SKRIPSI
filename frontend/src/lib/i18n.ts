@@ -1,5 +1,6 @@
 // ═══════════════════════════════════════════════════════════════
 // A.T.L.A.S — Internationalization (i18n) Store & Dictionary
+// Comprehensive Bilingual Translation (ID & EN)
 // ═══════════════════════════════════════════════════════════════
 import { useState, useEffect } from 'react'
 
@@ -51,7 +52,7 @@ export const translations = {
   id: {
     fullName: 'Autonomous Threat Location & Alert System',
     fullNameSub: 'Sistem Otonom Pemetaan Ancaman Bahaya dan Peringatan Darurat',
-    systemTelemetry: 'A.T.L.A.S // SISTEM TELEMETRI OTOMONOM',
+    systemTelemetry: 'A.T.L.A.S // SISTEM TELEMETRI OTONOM',
     detectingLocation: 'Mendeteksi lokasi Anda...',
     locationPermissionRequired: 'Izin Lokasi Diperlukan (Aktifkan GPS)',
     welcome: 'Selamat Datang!',
@@ -109,7 +110,96 @@ export const translations = {
     navSensors: 'SENSOR',
     navUnits: 'UNIT',
     currentIp: 'IP Publik',
-    ipAddress: 'Alamat IP'
+    ipAddress: 'Alamat IP',
+
+    // Family Page
+    familyHeader: 'DIREKTORI UNIT KELUARGA',
+    familySub: 'Pantauan Lokasi & Status Keselamatan Personel',
+    addMemberBtn: 'Tambah Anggota',
+    scanQrBtn: 'Pindai QR',
+    myQrBtn: 'QR Saya',
+    noFamilyYet: 'Belum Ada Anggota Keluarga',
+    noFamilyDesc: 'Tambahkan anggota keluarga dengan memindai kode QR perangkat mereka atau bagikan QR Anda.',
+    statusSafeText: 'AMAN',
+    statusEvacText: 'EVAKUASI',
+    statusDangerText: 'DARURAT',
+    lastSync: 'Sinkronisasi Terakhir',
+    memberDeleted: 'Anggota berhasil dihapus',
+    confirmDeleteMember: 'Hapus anggota ini dari unit keluarga?',
+
+    // Guides Page
+    guidesHeader: 'PANDUAN OPERASIONAL DARURAT',
+    guidesSubtitle: 'Direktif Taktis Bencana & Pertolongan Pertama (First Aid)',
+    goldenRuleLabel: 'ATURAN EMAS KESELAMATAN',
+    keyStepsLabel: 'LANGKAH TINDAKAN UTAMA',
+    precautionsLabel: 'PERINGATAN & TINDAKAN PREVENTIF',
+    firstAidHeader: 'PROTOKOL PERTOLONGAN PERTAMA (FIRST AID)',
+    firstAidSub: 'Pedoman Penyelamatan Darurat Medis Lapangan',
+
+    // Menu & Settings
+    menuTitle: 'Pusat Kontrol & Pengaturan',
+    menuSubtitle: 'Konfigurasi Sistem Taktis A.T.L.A.S',
+    sectionAppearance: 'TAMPILAN & AKSESIBILITAS',
+    sectionNotifications: 'SISTEM NOTIFIKASI DARURAT',
+    sectionInformation: 'INFORMASI & DOKUMENTASI',
+    appearanceTitle: 'Tampilan',
+    appearanceSub: 'Tema Taktis, Aksesibilitas, dan Tata Letak',
+    notificationsTitle: 'Notifikasi',
+    notificationsSub: 'Kanal Peringatan Suara, DND & Uji Sirene',
+    wartaTitle: 'News & Log Pembaruan',
+    wartaSub: 'Catatan Rilis & Log Pembaruan Sistem',
+    newsTitle: 'News & Log Pembaruan',
+    newsSub: 'Catatan Rilis & Log Pembaruan Sistem',
+    aboutTitle: 'Tentang A.T.L.A.S',
+    aboutSub: 'Spesifikasi Sistem & Otonomi Pertahanan',
+
+    // Appearance Subpage
+    themeOptions: 'PILIHAN TEMA TAMPILAN',
+    themeDarkTactical: 'DARK (TAKTIKAL)',
+    themeLight: 'LIGHT',
+    accessibleThemes: 'TEMA AKSESIBILITAS',
+    contrastLabel: 'Tingkat Kontras',
+    contrastStandard: 'Standard',
+    contrastHigh: 'High',
+    colourVisionLabel: 'Penglihatan Warna',
+    fontSizeLabel: 'Ukuran Font',
+    fontSizeDevice: 'Pengaturan Perangkat',
+    fontSizeSmall: 'Kecil',
+    fontSizeMedium: 'Sedang',
+    fontSizeLarge: 'Besar',
+    fontThicknessLabel: 'Ketebalan Huruf',
+    fontThicknessDevice: 'Pengaturan Perangkat',
+    fontThicknessRegular: 'Biasa',
+    fontThicknessBold: 'Tebal',
+    screenReaderSection: 'PEMBACA LAYAR (TALKBACK)',
+    screenReaderDefault: 'Standar (Default)',
+    screenReaderDefaultDesc: 'Tampilkan antarmuka dalam tata letak visual taktis standar.',
+    screenReaderTalkBack: 'Kompatibel Pembaca Layar',
+    screenReaderTalkBackDesc: 'Sesuaikan tata letak untuk kemudahan navigasi perangkat lunak pembaca layar (TalkBack).',
+
+    // DND & Notif Subpages
+    dndAccessTitle: 'Akses "Jangan Ganggu" (DND)',
+    dndAccessSub: 'Pengaturan Bypass Suara Sistem Android',
+    localNotifTitle: 'Pengaturan Notifikasi Lokal',
+    localNotifSub: 'Kanal Sistem & Prioritas Audio Hardware',
+    testAlertsTitle: 'Uji Peringatan (Test Notification)',
+    testAlertsSub: 'Verifikasi Kesiapan Sirine & Getaran Haptic',
+    swipeToDismiss: 'Geser ke atas untuk menghapus notifikasi',
+
+    // Profile & Node Identity
+    terminalIdentity: 'IDENTITAS TERMINAL',
+    nodeIdentity: 'IDENTITAS NODE',
+    nodePublic: 'NODE-P // WARGA',
+    nodeCommand: 'NODE-01 // KOMANDO',
+    authenticatedStatus: 'TERAUTENTIKASI RESMI',
+    fullNameLabel: 'NAMA LENGKAP TERDAFTAR',
+    nikRegisteredLabel: 'NIK KTP TERVERIFIKASI',
+    regionalTelemetryNode: 'Node Telemetri Regional',
+    reclaimNodeTitle: 'Verifikasi Hak Akses Komando (Node-01)',
+    reclaimNodeDesc: 'Masukkan PIN Kredensial Komando untuk menetapkan perangkat ini sebagai NODE-01.',
+    enterPin: 'Masukkan PIN Komando',
+    verifyPin: 'Verifikasi',
+    invalidPin: 'PIN Komando tidak valid'
   },
   en: {
     fullName: 'Autonomous Threat Location & Alert System',
@@ -172,6 +262,95 @@ export const translations = {
     navSensors: 'SENSORS',
     navUnits: 'UNITS',
     currentIp: 'Public IP',
-    ipAddress: 'IP Address'
+    ipAddress: 'IP Address',
+
+    // Family Page
+    familyHeader: 'FAMILY PERSONNEL DIRECTORY',
+    familySub: 'Personnel Location Tracking & Safety Verification',
+    addMemberBtn: 'Add Member',
+    scanQrBtn: 'Scan QR',
+    myQrBtn: 'My QR',
+    noFamilyYet: 'No Family Members Linked',
+    noFamilyDesc: 'Add family personnel by scanning their terminal QR code or sharing your own.',
+    statusSafeText: 'SAFE',
+    statusEvacText: 'EVACUATING',
+    statusDangerText: 'EMERGENCY',
+    lastSync: 'Last Synchronized',
+    memberDeleted: 'Member successfully removed',
+    confirmDeleteMember: 'Remove this personnel from your family unit?',
+
+    // Guides Page
+    guidesHeader: 'EMERGENCY OPERATING DIRECTIVES',
+    guidesSubtitle: 'Tactical Disaster Protocols & Field First Aid Procedures',
+    goldenRuleLabel: 'GOLDEN SAFETY DIRECTIVE',
+    keyStepsLabel: 'PRIMARY ACTION STEPS',
+    precautionsLabel: 'PRECAUTIONARY MEASURES',
+    firstAidHeader: 'FIRST AID MEDICAL PROTOCOLS',
+    firstAidSub: 'Field Emergency Trauma Care & Stabilization',
+
+    // Menu & Settings
+    menuTitle: 'Control Center & Settings',
+    menuSubtitle: 'A.T.L.A.S Tactical System Configuration',
+    sectionAppearance: 'APPEARANCE & ACCESSIBILITY',
+    sectionNotifications: 'EMERGENCY NOTIFICATION SYSTEM',
+    sectionInformation: 'INFORMATION & DOCUMENTATION',
+    appearanceTitle: 'Appearance',
+    appearanceSub: 'Tactical Theme, Accessibility & Display Layout',
+    notificationsTitle: 'Notifications',
+    notificationsSub: 'Audio Alarm Channels, DND & Siren Testing',
+    wartaTitle: 'News & Changelog',
+    wartaSub: 'Release Notes & System Telemetry Changelog',
+    newsTitle: 'News & Changelog',
+    newsSub: 'Release Notes & System Telemetry Changelog',
+    aboutTitle: 'About A.T.L.A.S',
+    aboutSub: 'System Architecture & Telemetry Specifications',
+
+    // Appearance Subpage
+    themeOptions: 'DISPLAY THEME PREFERENCE',
+    themeDarkTactical: 'DARK (TACTICAL)',
+    themeLight: 'LIGHT',
+    accessibleThemes: 'ACCESSIBILITY THEMES',
+    contrastLabel: 'Contrast',
+    contrastStandard: 'Standard',
+    contrastHigh: 'High',
+    colourVisionLabel: 'Colour vision',
+    fontSizeLabel: 'Font size',
+    fontSizeDevice: 'Device setting',
+    fontSizeSmall: 'Small',
+    fontSizeMedium: 'Medium',
+    fontSizeLarge: 'Large',
+    fontThicknessLabel: 'Font thickness',
+    fontThicknessDevice: 'Device setting',
+    fontThicknessRegular: 'Regular',
+    fontThicknessBold: 'Bold',
+    screenReaderSection: 'SCREEN READER (TALKBACK)',
+    screenReaderDefault: 'Default',
+    screenReaderDefaultDesc: 'Display in the default layout.',
+    screenReaderTalkBack: 'Screen reader compatible',
+    screenReaderTalkBackDesc: 'Adjust the layout to make it easier for screen readers to read.',
+
+    // DND & Notif Subpages
+    dndAccessTitle: 'Do Not Disturb Access',
+    dndAccessSub: 'Android System Volume Bypass Configuration',
+    localNotifTitle: 'Local Notification Settings',
+    localNotifSub: 'Hardware Audio Channels & Priority Alerting',
+    testAlertsTitle: 'Test Notifications',
+    testAlertsSub: 'Sirens, Haptics & Visual Heads-Up Verification',
+    swipeToDismiss: 'Swipe up to dismiss notification',
+
+    // Profile & Node Identity
+    terminalIdentity: 'TERMINAL IDENTITY',
+    nodeIdentity: 'NODE IDENTITY',
+    nodePublic: 'NODE-P // CITIZEN',
+    nodeCommand: 'NODE-01 // COMMAND',
+    authenticatedStatus: 'OFFICIALLY AUTHENTICATED',
+    fullNameLabel: 'REGISTERED FULL NAME',
+    nikRegisteredLabel: 'VERIFIED NATIONAL ID (NIK)',
+    regionalTelemetryNode: 'Regional Telemetry Node',
+    reclaimNodeTitle: 'Verify Command Node (Node-01)',
+    reclaimNodeDesc: 'Enter Command Credential PIN to designate this device as NODE-01.',
+    enterPin: 'Enter Command PIN',
+    verifyPin: 'Verify',
+    invalidPin: 'Invalid Command PIN'
   }
 }

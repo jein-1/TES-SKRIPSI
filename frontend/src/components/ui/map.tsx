@@ -34,6 +34,11 @@ const googleMapStyle: MapLibreGL.StyleSpecification = {
   },
   layers: [
     {
+      id: "tactical-background",
+      type: "background",
+      paint: { "background-color": "#07090E" }
+    },
+    {
       id: "google-maps-layer",
       type: "raster",
       source: "google-maps",
@@ -444,7 +449,7 @@ const Map = forwardRef<MapRef, MapProps>(function Map(
     <MapContext.Provider value={contextValue}>
       <div
         ref={containerRef}
-        className={cn("relative h-full w-full", className)}
+        className={cn("relative h-full w-full bg-[#07090E]", className)}
       >
         {(!isLoaded || loading) && <DefaultLoader />}
         {/* SSR-safe: children render only when map is loaded on client */}

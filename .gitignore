@@ -54,10 +54,33 @@ android/
 android-admin/
 
 # ── Private Documentation & Architecture Intel (JANGAN PUSH KE GITHUB) ──
+*.md
+!README.md
 AGENTS.md
 DOKUMENTASI_FITUR.md
 ROADMAP_ARSITEKTUR.md
 CHANGELOG_AEGIS.md
 implementation_plan.md
 SETUP-SUPABASE.md
+PLAYSTORE_SUBMISSION_GUIDE.md
 *.doc.md
+
+# ── Raw media & videos in root (khusus aset lokal, jangan di-push) ──
+/*.mp4
+/*.mov
+/*.avi
+/*.png
+/*.jpg
+/*.jpeg
+tools/generate_all_icons.py
+
+# ── Local test scripts, scratch files & SQL Migrations ──
+*.sql
+test_*.js
+test_*.ts
+dev-server.js
+replacement-block.tsx
+zoneOffset.ts
+capacitor.config.ts.bak
+capacitor.config copy.ts
+capacitor.admin.config copy.ts

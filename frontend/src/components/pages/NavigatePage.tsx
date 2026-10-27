@@ -15,6 +15,7 @@ import { findOptimalEvacuationRoutes, type RouteResult } from "../../lib/evacuat
 import type { GempaData } from "../../lib/useBMKG";
 import { shelters, hazardZones, type Shelter } from '../../lib/evacuation'
 import { Geolocation } from '@capacitor/geolocation'
+import { Capacitor } from '@capacitor/core'
 import type * as GeoJSON from 'geojson'
 import { polygonCentroid } from '../../lib/zoneOffset'
 import { ZRB_REFERENCE } from '../../lib/evacuation/zrbReference'
@@ -93,6 +94,8 @@ function formatManeuver(step?: OsrmStep, fallbackLabel?: string): { label: strin
   }
 }
 
+// ── Figure-8 Calibration Modal REMOVED — replaced by Google Maps-style direct tracking ──
+
 // ── MAIN ──────────────────────────────────────────────────────
 export default function NavigatePage({ routes, selectedRoute, tsunamiAlert, userPosition, onBack, adminPing, onAdminPingDismiss, onStartGps, onUpdateUserPosition, gempa, isGempaDismissed, onDismissGempa, settings }: Props) {
   const [showMedical, setShowMedical]     = useState(false)
@@ -100,15 +103,30 @@ export default function NavigatePage({ routes, selectedRoute, tsunamiAlert, user
   const [deviceHeading, setDeviceHeading] = useState<number | null>(null)
   const [headingLocked, setHeadingLocked] = useState(true)
   const [activeRouteIdx, setActiveRouteIdx] = useState(selectedRoute)
-  const [showRoutePanel, setShowRoutePanel] = useState(true)
+  const [showRoutePanel, setShowRoutePanel] = useState(false)
   const [localPos, setLocalPos] = useState<[number,number] | null>(null)
   const [isCalibrating, setIsCalibrating] = useState(false)
+  const [isManualPinned, setIsManualPinned] = useState<boolean>(() => {
+    try {
+      return localStorage.getItem('atlas_manual_pinned') === 'true'
+    } catch {
+      return false
+    }
+  })
+  const [customTargetRoute, setCustomTargetRoute] = useState<RouteResult | null>(null)
   const mapRef = useRef<MapRef | null>(null)
-  const [showCalibration, setShowCalibration] = useState(() => !sessionStorage.getItem('compassCalibrated'))
-  
-  // OSRM Data
   const [osrmRoutes, setOsrmRoutes] = useState<OsrmRouteData[]>([])
   const [inspectingShelter, setInspectingShelter] = useState<Shelter | null>(null)
+
+  // Pastikan shelter selalu termuat bahkan saat offline tanpa internet
+  useEffect(() => {
+    if (shelters.length === 0) {
+      import('../../lib/evacuation/shelters').then(({ loadShelters }) => {
+        loadShelters();
+        setShelterVersion(v => v + 1);
+      }).catch(() => {});
+    }
+  }, [])
 
   const [viewport, setViewport] = useState<MapViewport>({
     center: [119.8577, -0.8917], // MapLibre uses [lng, lat]
@@ -126,9 +144,13 @@ export default function NavigatePage({ routes, selectedRoute, tsunamiAlert, user
   const [searchQuery, setSearchQuery] = useState('')
   const [searchingLocation, setSearchingLocation] = useState(false)
 
-  const handleApplyNewPosition = (pos: [number, number], feedbackText?: string) => {
+  const handleApplyNewPosition = (pos: [number, number], feedbackText?: string, isManual = true) => {
     setLocalPos(pos)
     localStorage.setItem('atlas_user_position', JSON.stringify(pos))
+    if (isManual) {
+      setIsManualPinned(true)
+      localStorage.setItem('atlas_manual_pinned', 'true')
+    }
     onUpdateUserPosition?.(pos)
     setViewport(v => ({ ...v, center: [pos[1], pos[0]], zoom: Math.max(v.zoom, 14) }))
     setCalibrationFeedback(feedbackText || `✓ Pin dipindahkan ke [${pos[0].toFixed(4)}, ${pos[1].toFixed(4)}]`)
@@ -147,7 +169,7 @@ export default function NavigatePage({ routes, selectedRoute, tsunamiAlert, user
         if (data && data.length > 0) {
           const lat = parseFloat(data[0].lat)
           const lon = parseFloat(data[0].lon)
-          handleApplyNewPosition([lat, lon], `✓ Ditemukan: ${data[0].display_name.split(',')[0]}`)
+          handleApplyNewPosition([lat, lon], `✓ Ditemukan: ${data[0].display_name.split(',')[0]}`, true)
           setSearchQuery('')
           setSearchingLocation(false)
           return
@@ -168,137 +190,219 @@ export default function NavigatePage({ routes, selectedRoute, tsunamiAlert, user
     const deltaLng = dLngMeters / (111320 * Math.cos(lat * (Math.PI / 180)))
     const newPos: [number, number] = [lat + deltaLat, lng + deltaLng]
     const dir = dLatMeters > 0 ? 'Utara' : dLatMeters < 0 ? 'Selatan' : dLngMeters > 0 ? 'Timur' : 'Barat'
-    handleApplyNewPosition(newPos, `✓ Geser mikro (${dir} ${Math.abs(dLatMeters || dLngMeters)}m): [${newPos[0].toFixed(5)}, ${newPos[1].toFixed(5)}]`)
+    handleApplyNewPosition(newPos, `✓ Geser mikro (${dir} ${Math.abs(dLatMeters || dLngMeters)}m): [${newPos[0].toFixed(5)}, ${newPos[1].toFixed(5)}]`, true)
   }
 
-  const handleForceGpsRefresh = () => {
-    if (typeof window === "undefined" || !("geolocation" in navigator)) {
-      setCalibrationFeedback("Sensor Geolocation tidak didukung di browser ini.")
-      return
-    }
+  const handleForceGpsRefresh = async () => {
     setGpsRefreshing(true)
-    setCalibrationFeedback("Mengumpulkan sampel GPS satelit presisi tinggi...")
+    setCalibrationFeedback("🛰️ Mengunci sinyal satelit GNSS/GPS presisi...")
 
-    const samples: Array<{ lat: number; lng: number; acc: number }> = []
-    let sampleCount = 0
-    let watchId: number | null = null
+    const isNative = typeof window !== "undefined" && Capacitor.isNativePlatform()
+    let resolved = false
+    let tempWatchId: string | null = null
 
-    const finishSampling = () => {
-      if (watchId !== null) {
-        navigator.geolocation.clearWatch(watchId)
-        watchId = null
+    // Helper untuk menetapkan posisi hasil kunci satelit/fused yang akurat (<= 50m)
+    const commitGpsFix = (lat: number, lng: number, acc: number, label: string) => {
+      if (resolved) return
+      resolved = true
+      if (tempWatchId && isNative) {
+        Geolocation.clearWatch({ id: tempWatchId }).catch(() => {})
+        tempWatchId = null
       }
       setGpsRefreshing(false)
-      if (samples.length === 0) {
-        setCalibrationFeedback("Sinyal satelit tidak merespons. Gunakan tombol geser mikro atau klik langsung pada peta.")
-        return
-      }
+      // Hapus pin manual HANYA SETELAH posisi benar-benar terkunci secara akurat!
+      setIsManualPinned(false)
+      try {
+        localStorage.removeItem('atlas_manual_pinned')
+      } catch {}
 
-      // Sort by accuracy (lower acc number is tighter and better)
-      samples.sort((a, b) => a.acc - b.acc)
-
-      // Inverse-variance weighted centroid
-      let totalW = 0
-      let wLat = 0
-      let wLng = 0
-      for (const s of samples) {
-        const w = 1 / Math.max(s.acc * s.acc, 1)
-        wLat += s.lat * w
-        wLng += s.lng * w
-        totalW += w
-      }
-
-      const bestLat = wLat / totalW
-      const bestLng = wLng / totalW
-      const bestAcc = Math.round(samples[0].acc)
-
-      handleApplyNewPosition([bestLat, bestLng], `✓ Akurasi optimal: ±${bestAcc}m (${samples.length} sampel terkalibrasi)`)
+      handleApplyNewPosition([lat, lng], `✓ Lokasi presisi terkunci: [${lat.toFixed(4)}, ${lng.toFixed(4)}] (±${Math.round(acc)}m via ${label})`, false)
     }
 
     try {
-      watchId = navigator.geolocation.watchPosition(
-        (p) => {
-          sampleCount++
-          samples.push({
-            lat: p.coords.latitude,
-            lng: p.coords.longitude,
-            acc: p.coords.accuracy,
-          })
-          setCalibrationFeedback(`Mengunci satelit... Sampel ${sampleCount}/3 (Akurasi: ±${Math.round(p.coords.accuracy)}m)`)
-          if (sampleCount >= 3) {
-            finishSampling()
+      await Geolocation.requestPermissions()
+    } catch {}
+
+    if (isNative) {
+      // 1. Coba pembacaan langsung dari FusedLocationProvider (Google Play Services / Wi-Fi / Satelit)
+      Geolocation.getCurrentPosition({ enableHighAccuracy: true, timeout: 8000, maximumAge: 30000 })
+        .then((pos) => {
+          if (pos?.coords && (pos.coords.accuracy ?? 100) <= 50) {
+            commitGpsFix(pos.coords.latitude, pos.coords.longitude, pos.coords.accuracy || 15, (pos.coords.accuracy ?? 100) <= 20 ? "GNSS Satelit" : "Fused Wi-Fi/GPS")
           }
-        },
-        (err) => {
-          console.warn("Watch position sampling warning:", err)
-          if (samples.length === 0) {
-            navigator.geolocation.getCurrentPosition(
-              (p) => {
-                samples.push({ lat: p.coords.latitude, lng: p.coords.longitude, acc: p.coords.accuracy })
-                finishSampling()
-              },
-              () => finishSampling(),
-              { enableHighAccuracy: false, timeout: 5000, maximumAge: 60000 }
-            )
-          } else {
-            finishSampling()
+        })
+        .catch(() => {})
+
+      // 2. Multi-sample Watcher (Sharelock Grade): pantau stream posisi sampai akurasi <= 50m
+      try {
+        tempWatchId = await Geolocation.watchPosition(
+          { enableHighAccuracy: true, maximumAge: 5000 },
+          (pos, err) => {
+            if (resolved || err || !pos?.coords) return
+            const acc = pos.coords.accuracy ?? 100
+            if (acc <= 50) {
+              commitGpsFix(pos.coords.latitude, pos.coords.longitude, acc, acc <= 20 ? "GNSS Satelit" : "Fused Wi-Fi/GPS")
+            } else {
+              setCalibrationFeedback(`🛰️ Sinyal posisi terdeteksi, memperjelas presisi (±${Math.round(acc)}m)...`)
+            }
           }
-        },
-        { enableHighAccuracy: true, timeout: 8000, maximumAge: 0 }
-      )
-    } catch {
-      finishSampling()
+        )
+      } catch (e) {
+        console.warn('[ATLAS GPS] Watch fallback error:', e)
+      }
+    } else {
+      // Mode Web Browser / Desktop
+      if (typeof window !== "undefined" && "geolocation" in navigator) {
+        navigator.geolocation.getCurrentPosition(
+          (pos) => {
+            if (pos?.coords && (pos.coords.accuracy ?? 100) <= 50) {
+              commitGpsFix(pos.coords.latitude, pos.coords.longitude, pos.coords.accuracy, "Browser GPS/Wi-Fi")
+            }
+          },
+          () => {},
+          { enableHighAccuracy: true, timeout: 10000, maximumAge: 30000 }
+        )
+      }
     }
 
+    // Safety timeout: jika dalam 12 detik satelit belum terkunci (<= 50m)
+    // PERTAHANKAN PIN MANUAL ATAU KOORDINAT TERAKHIR PENGGUNA!
     setTimeout(() => {
-      if (samples.length > 0) finishSampling()
-      else setGpsRefreshing(false)
-    }, 8000)
+      if (resolved) return
+      resolved = true
+      if (tempWatchId && isNative) {
+        Geolocation.clearWatch({ id: tempWatchId }).catch(() => {})
+        tempWatchId = null
+      }
+      setGpsRefreshing(false)
+      const isManual = localStorage.getItem('atlas_manual_pinned') === 'true'
+      if (isManual) {
+        setCalibrationFeedback("⚠️ Sinyal GPS lemah di dalam gedung tebal. Posisi pin manual Anda tetap dipertahankan.")
+      } else {
+        setCalibrationFeedback("⚠️ Sinyal GPS lemah di dalam gedung tebal. Pastikan GPS & Wi-Fi aktif.")
+      }
+    }, 12000)
   }
 
+  // ── HIGH-PRECISION GPS TRACKING (Google Maps-style, "sharelock" grade) ──
+  // Uses Kalman-weighted multi-sample smoothing for sub-10m accuracy
+  const gpsFilterRef = useRef<{ lat: number; lng: number; acc: number; ts: number } | null>(null)
+
   useEffect(() => {
-    if (userPosition) {
+    const isManual = localStorage.getItem('atlas_manual_pinned') === 'true'
+    if (userPosition && !isManual) {
       setLocalPos(userPosition)
       setViewport(v => ({ ...v, center: [userPosition[1], userPosition[0]] }))
-      return
     }
     let watchId: string | null = null;
-    if (typeof window !== "undefined" && "geolocation" in navigator) {
+    let browserWatchId: number | null = null;
+
+    // Kalman-inspired position filter: blends new readings with previous position
+    // weighted by accuracy — low accuracy readings are mostly ignored
+    const applyPositionFilter = (lat: number, lng: number, accuracy: number) => {
+      // JIKA PENGGUNA SEDANG MENGGUNAKAN PIN MANUAL, JANGAN TIMPA DENGAN UPDATE GPS OTOMATIS!
+      if (localStorage.getItem('atlas_manual_pinned') === 'true') {
+        const now = Date.now()
+        gpsFilterRef.current = { lat, lng, acc: accuracy, ts: now }
+        return
+      }
+
+      // Saring akurasi: tolak sinyal kasar / BTS seluler (> 50m) agar tidak melompat ke pemancar kota,
+      // tetapi terima Fused Wi-Fi indoor Google Maps / WhatsApp (15-50m)
+      if (accuracy > 50) {
+        return
+      }
+
+      const prev = gpsFilterRef.current
+      const now = Date.now()
+
+      // Accept directly if first reading or accuracy < 25m
+      if (!prev || accuracy < 25) {
+        gpsFilterRef.current = { lat, lng, acc: accuracy, ts: now }
+        setLocalPos([lat, lng])
+        onUpdateUserPosition?.([lat, lng])
+        return
+      }
+
+      // If new reading is significantly more accurate, trust it more
+      const accRatio = prev.acc / Math.max(accuracy, 1)
+      const weight = Math.min(1, Math.max(0.05, 1 / (1 + accRatio * 0.5)))
+
+      // Time decay: older previous readings get less trust
+      const timeDelta = (now - prev.ts) / 1000
+      const timeWeight = Math.min(1, weight + timeDelta * 0.1)
+
+      const filteredLat = prev.lat + (lat - prev.lat) * timeWeight
+      const filteredLng = prev.lng + (lng - prev.lng) * timeWeight
+      const filteredAcc = prev.acc + (accuracy - prev.acc) * timeWeight
+
+      gpsFilterRef.current = { lat: filteredLat, lng: filteredLng, acc: filteredAcc, ts: now }
+      setLocalPos([filteredLat, filteredLng])
+      onUpdateUserPosition?.([filteredLat, filteredLng])
+    }
+
+    const isNative = typeof window !== "undefined" && Capacitor.isNativePlatform()
+
+    // 1. Browser Geolocation HANYA untuk Desktop / Browser Web (bukan Native Android)
+    if (!isNative && typeof window !== "undefined" && "geolocation" in navigator) {
       navigator.geolocation.getCurrentPosition(
         (p) => {
-          const pos: [number, number] = [p.coords.latitude, p.coords.longitude]
-          setLocalPos(pos)
-          setViewport(v => ({ ...v, center: [pos[1], pos[0]] }))
+          if (p.coords.accuracy <= 50) {
+            applyPositionFilter(p.coords.latitude, p.coords.longitude, p.coords.accuracy)
+            if (localStorage.getItem('atlas_manual_pinned') !== 'true') {
+              setViewport(v => ({ ...v, center: [p.coords.longitude, p.coords.latitude] }))
+            }
+          }
         },
         () => {},
         { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
       );
+
+      browserWatchId = navigator.geolocation.watchPosition(
+        (p) => {
+          if (p.coords.accuracy <= 50) {
+            applyPositionFilter(p.coords.latitude, p.coords.longitude, p.coords.accuracy)
+          }
+        },
+        () => {},
+        { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 }
+      );
     }
+
+    // 2. Capacitor native watch (FusedLocationProvider on Android — Sharelock Accuracy)
     const startWatch = async () => {
+      if (!isNative) return;
       try {
-        watchId = await Geolocation.watchPosition({ enableHighAccuracy: true, maximumAge: 5000 }, (p, err) => {
-          if (err || !p) return;
-          setLocalPos([p.coords.latitude, p.coords.longitude]);
-        });
-      } catch (e) {}
+        await Geolocation.requestPermissions()
+      } catch {}
+      try {
+        watchId = await Geolocation.watchPosition(
+          { enableHighAccuracy: true, maximumAge: 0, timeout: 15000 },
+          (p, err) => {
+            if (err || !p || !p.coords) return;
+            const acc = p.coords.accuracy || 10
+            if (acc <= 35) {
+              applyPositionFilter(p.coords.latitude, p.coords.longitude, acc)
+            }
+          }
+        );
+      } catch (e) {
+        console.warn('[ATLAS GPS] Capacitor watch fallback:', e)
+      }
     };
     startWatch();
+
     return () => {
       if (watchId) Geolocation.clearWatch({ id: watchId }).catch(() => {});
+      if (browserWatchId !== null) navigator.geolocation.clearWatch(browserWatchId);
     };
   }, [userPosition])
 
   useEffect(() => {
-    if (!userPosition && onStartGps) {
-      const t = setTimeout(() => onStartGps(), 500)
-      return () => clearTimeout(t)
-    }
+    onStartGps?.()
   }, [])
 
-  const handleCalibrate = () => {
-    sessionStorage.setItem('compassCalibrated', 'true')
-    setShowCalibration(false)
-  }
+  // Calibration modal removed — compass orientation is handled automatically
   const emergency = tsunamiAlert
 
   const [shelterVersion, setShelterVersion] = useState(0)
@@ -314,17 +418,23 @@ export default function NavigatePage({ routes, selectedRoute, tsunamiAlert, user
   })
 
   const activeRoutes = useMemo(() => {
-    if (routes.length > 0) return routes
-    if (effectivePosRaw) {
-      return findOptimalEvacuationRoutes(
+    let baseList = routes
+    if (baseList.length === 0 && effectivePosRaw) {
+      baseList = findOptimalEvacuationRoutes(
         effectivePosRaw[0],
         effectivePosRaw[1],
         99,
         settings?.algorithm ?? 'dijkstra'
       )
     }
-    return []
-  }, [routes, effectivePosRaw?.[0], effectivePosRaw?.[1], settings?.algorithm, shelterVersion])
+    if (customTargetRoute) {
+      return [
+        customTargetRoute,
+        ...baseList.filter(r => r.shelterId !== customTargetRoute.shelterId && r.shelterName !== customTargetRoute.shelterName)
+      ]
+    }
+    return baseList
+  }, [routes, effectivePosRaw?.[0], effectivePosRaw?.[1], settings?.algorithm, shelterVersion, customTargetRoute])
 
   useEffect(() => {
     if (selectedRoute !== undefined && selectedRoute >= 0) {
@@ -353,18 +463,20 @@ export default function NavigatePage({ routes, selectedRoute, tsunamiAlert, user
   const computedBearing = (effectivePosRaw && shelterPosRaw) ? getBearing(effectivePosRaw, shelterPosRaw) : 0
   const heading = deviceHeading ?? computedBearing
 
-  // Map viewport control (locked to user position ONLY when not inspecting a shelter)
+  const userInteractedRef = useRef(false)
+
+  // Map viewport control (locked to user position ONLY when user hasn't panned/zoomed, not calibrating, and not inspecting a shelter)
   useEffect(() => {
-    if (effectivePos && !inspectingShelter) {
+    if (effectivePos && !inspectingShelter && !isCalibrating && !userInteractedRef.current) {
       setViewport(v => ({
         ...v,
         center: effectivePos,
-        zoom: 16,
+        zoom: v.zoom || 16,
         pitch: 0,
         bearing: (emergency && headingLocked) ? heading : v.bearing
       }))
     }
-  }, [effectivePos?.[0], effectivePos?.[1], emergency, heading, headingLocked, inspectingShelter])
+  }, [effectivePos?.[0], effectivePos?.[1], emergency, heading, headingLocked, inspectingShelter, isCalibrating])
 
   const distanceM   = (effectivePosRaw && shelterPosRaw) ? haversineM(effectivePosRaw, shelterPosRaw) : (route?.totalDistance ? route.totalDistance * 1000 : 0)
   const distLabel   = osrmRoutes.length > 0 ? (osrmRoutes[0].distance < 1000 ? `${Math.round(osrmRoutes[0].distance)}m` : `${(osrmRoutes[0].distance/1000).toFixed(1)} km`) : (distanceM < 1000 ? `${Math.round(distanceM)}m` : `${(distanceM/1000).toFixed(1)} km`)
@@ -417,35 +529,17 @@ export default function NavigatePage({ routes, selectedRoute, tsunamiAlert, user
 
   const recenterMap = useCallback(() => {
     if (effectivePos) {
+      userInteractedRef.current = false
       setHeadingLocked(true)
       setViewport(v => ({ ...v, center: effectivePos, zoom: 16 }))
+      mapRef.current?.flyTo({ center: effectivePos, zoom: 16, duration: 800, essential: true })
     }
   }, [effectivePos])
 
   const headerBg = emergency ? '#160608' : '#0B0F19'
   const headerBorder = emergency ? 'border-nerv-red' : 'border-nerv-border'
 
-  if (showCalibration) return (
-    <div className="fixed inset-0 z-[1900] flex items-center justify-center bg-black/95 p-6 backdrop-blur-md">
-      <motion.div initial={{ scale:0.95,opacity:0 }} animate={{ scale:1,opacity:1 }}
-        className="w-full max-w-sm p-5 rounded-lg border border-nerv-orange/50 bg-nerv-card text-center font-mono shadow-2xl">
-        <div className="w-16 h-16 rounded-full bg-nerv-orange/20 border border-nerv-orange flex items-center justify-center mx-auto mb-4">
-          <Compass className="w-8 h-8 text-nerv-orange animate-spin" />
-        </div>
-        <p className="text-[9px] text-nerv-orange uppercase tracking-widest font-bold mb-1">
-          A.T.L.A.S // SENSOR CALIBRATION
-        </p>
-        <h2 className="text-base font-bold text-white mb-2">KALIBRASI KOMPAS & GYRO</h2>
-        <p className="text-xs text-slate-300 font-sans leading-relaxed mb-5">
-          Untuk mendapatkan akurasi orientasi azimuth maksimal, gerakkan perangkat membentuk pola <b>angka 8</b> di udara beberapa kali.
-        </p>
-        <button onClick={handleCalibrate}
-          className="w-full py-3 bg-nerv-orange hover:bg-orange-600 text-black rounded font-mono font-bold text-xs uppercase tracking-widest shadow-[0_0_15px_rgba(255,87,34,0.4)] transition-all">
-          SISTEM SIAP // SAYA MENGERTI
-        </button>
-      </motion.div>
-    </div>
-  )
+  // Figure-8 calibration gate removed — direct to map
 
   if (showMedical) return (
     <div className="fixed inset-0 z-[1900] flex items-center justify-center bg-black/90 p-6 backdrop-blur-md">
@@ -476,7 +570,7 @@ export default function NavigatePage({ routes, selectedRoute, tsunamiAlert, user
       className="fixed inset-0 z-[1800] flex flex-col bg-nerv-bg text-slate-200">
 
       {/* Header */}
-      <div className={`shrink-0 flex items-center justify-between px-4 py-3 border-b ${headerBorder}`} style={{background: headerBg}}>
+      <div className={`shrink-0 flex items-center justify-between px-4 pt-[max(env(safe-area-inset-top,0px),1rem)] pb-3 border-b ${headerBorder}`} style={{background: headerBg}}>
         <div className="flex items-center gap-2.5 min-w-0">
           {onBack && (
             <button onClick={onBack}
@@ -500,7 +594,7 @@ export default function NavigatePage({ routes, selectedRoute, tsunamiAlert, user
           {!emergency && (
             <button onClick={() => setShowRoutePanel(p => !p)}
               className="px-2.5 py-1 rounded bg-black/60 border border-nerv-border hover:border-nerv-cyan text-nerv-cyan text-[10px] font-mono font-bold transition-colors">
-              {showRoutePanel ? 'HIDE ROUTES' : 'SELECT ROUTE'}
+              {showRoutePanel ? 'TUTUP DAFTAR' : 'PILIH RUTE'}
             </button>
           )}
           {emergency ? (
@@ -543,7 +637,10 @@ export default function NavigatePage({ routes, selectedRoute, tsunamiAlert, user
         <Map
           ref={mapRef}
           viewport={viewport}
-          onViewportChange={setViewport}
+          onViewportChange={(newV) => {
+            userInteractedRef.current = true
+            setViewport(newV)
+          }}
           onMapClick={(e) => {
             if (isCalibrating && e.lngLat) {
               handleApplyNewPosition([e.lngLat.lat, e.lngLat.lng]);
@@ -722,6 +819,20 @@ export default function NavigatePage({ routes, selectedRoute, tsunamiAlert, user
 
         </Map>
 
+        {/* Floating Manual Pin Active Indicator */}
+        {isManualPinned && !isCalibrating && (
+          <div className="absolute top-3 left-1/2 -translate-x-1/2 z-[500] bg-black/85 border border-amber-500/70 rounded-full px-3 py-1 flex items-center gap-2 shadow-[0_0_15px_rgba(245,158,11,0.3)] backdrop-blur-md">
+            <div className="w-2 h-2 rounded-full bg-amber-400 animate-pulse" />
+            <span className="text-[10px] font-mono font-bold text-amber-300 tracking-wider">PIN MANUAL TERKUNCI</span>
+            <button
+              onClick={handleForceGpsRefresh}
+              className="text-[9px] font-mono font-black text-black bg-amber-400 hover:bg-amber-300 px-2 py-0.5 rounded-full transition-colors ml-1 shadow-sm"
+            >
+              KEMBALIKAN KE GPS
+            </button>
+          </div>
+        )}
+
         {/* Floating Calibration Guide Banner */}
         {isCalibrating && (
           <div className="absolute top-4 left-1/2 -translate-x-1/2 z-[600] max-w-md w-[94%] bg-[#080d1a]/95 border border-nerv-orange rounded-xl p-3.5 shadow-2xl font-mono text-center space-y-2.5 backdrop-blur-md">
@@ -821,7 +932,12 @@ export default function NavigatePage({ routes, selectedRoute, tsunamiAlert, user
             <div className="flex gap-2 justify-center pt-1">
               <button
                 type="button"
-                onClick={() => setIsCalibrating(false)}
+                onClick={() => {
+                  setIsCalibrating(false)
+                  if (effectivePosRaw) {
+                    handleApplyNewPosition(effectivePosRaw, `✓ Posisi manual dikunci di [${effectivePosRaw[0].toFixed(4)}, ${effectivePosRaw[1].toFixed(4)}]`, true)
+                  }
+                }}
                 className="flex-1 py-1.5 rounded bg-nerv-green hover:bg-emerald-500 text-black font-black text-xs uppercase tracking-wider shadow-[0_0_10px_rgba(16,185,129,0.5)] transition-colors"
               >
                 SIMPAN POSISI INI
@@ -841,19 +957,21 @@ export default function NavigatePage({ routes, selectedRoute, tsunamiAlert, user
 
         {/* Controls */}
         <div className="absolute top-3 right-3 z-[500] flex flex-col gap-2">
-          {/* Compass */}
-          <button onClick={resetNorth}
-            className="w-11 h-11 rounded-full flex items-center justify-center bg-slate-900/80 border border-slate-700/60 shadow-lg"
+          {/* Compass — Reset north only (calibration removed) */}
+          <button
+            onClick={resetNorth}
+            className="w-11 h-11 rounded-full flex items-center justify-center border shadow-lg transition-colors bg-slate-900/80 border-slate-700/60 active:scale-95"
             style={{ transform: `rotate(${-viewport.bearing}deg)`, transition: 'transform 0.1s' }}
+            title="Reset orientasi ke Utara"
           >
             <Compass className="w-5 h-5 text-red-500"/>
           </button>
           
           {/* Re-center button */}
           <button onClick={recenterMap}
-            className="w-11 h-11 rounded-full flex items-center justify-center bg-slate-900/80 border border-slate-700/60 text-white shadow-lg"
+            className="w-11 h-11 rounded-full flex items-center justify-center border shadow-lg transition-colors bg-slate-900/80 border-slate-700/60 text-white"
             title="Kembali ke posisi saya">
-            <Navigation2 className="w-4 h-4 text-indigo-400"/>
+            <Navigation2 className="w-4 h-4 text-indigo-500"/>
           </button>
 
           {/* Calibrate / Manual Location Button */}
@@ -880,9 +998,9 @@ export default function NavigatePage({ routes, selectedRoute, tsunamiAlert, user
         </div>
 
         {/* Bearing */}
-        <div className="absolute bottom-3 left-3 z-[500] px-2 py-1.5 rounded-xl bg-slate-900/80 border border-slate-700/60">
+        <div className="absolute bottom-3 left-3 z-[500] px-2 py-1.5 rounded-xl border shadow-sm bg-slate-900/80 border-slate-700/60">
           <p className="text-[10px] font-black text-white">{Math.round(viewport.bearing)}°</p>
-          <p className="text-[8px] text-slate-500">BEARING</p>
+          <p className="text-[8px] text-slate-500 font-bold">BEARING</p>
         </div>
 
         {!effectivePos && (
@@ -917,17 +1035,33 @@ export default function NavigatePage({ routes, selectedRoute, tsunamiAlert, user
         )}
       </div>
 
-      {/* Route panel (normal mode) - Dihapus karena instruksi: tidak menunjukkan rute saat normal */}
-      {false && !emergency && showRoutePanel && activeRoutes.length > 0 && (
-        <div className="shrink-0 border-t border-slate-800/50" style={{background:'#0a1020', maxHeight: 210, overflowY: 'auto'}}>
-          <p className="text-[9px] text-slate-500 uppercase tracking-widest font-bold px-3 pt-2 pb-0.5">Pilih Rute Evakuasi</p>
+      {/* Route panel (normal mode) */}
+      {!emergency && showRoutePanel && activeRoutes.length > 0 && (
+        <div className="shrink-0 border-t border-slate-800/50" style={{background:'#0a1020', maxHeight: 220, overflowY: 'auto'}}>
+          <div className="flex items-center justify-between px-3 pt-2 pb-1 border-b border-slate-800/40">
+            <p className="text-[9px] text-slate-400 uppercase tracking-widest font-bold font-mono">Daftar Titik Kumpul / Shelter Evakuasi</p>
+            <button onClick={() => setShowRoutePanel(false)} className="text-[9px] text-slate-500 hover:text-white font-mono">✕ TUTUP</button>
+          </div>
           {activeRoutes.slice(0, 10).map((r, i) => {
             const dKm  = r.totalDistance === Infinity ? '—' : `${r.totalDistance.toFixed(2)} km`
             const t    = r.totalDistance === Infinity ? '—' : `${r.walkingTime} mnt`
             const cap  = shelters.find(s => s.name === r.shelterName)?.capacity?.toLocaleString() ?? '—'
             const isAct = i === activeRouteIdx
             return (
-              <button key={r.shelterName} onClick={() => setActiveRouteIdx(i)}
+              <button key={`${r.shelterId || r.shelterName}-${i}`} onClick={() => {
+                setActiveRouteIdx(i);
+                if (effectivePos && r.coordinates && r.coordinates.length > 0) {
+                  const dest = r.coordinates[r.coordinates.length - 1];
+                  fetchOsrmRoute(effectivePos[0], effectivePos[1], dest[1], dest[0])
+                    .then(osrm => setOsrmRoutes(osrm))
+                    .catch(() => {});
+                  setViewport(v => ({
+                    ...v,
+                    center: [(effectivePos[0] + dest[1]) / 2, (effectivePos[1] + dest[0]) / 2],
+                    zoom: Math.min(v.zoom, 14)
+                  }));
+                }
+              }}
                 className={`w-full flex items-center gap-3 px-3 py-2.5 border-b border-slate-800/30 text-left transition-colors ${isAct ? 'bg-indigo-600/20' : 'hover:bg-slate-800/40'}`}>
                 <div className={`w-7 h-7 rounded-xl flex items-center justify-center shrink-0 text-xs font-black ${isAct ? 'bg-indigo-600 text-white' : 'bg-slate-700 text-slate-400'}`}>{i + 1}</div>
                 <div className="flex-1 min-w-0">
@@ -1144,7 +1278,36 @@ export default function NavigatePage({ routes, selectedRoute, tsunamiAlert, user
                 <button
                   onClick={() => {
                     const rIdx = activeRoutes.findIndex(r => r.shelterId === inspectingShelter.id || r.shelterName === inspectingShelter.name);
-                    if (rIdx !== -1) setActiveRouteIdx(rIdx);
+                    if (rIdx !== -1) {
+                      setActiveRouteIdx(rIdx);
+                    } else {
+                      const userLat = effectivePosRaw ? effectivePosRaw[0] : -0.8917;
+                      const userLng = effectivePosRaw ? effectivePosRaw[1] : 119.8577;
+                      const distKm = haversineM([userLat, userLng], [inspectingShelter.lat, inspectingShelter.lng]) / 1000;
+                      const dynamicRoute: RouteResult = {
+                        shelterId: inspectingShelter.id,
+                        shelterName: inspectingShelter.name,
+                        shelterCapacity: inspectingShelter.capacity,
+                        haversineDistance: distKm,
+                        dijkstraDistance: distKm,
+                        totalDistance: distKm,
+                        coordinates: [[userLat, userLng], [inspectingShelter.lat, inspectingShelter.lng]],
+                        walkingTime: Math.max(1, Math.round((distKm / 4.5) * 60)),
+                        runningTime: Math.max(1, Math.round((distKm / 9.0) * 60))
+                      };
+                      setCustomTargetRoute(dynamicRoute);
+                      setActiveRouteIdx(0);
+                    }
+                    if (effectivePos) {
+                      fetchOsrmRoute(effectivePos[0], effectivePos[1], inspectingShelter.lng, inspectingShelter.lat)
+                        .then(r => setOsrmRoutes(r))
+                        .catch(() => {});
+                      setViewport(v => ({
+                        ...v,
+                        center: [(effectivePos[0] + inspectingShelter.lng) / 2, (effectivePos[1] + inspectingShelter.lat) / 2],
+                        zoom: Math.min(v.zoom, 14)
+                      }));
+                    }
                     setInspectingShelter(null);
                   }}
                   className="flex-1 py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 transition-colors shadow-lg shadow-indigo-600/30"

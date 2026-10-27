@@ -17,6 +17,7 @@ export interface AegisSyncEvent {
     | "FAMILY_JOIN"
     | "PING"
     | "PING_REPLY"
+    | "PING_HELP"
     | "LOCATION_UPDATE"
     | "SHELTER_ADDED"
     | "SHELTER_UPDATED"
@@ -130,12 +131,21 @@ export const aegisApi = {
     });
   },
 
-  /** Reply to a ping (Supabase Broadcast) */
+  /** Reply to a ping with Safe status (Supabase Broadcast) */
   pingReply: async (fromId: string, fromName: string, toId: string, nik?: string) => {
     await broadcastChannel.send({
       type: "broadcast",
       event: "PING_REPLY",
       payload: { fromId, fromName, toId, nik },
+    });
+  },
+
+  /** Reply to a ping with Emergency Help request (Supabase Broadcast) */
+  pingHelp: async (fromId: string, fromName: string, toId: string, lat?: number, lng?: number, nik?: string) => {
+    await broadcastChannel.send({
+      type: "broadcast",
+      event: "PING_HELP",
+      payload: { fromId, fromName, toId, lat, lng, nik },
     });
   },
 
