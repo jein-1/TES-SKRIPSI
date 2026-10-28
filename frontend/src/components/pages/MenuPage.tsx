@@ -7,16 +7,20 @@ import {
   ChevronLeft, ChevronRight, Settings, Bell, Palette, Globe,
   Shield, Info, FileText, Check, Radio, Volume2, VolumeX,
   AlertTriangle, Flame, Waves, Wind, ExternalLink, Activity,
-  Sliders, Eye, Type, Smartphone, CheckCircle, Navigation2, Compass, Clock
+  Sliders, Eye, Type, Smartphone, CheckCircle, Navigation2, Compass, Clock,
+  BookOpen, Search, ChevronDown, ChevronUp, Megaphone
 } from 'lucide-react'
 import { motion, AnimatePresence } from 'motion/react'
 import { Haptics, ImpactStyle } from '@capacitor/haptics'
 import { NativeSettings } from '../../lib/nativeSettings'
 import { LocalNotifications } from '@capacitor/local-notifications'
 import { useLanguage } from '../../lib/i18n'
+import { GLOSSARY_TERMS, FEATURE_GUIDES } from './GuidesPage'
+import { getAdminBroadcasts, markBroadcastAsRead, type AdminBroadcast } from '../../lib/broadcastStorage'
 
 export type MenuView =
   | 'hub'
+  | 'app_guide'
   | 'appearance'
   | 'notifications'
   | 'local_notifications'
@@ -27,6 +31,7 @@ export type MenuView =
   | 'license'
   | 'news'
   | 'changelog'
+  | 'broadcasts'
   | 'remarks'
   | 'terms'
   | 'privacy'
@@ -40,7 +45,7 @@ export type TestCategoryType =
   | 'heavy_rain'
   | 'civil'
 
-export const LATEST_NEWS_VERSION = 'v1.0.5'
+export const LATEST_NEWS_VERSION = 'v1.1.0'
 export const LATEST_WARTA_VERSION = LATEST_NEWS_VERSION
 
 export interface EarthquakeNewsItem {
@@ -60,8 +65,8 @@ export function loadEarthquakeNews(): EarthquakeNewsItem[] {
     let items: EarthquakeNewsItem[] = raw ? JSON.parse(raw) : []
     // Bersihkan entri dummy masa lalu jika ada (hanya tampilkan data riil BMKG)
     const cleaned = items.filter(it => it.id !== 'eq-palu-01' && it.id !== 'eq-donggala-02')
-    // Batas penyimpanan: 60 jam (2.5 hari = 60 * 3600 * 1000 ms)
-    const cutoff = Date.now() - (60 * 60 * 1000 * 60)
+    // Batas penyimpanan: 1 minggu (7 hari = 7 * 24 * 3600 * 1000 ms)
+    const cutoff = Date.now() - (7 * 24 * 60 * 60 * 1000)
     const valid = cleaned.filter(it => it.receivedAt >= cutoff)
     if (valid.length !== items.length) {
       localStorage.setItem('atlas_earthquake_news_history', JSON.stringify(valid))
@@ -83,6 +88,8 @@ export default function MenuPage({ onBack, onNavigateHistory, onCalibrateCompass
   const { lang, setLanguage, t } = useLanguage()
   const [view, setView] = useState<MenuView>('hub')
   const [selectedCategory, setSelectedCategory] = useState<TestCategoryType>('eew')
+  const [glossarySearch, setGlossarySearch] = useState('')
+  const [expandedGlossary, setExpandedGlossary] = useState<string>('DEFCON (Defense Readiness Condition)')
 
   // Red Dot Indicator khusus untuk News Gempa Sistem
   const [hasUnreadNews, setHasUnreadNews] = useState(() => {
@@ -121,6 +128,29 @@ export default function MenuPage({ onBack, onNavigateHistory, onCalibrateCompass
     setUnreadLogCount(0)
     window.dispatchEvent(new CustomEvent('atlas_changelog_read'))
     setView('changelog')
+  }
+
+  // Siaran Darurat Posko Komando
+  const [broadcastList, setBroadcastList] = useState<AdminBroadcast[]>(() => {
+    try {
+      return getAdminBroadcasts()
+    } catch {
+      return []
+    }
+  })
+
+  useEffect(() => {
+    const handleBroadcastUpdate = () => {
+      setBroadcastList(getAdminBroadcasts())
+    }
+    window.addEventListener('atlas_admin_broadcast_updated', handleBroadcastUpdate)
+    return () => window.removeEventListener('atlas_admin_broadcast_updated', handleBroadcastUpdate)
+  }, [])
+
+  const unreadBroadcastsCount = broadcastList.filter(b => !b.read).length
+
+  const handleOpenBroadcasts = () => {
+    setView('broadcasts')
   }
   
   // Settings States (stored in localStorage for persistence)
@@ -242,8 +272,20 @@ export default function MenuPage({ onBack, onNavigateHistory, onCalibrateCompass
   } | null>(null)
   const testBannerTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
-  // Synthesized Audio Tone Generator for test alerts
+  // Synthesized Audio Tone Generator for test alerts with atlas_siren.wav
   const playTestTone = (isCritical: boolean = false) => {
+    try {
+      if (isCritical) {
+        const audio = new Audio('/atlas_siren.wav')
+        audio.volume = 1.0
+        audio.play().catch(() => playSynthesizedTone(true))
+        return
+      }
+    } catch (_) {}
+    playSynthesizedTone(isCritical)
+  }
+
+  const playSynthesizedTone = (isCritical: boolean = false) => {
     try {
       const AudioCtx = window.AudioContext || (window as any).webkitAudioContext
       if (!AudioCtx) return
@@ -332,6 +374,7 @@ export default function MenuPage({ onBack, onNavigateHistory, onCalibrateCompass
             title,
             body,
             channelId: options.isCritical ? 'critical_alerts' : 'normal_alerts',
+            sound: options.isCritical ? 'atlas_siren.wav' : undefined,
             smallIcon: 'ic_launcher_round',
             extra: {
               category: options.category,
@@ -497,6 +540,7 @@ export default function MenuPage({ onBack, onNavigateHistory, onCalibrateCompass
             </div>
             <h1 className="text-sm font-bold text-white tracking-wide font-mono uppercase">
               {view === 'hub' && (lang === 'id' ? 'MENU & PENGATURAN' : 'MENU & SETTINGS')}
+              {view === 'app_guide' && (lang === 'id' ? 'BUKU PANDUAN APLIKASI & GLOSARIUM' : 'APP MANUAL & GLOSSARY')}
               {view === 'appearance' && (lang === 'id' ? 'TAMPILAN // APPEARANCE' : 'APPEARANCE & DISPLAY')}
               {view === 'notifications' && (lang === 'id' ? 'NOTIFIKASI // NOTIFICATIONS' : 'EMERGENCY NOTIFICATIONS')}
               {view === 'local_notifications' && (lang === 'id' ? 'PENGATURAN NOTIFIKASI LOKAL' : 'LOCAL NOTIFICATION SETTINGS')}
@@ -507,6 +551,7 @@ export default function MenuPage({ onBack, onNavigateHistory, onCalibrateCompass
               {view === 'license' && (lang === 'id' ? 'INFORMASI LISENSI // HAK CIPTA' : 'LICENSE INFORMATION // COPYRIGHT')}
               {view === 'news' && (lang === 'id' ? 'NEWS GEMPA SISTEM' : 'EARTHQUAKE TELEMETRY NEWS')}
               {view === 'changelog' && (lang === 'id' ? 'LOG PEMBARUAN SISTEM' : 'SYSTEM RELEASE CHANGELOG')}
+              {view === 'broadcasts' && (lang === 'id' ? 'SIARAN DARURAT POSKO KOMANDO' : 'COMMAND DISPATCH BROADCASTS')}
               {view === 'remarks' && (lang === 'id' ? 'KETERANGAN SISTEM' : 'SYSTEM REMARKS')}
               {view === 'terms' && (lang === 'id' ? 'KETENTUAN LAYANAN' : 'TERMS OF SERVICE')}
               {view === 'privacy' && (lang === 'id' ? 'KEBIJAKAN PRIVASI' : 'PRIVACY POLICY')}
@@ -514,7 +559,7 @@ export default function MenuPage({ onBack, onNavigateHistory, onCalibrateCompass
           </div>
         </div>
         <div className="px-2 py-0.5 rounded bg-black/60 border border-[#1A2333] font-mono text-[10px] text-nerv-orange font-bold">
-          v1.0.5
+          {LATEST_NEWS_VERSION}
         </div>
       </div>
 
@@ -612,6 +657,24 @@ export default function MenuPage({ onBack, onNavigateHistory, onCalibrateCompass
                   <ChevronRight className="w-4 h-4 text-slate-500" />
                 </button>
 
+                <button
+                  onClick={() => setView('app_guide')}
+                  className="w-full px-4 py-3.5 flex items-center justify-between hover:bg-white/[0.03] transition-colors"
+                >
+                  <div className="flex items-center gap-3">
+                    <BookOpen className="w-4 h-4 text-amber-400" />
+                    <div className="text-left">
+                      <span className="text-xs font-medium text-slate-200 block">
+                        {lang === 'id' ? 'Buku Panduan Aplikasi & Glosarium' : 'App Manual & Tactical Glossary'}
+                      </span>
+                      <span className="text-[10px] text-slate-500 font-sans block">
+                        {lang === 'id' ? 'Tata cara penggunaan fitur, panduan navigasi, dan arti istilah' : 'User guide, feature operations, and system terminology'}
+                      </span>
+                    </div>
+                  </div>
+                  <ChevronRight className="w-4 h-4 text-slate-500" />
+                </button>
+
                 {onNavigateHistory && (
                   <button
                     onClick={onNavigateHistory}
@@ -658,7 +721,7 @@ export default function MenuPage({ onBack, onNavigateHistory, onCalibrateCompass
                         {lang === 'id' ? 'News Gempa Sistem' : 'System Earthquake Feed (News)'}
                       </span>
                       <span className="text-[10px] text-slate-500 font-sans block">
-                        {lang === 'id' ? 'Riwayat pesan gempa masuk (otomatis kedaluwarsa 60 jam)' : 'Live seismic telemetry alerts (auto-purged 60h)'}
+                        {lang === 'id' ? 'Riwayat warta telemetri gempa masuk' : 'Live seismic telemetry news archive'}
                       </span>
                     </div>
                   </div>
@@ -692,6 +755,36 @@ export default function MenuPage({ onBack, onNavigateHistory, onCalibrateCompass
                         {unreadLogCount}
                       </span>
                     )}
+                    <ChevronRight className="w-4 h-4 text-slate-500" />
+                  </div>
+                </button>
+
+                {/* 3. BROADCASTS: Siaran Darurat Posko Komando */}
+                <button
+                  onClick={handleOpenBroadcasts}
+                  className="w-full px-4 py-3.5 flex items-center justify-between hover:bg-white/[0.03] transition-colors"
+                >
+                  <div className="flex items-center gap-3">
+                    <Megaphone className="w-4 h-4 text-amber-400 shrink-0" />
+                    <div className="text-left">
+                      <span className="text-xs font-medium text-slate-200 block">
+                        {lang === 'id' ? 'Pesan Siaran Komando' : 'Command Post Broadcasts'}
+                      </span>
+                      <span className="text-[10px] text-slate-500 font-sans block">
+                        {lang === 'id' ? 'Instruksi resmi penanganan darurat dari Posko Komando' : 'Official emergency instructions & tactical advisories'}
+                      </span>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    {unreadBroadcastsCount > 0 ? (
+                      <span className="px-2 py-0.5 rounded-full bg-amber-500/20 border border-amber-500/60 text-[10px] font-mono font-bold text-amber-400 animate-pulse">
+                        {unreadBroadcastsCount}
+                      </span>
+                    ) : broadcastList.length > 0 ? (
+                      <span className="px-2 py-0.5 rounded bg-slate-800 text-[10px] font-mono text-slate-400">
+                        {broadcastList.length}
+                      </span>
+                    ) : null}
                     <ChevronRight className="w-4 h-4 text-slate-500" />
                   </div>
                 </button>
@@ -772,6 +865,173 @@ export default function MenuPage({ onBack, onNavigateHistory, onCalibrateCompass
                   return `Tactical Telemetry & Emergency Evacuation Network — ${clean} Telemetry Node`;
                 })()}
               </p>
+            </div>
+          </div>
+        )}
+
+        {/* ══════════════════════════════════════════════════════════
+            VIEW: APP_GUIDE (Buku Panduan Aplikasi & Glosarium)
+        ══════════════════════════════════════════════════════════ */}
+        {view === 'app_guide' && (
+          <div className="p-4 space-y-6">
+            {/* 1. GLOSARIUM TAKTIS SISTEM */}
+            <div className="space-y-3 font-mono">
+              <div className="flex items-center justify-between border-b border-[#1A2333] pb-2">
+                <div>
+                  <div className="flex items-center gap-1.5">
+                    <span className="w-2 h-2 rounded-full bg-nerv-cyan animate-pulse" />
+                    <h3 className="text-xs font-bold text-nerv-cyan uppercase tracking-wider">
+                      {lang === 'id' ? 'GLOSARIUM ISTILAH SISTEM A.T.L.A.S' : 'TACTICAL SYSTEM GLOSSARY'}
+                    </h3>
+                  </div>
+                  <p className="text-[10px] text-slate-400 font-sans mt-0.5">
+                    {lang === 'id' ? 'Penjelasan arti istilah, tingkat bahaya, dan kode panggilan sistem' : 'Detailed explanations of system terminology and status codes'}
+                  </p>
+                </div>
+                <div className="px-2 py-0.5 rounded bg-black/50 border border-slate-800 text-[9px] text-slate-400 font-bold">
+                  {GLOSSARY_TERMS.length} ENTRI
+                </div>
+              </div>
+
+              {/* Search filter for glossary */}
+              <div className="relative">
+                <Search className="w-3.5 h-3.5 text-slate-500 absolute left-3 top-1/2 -translate-y-1/2" />
+                <input
+                  type="text"
+                  value={glossarySearch}
+                  onChange={(e) => setGlossarySearch(e.target.value)}
+                  placeholder="Cari istilah (DEFCON, UNIT, ZRB, Sharelock)..."
+                  className="w-full pl-9 pr-3 py-2 rounded-lg bg-black/60 border border-slate-800 text-xs text-white placeholder:text-slate-600 focus:border-nerv-cyan focus:outline-none"
+                />
+              </div>
+
+              <div className="space-y-2.5">
+                {GLOSSARY_TERMS.filter(g => 
+                  g.term.toLowerCase().includes(glossarySearch.toLowerCase()) || 
+                  g.summary.toLowerCase().includes(glossarySearch.toLowerCase()) ||
+                  g.detail.toLowerCase().includes(glossarySearch.toLowerCase())
+                ).map((item) => {
+                  const isExp = expandedGlossary === item.term;
+                  return (
+                    <div
+                      key={item.term}
+                      className={`rounded-xl border transition-all overflow-hidden bg-[#0a0f1d] ${
+                        isExp ? 'border-nerv-cyan/70 shadow-[0_0_15px_rgba(0,229,255,0.15)]' : 'border-slate-800/80 hover:border-slate-700'
+                      }`}
+                    >
+                      <button
+                        onClick={() => setExpandedGlossary(isExp ? '' : item.term)}
+                        className="w-full p-3.5 text-left flex items-start justify-between gap-3 hover:bg-white/[0.02] transition-colors"
+                      >
+                        <div className="min-w-0 flex-1">
+                          <div className="flex items-center gap-2 mb-1 flex-wrap">
+                            <span className="text-[9px] font-mono font-bold tracking-widest text-slate-500 uppercase">
+                              {item.code}
+                            </span>
+                            <span className={`px-1.5 py-0.5 rounded text-[8px] font-mono font-bold border ${item.badgeColor}`}>
+                              {item.badge}
+                            </span>
+                          </div>
+                          <h4 className="text-xs font-mono font-bold text-white tracking-wide">
+                            {item.term}
+                          </h4>
+                          <p className="text-[11px] font-sans text-slate-400 mt-1 leading-relaxed">
+                            {item.summary}
+                          </p>
+                        </div>
+                        <div className="p-1 rounded bg-slate-800/60 text-slate-400 shrink-0 mt-1">
+                          {isExp ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
+                        </div>
+                      </button>
+
+                      {isExp && (
+                        <div className="px-3.5 pb-3.5 pt-1 border-t border-slate-800/60 font-sans text-xs space-y-2.5 bg-black/30">
+                          <div className="text-slate-300 leading-relaxed whitespace-pre-line text-[11px]">
+                            {item.detail}
+                          </div>
+                          {item.examples && item.examples.length > 0 && (
+                            <div className="p-2 rounded-lg bg-slate-900/90 border border-slate-800 font-mono text-[10px] space-y-1">
+                              <span className="text-nerv-cyan font-bold block mb-1">CONTOH PENERAPAN DI A.T.L.A.S:</span>
+                              {item.examples.map((ex, idx) => (
+                                <div key={idx} className="text-slate-300 flex items-center gap-1.5">
+                                  <span className="text-nerv-orange">›</span>
+                                  <span>{ex}</span>
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* 2. PANDUAN PENGGUNAAN FITUR (Langkah Demi Langkah) */}
+            <div className="space-y-3 font-mono">
+              <div className="flex items-center justify-between border-b border-[#1A2333] pb-2">
+                <div>
+                  <div className="flex items-center gap-1.5">
+                    <span className="w-2 h-2 rounded-full bg-nerv-orange animate-pulse" />
+                    <h3 className="text-xs font-bold text-nerv-orange uppercase tracking-wider">
+                      {lang === 'id' ? 'PANDUAN OPERASIONAL CARA PENGGUNAAN FITUR' : 'SYSTEM OPERATIONAL WORKFLOW'}
+                    </h3>
+                  </div>
+                  <p className="text-[10px] text-slate-400 font-sans mt-0.5">
+                    {lang === 'id' ? 'Langkah kerja rinci setiap menu dari situasi normal hingga darurat' : 'Step-by-step instructions for all application interfaces'}
+                  </p>
+                </div>
+              </div>
+
+              <div className="space-y-3">
+                {FEATURE_GUIDES.map((guide, idx) => (
+                  <div
+                    key={idx}
+                    className="p-4 rounded-xl border border-slate-800/80 bg-[#0d121c] space-y-3 shadow-md"
+                  >
+                    <div className="flex items-center justify-between border-b border-slate-800/60 pb-2">
+                      <div className="flex items-center gap-2">
+                        <div
+                          className="w-6 h-6 rounded-lg flex items-center justify-center text-xs font-black text-black font-mono shrink-0"
+                          style={{ background: guide.color }}
+                        >
+                          {idx + 1}
+                        </div>
+                        <h4 className="text-xs font-mono font-bold text-white tracking-wide">
+                          {guide.title}
+                        </h4>
+                      </div>
+                      <span className="px-1.5 py-0.5 rounded bg-black/60 border border-slate-800 font-mono text-[8px] text-slate-400 uppercase font-bold">
+                        {guide.tag}
+                      </span>
+                    </div>
+
+                    <p className="text-xs text-slate-300 font-sans leading-relaxed">
+                      {guide.desc}
+                    </p>
+
+                    <div className="space-y-2 pt-1">
+                      {guide.steps.map((st, sIdx) => (
+                        <div
+                          key={sIdx}
+                          className="flex items-start gap-2.5 p-2 rounded-lg bg-black/40 border border-slate-800/50"
+                        >
+                          <span
+                            className="text-[9px] font-mono font-black px-1.5 py-0.5 rounded shrink-0 text-black mt-0.5"
+                            style={{ background: guide.color }}
+                          >
+                            {st.step}
+                          </span>
+                          <p className="text-[11px] font-sans text-slate-300 leading-snug">
+                            {st.instruction}
+                          </p>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                ))}
+              </div>
             </div>
           </div>
         )}
@@ -1792,25 +2052,26 @@ export default function MenuPage({ onBack, onNavigateHistory, onCalibrateCompass
                 <p className="text-[11px] font-mono font-bold text-slate-500 uppercase tracking-widest">
                   {lang === 'id' ? 'NEWS GEMPA SISTEM' : 'SYSTEM SEISMIC TELEMETRY NEWS'}
                 </p>
-                <span className="text-[10px] font-mono text-nerv-cyan font-bold bg-nerv-cyan/10 px-2 py-0.5 rounded border border-nerv-cyan/30">
-                  {lang === 'id' ? 'BATAS 60 JAM' : '60H LIFETIME'}
-                </span>
               </div>
 
               {earthquakeList.length === 0 ? (
                 <div className="p-6 rounded-xl bg-[#0D121F] border border-[#1A2333] text-center space-y-2">
                   <Activity className="w-8 h-8 text-slate-600 mx-auto" />
                   <p className="text-xs text-slate-400 font-mono">
-                    {lang === 'id' ? 'Belum ada warta gempa baru dalam 60 jam terakhir' : 'No seismic telemetry events recorded in the last 60 hours'}
+                    {lang === 'id' ? 'Belum ada warta gempa baru dalam 7 hari terakhir' : 'No seismic telemetry events recorded in the last 7 days'}
                   </p>
                 </div>
               ) : (
                 <div className="space-y-3">
                   {earthquakeList.map((item) => {
-                    const expireAt = item.receivedAt + (60 * 60 * 1000 * 60)
+                    const expireAt = item.receivedAt + (7 * 24 * 60 * 60 * 1000)
                     const diffMs = Math.max(0, expireAt - Date.now())
-                    const hoursLeft = Math.floor(diffMs / (3600 * 1000))
+                    const daysLeft = Math.floor(diffMs / (24 * 3600 * 1000))
+                    const hoursLeft = Math.floor((diffMs % (24 * 3600 * 1000)) / (3600 * 1000))
                     const minsLeft = Math.floor((diffMs % (3600 * 1000)) / (60 * 1000))
+                    const countdownText = daysLeft > 0 
+                      ? (lang === 'id' ? `${daysLeft}h ${hoursLeft}j ${minsLeft}m` : `${daysLeft}d ${hoursLeft}h ${minsLeft}m`)
+                      : (lang === 'id' ? `${hoursLeft}j ${minsLeft}m` : `${hoursLeft}h ${minsLeft}m`)
                     const formattedReceived = new Date(item.receivedAt).toLocaleTimeString('id-ID', {
                       hour: '2-digit',
                       minute: '2-digit',
@@ -1866,7 +2127,7 @@ export default function MenuPage({ onBack, onNavigateHistory, onCalibrateCompass
                             <span>DATA RESMI BMKG TEWS</span>
                           </span>
                           <span className="text-nerv-cyan font-bold">
-                            {lang === 'id' ? `Kedaluwarsa: ${hoursLeft}j ${minsLeft}m` : `Expires: ${hoursLeft}h ${minsLeft}m`}
+                            {lang === 'id' ? `Kedaluwarsa: ${countdownText}` : `Expires: ${countdownText}`}
                           </span>
                         </div>
                       </div>
@@ -1879,6 +2140,98 @@ export default function MenuPage({ onBack, onNavigateHistory, onCalibrateCompass
         })()}
 
         {/* ══════════════════════════════════════════════════════════
+            VIEW: BROADCASTS (SIARAN DARURAT POSKO KOMANDO)
+        ══════════════════════════════════════════════════════════ */}
+        {view === 'broadcasts' && (
+          <div className="p-4 space-y-4">
+            <div className="flex items-center justify-between px-2">
+              <p className="text-[11px] font-mono font-bold text-slate-500 uppercase tracking-widest">
+                {lang === 'id' ? 'PESAN SIARAN RESMI KOMANDO' : 'OFFICIAL COMMAND DISPATCHES'}
+              </p>
+              <span className="text-[10px] font-mono text-amber-400 font-bold bg-amber-500/10 px-2 py-0.5 rounded border border-amber-500/30">
+                DEFCON DISPATCH
+              </span>
+            </div>
+
+            {broadcastList.length === 0 ? (
+              <div className="p-6 rounded-xl bg-[#0D121F] border border-[#1A2333] text-center space-y-2">
+                <Megaphone className="w-8 h-8 text-slate-600 mx-auto" />
+                <p className="text-xs text-slate-400 font-mono">
+                  {lang === 'id' ? 'Belum ada pesan siaran darurat aktif dari Posko Komando' : 'No active emergency dispatches from Command Post'}
+                </p>
+                <p className="text-[10px] text-slate-600 font-mono">
+                  {lang === 'id' ? 'Instruksi resmi komando akan disiarkan langsung ke seluruh unit saat siaga' : 'Official command instructions will be broadcasted to all units in real-time'}
+                </p>
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {broadcastList.map((item) => (
+                  <div
+                    key={item.id}
+                    className={`p-4 rounded-xl border bg-black/60 space-y-2.5 ${
+                      item.level === 'CRITICAL'
+                        ? 'border-red-500/60 shadow-[0_0_15px_rgba(239,68,68,0.2)]'
+                        : item.level === 'WARNING'
+                        ? 'border-amber-500/60 shadow-[0_0_15px_rgba(245,158,11,0.2)]'
+                        : 'border-cyan-500/60 shadow-[0_0_15px_rgba(6,182,212,0.2)]'
+                    }`}
+                  >
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <span className={`px-2 py-0.5 rounded text-[9px] font-mono font-bold uppercase ${
+                          item.level === 'CRITICAL'
+                            ? 'bg-red-500/20 text-red-300 border border-red-500/40'
+                            : item.level === 'WARNING'
+                            ? 'bg-amber-500/20 text-amber-300 border border-amber-500/40'
+                            : 'bg-cyan-500/20 text-cyan-300 border border-cyan-500/40'
+                        }`}>
+                          {item.level === 'CRITICAL' ? 'DEFCON 1 · KRITIS' : item.level === 'WARNING' ? 'DEFCON 2 · PERINGATAN' : 'INFORMASI'}
+                        </span>
+                        <span className="text-[10px] font-mono font-bold text-white bg-slate-800/80 px-2 py-0.5 rounded border border-white/10">
+                          {item.region || 'SEMUA WILAYAH'}
+                        </span>
+                      </div>
+                      <span className="text-[10px] font-mono text-slate-400">
+                        {new Date(item.timestamp).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })}
+                      </span>
+                    </div>
+
+                    <div>
+                      <div className="text-[10px] font-mono text-slate-400 mb-0.5">
+                        DARI: <span className="text-white font-bold">{item.sender}</span>
+                      </div>
+                      <h3 className="text-sm font-bold text-white tracking-wide">
+                        {item.title}
+                      </h3>
+                    </div>
+
+                    <div className="p-3 rounded-lg bg-[#07090e] border border-white/10 text-xs text-slate-200 leading-relaxed font-sans break-words">
+                      {item.message}
+                    </div>
+
+                    <div className="pt-2 flex items-center justify-between border-t border-white/10">
+                      <span className="text-[9px] font-mono text-slate-500">
+                        STATUS: {item.read ? 'TERBACA' : 'BELUM DIBACA'}
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          markBroadcastAsRead(item.id)
+                          setBroadcastList(getAdminBroadcasts())
+                        }}
+                        className="px-3 py-1 rounded bg-white/10 hover:bg-white/20 active:scale-95 text-white font-mono text-[10px] font-bold flex items-center gap-1.5 transition-all"
+                      >
+                        <Check className="w-3.5 h-3.5 text-emerald-400" /> {lang === 'id' ? 'SAYA MEMATUHI' : 'ACKNOWLEDGE'}
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* ══════════════════════════════════════════════════════════
             VIEW: CHANGELOG (LOG PEMBARUAN SISTEM)
         ══════════════════════════════════════════════════════════ */}
         {view === 'changelog' && (
@@ -1889,237 +2242,463 @@ export default function MenuPage({ onBack, onNavigateHistory, onCalibrateCompass
 
             <div className="space-y-3">
               {[
-                {
-                  version: 'v1.0.5',
-                  timestamp: {
-                    id: '2026.10.27 (Selasa) 01:40 WITA',
-                    en: '2026.10.27 (Tue) 01:40 WITA'
-                  },
-                  title: {
-                    id: 'Penyempurnaan Unit Keluarga, NIK Lengkap, Pemisahan News & Presisi Sharelock',
-                    en: 'Family Unit Enhancements, Full NIK, News Split & Sharelock Precision'
-                  },
-                  details: {
-                    id: [
-                      'Akurasi Pelacakan GPS Presisi Tinggi (Sharelock Grade): Pembaruan sistem penentuan posisi dengan arsitektur Dual-Layer Watcher (Hardware Native + Web Geolocation) secara paralel tanpa cache stale (maximumAge: 0), dilengkapi filter bobot Kalman adaptif untuk stabilitas koordinat sekelas fitur share-location WhatsApp / Google Maps.',
-                      'Kustomisasi Peran Unit Anggota Keluarga: Penambahan verifikasi kode 6-digit dan kustomisasi peran unit (3-20 karakter alfanumerik) menggantikan label personal unit standar.',
-                      'Tampilan NIK Lengkap 16-Digit: NIK anggota unit kini ditampilkan lengkap pada kartu identitas keluarga dan QR Code untuk verifikasi akurat di posko.',
-                      'Kartu Identitas Unit Pengguna: Kartu identitas perangkat pengguna kini disematkan secara terkemuka di bagian atas daftar unit keluarga.',
-                      'Pemisahan Warta Gempa (News) & Log Pembaruan: Warta gempa masuk tercatat lengkap dalam kartu historis berbatas kedaluwarsa 60 jam (2,5 hari) dengan estimasi waktu mundur, terpisah dari log pembaruan rilis sistem.',
-                      'Respon Seketika Tombol Bantuan Darurat: Tombol memerlukan bantuan pada notifikasi darurat kini langsung merespon seketika tanpa jeda pemindaian GPS.',
-                      'Sinkronisasi Telemetri Global Darurat: Integrasi pop-up darurat taktis dan pembaruan koordinat langsung di seluruh menu antarmuka.'
-                    ],
-                    en: [
-                      'High-Precision Sharelock GPS Tracking: Updated positioning engine with parallel Dual-Layer Watcher (Hardware Native + Web Geolocation) with zero stale-cache latency (maximumAge: 0), paired with an adaptive Kalman filter for pin-drop accuracy comparable to Google Maps / WhatsApp share-location.',
-                      'Family Unit Role Customization: Added 6-digit security code verification and custom unit role naming (3-20 alphanumeric characters) replacing generic unit tags.',
-                      'Full 16-Digit NIK Display: Full 16-digit national identity numbers are now displayed on member unit cards and QR passes for accurate verification.',
-                      'User Unit Identity Card: The current user unit identity card is now prominently pinned to the top of the family unit list.',
-                      'Earthquake News & Release Changelog Separation: Incoming earthquake alerts are now recorded on dedicated news cards with a 60-hour auto-purge and estimated countdown, separated from system release logs.',
-                      'Instant Emergency Assistance Response: The emergency assistance button in alerts now responds instantly without sensor acquisition delays.',
-                      'Global Emergency Telemetry Synchronization: Integrated tactical emergency popup and realtime coordinate synchronization across all interface views.'
-                    ]
-                  }
-                },
-                {
-                  version: 'v1.0.3',
-                  timestamp: {
-                    id: '2026.10.26 (Senin) 17:50 WITA',
-                    en: '2026.10.26 (Mon) 17:50 WITA'
-                  },
-                  title: {
-                    id: 'Optimalisasi Tata Letak Bahasa & Layanan Latar Belakang Sentinel',
-                    en: 'Language Interface Optimization & Sentinel Background Service'
-                  },
-                  details: {
-                    id: [
-                      'Penyelarasan Pengaturan Bahasa Terpusat: Tombol pemilihan bahasa kini difokuskan secara eksklusif di dalam Menu Pengaturan Sistem, menyederhanakan header status dan panel profil agar antarmuka lebih bersih dan taktis.',
-                      'Dukungan Bahasa Awal Registrasi: Tombol pergantian bahasa tetap dipertahankan pada tahap awal pendaftaran untuk kenyamanan pengguna baru.',
-                      'Integrasi Mode Sentinel Latar Belakang 24/7: Penambahan layanan latar belakang permanen (Android Foreground Service) agar sirine dan peringatan simulasi bencana otomatis aktif seketika meskipun aplikasi ditutup.'
-                    ],
-                    en: [
-                      'Centralized Language Interface Optimization: Language configuration is now streamlined exclusively into the System Menu, keeping the main telemetry header and profile terminal clean and uncluttered.',
-                      'Onboarding Multilingual Support: Language switcher retained during initial identity registration steps for new user onboarding.',
-                      '24/7 Sentinel Background Service Integration: Added a persistent native Android Foreground Service ensuring emergency sirens and simulation alerts trigger immediately even when the app is closed.'
-                    ]
-                  }
-                },
-                {
-                  version: 'v1.0.2',
-                  timestamp: {
-                    id: '2026.10.26 (Senin) 16:30 WITA',
-                    en: '2026.10.26 (Mon) 16:30 WITA'
-                  },
-                  title: {
-                    id: 'Kalibrasi Sensor Kompas 3D & Pengaturan Bahasa Sistem',
-                    en: '3D Compass Sensor Calibration & System Language Settings'
-                  },
-                  details: {
-                    id: [
-                      'Penyempurnaan Kalibrasi Sensor Angka 8 (Figure-8 Gesture): Rekonstruksi deteksi gerak 4 arah di udara secara presisi dengan getaran respon dan nada konfirmasi, serta pencegahan kalibrasi selesai prematur saat ponsel dalam posisi diam atau miring.',
-                      'Pengaturan Bahasa Antarmuka: Penambahan opsi pergantian bahasa langsung antara Bahasa Indonesia dan English di dalam menu pengaturan sistem.',
-                      'Indikator Pembaruan News: Indikator titik merah notifikasi otomatis aktif ketika terdapat informasi pembaruan sistem dan hilang setelah menu News dibuka.'
-                    ],
-                    en: [
-                      'Enhanced Figure-8 Compass Calibration: Precision 4-way spatial motion detection with interactive haptic and audio chime confirmation, preventing premature completion when the device is resting or tilted.',
-                      'System Interface Language Settings: Added direct toggle between Indonesian and English interface languages in System Settings.',
-                      'News Update Indicator: Dynamic red notification dot alerts users of new system updates and automatically clears once the News section is reviewed.'
-                    ]
-                  }
-                },
-                {
-                  version: 'v1.0.1',
-                  timestamp: {
-                    id: '2026.10.26 (Senin) 12:00 WITA',
-                    en: '2026.10.26 (Mon) 12:00 WITA'
-                  },
-                  title: {
-                    id: 'Peningkatan Notifikasi Darurat, Aksesibilitas & Dwibahasa',
-                    en: 'Emergency Notification Enhancements, Accessibility & Bilingual Support'
-                  },
-                  details: {
-                    id: [
-                      'Penyempurnaan notifikasi darurat: Panel peringatan dapat ditutup cepat dengan cara digeser ke atas (swipe-up).',
-                      'Kalibrasi kompas otomatis: Panduan kompas kini hanya muncul sekali saat pertama kali aplikasi dipasang.',
-                      'Pengaturan tampilan lengkap: Pilihan tema terang/gelap, kontras tinggi, bantuan penglihatan warna, dan ramah pembaca layar (TalkBack).',
-                      'Dukungan dwibahasa: Aplikasi kini dapat digunakan sepenuhnya dalam Bahasa Indonesia dan Bahasa Inggris.',
-                      'Penyempurnaan izin Jangan Ganggu: Aplikasi dapat berbunyi saat situasi darurat bencana meskipun ponsel dalam mode hening.'
-                    ],
-                    en: [
-                      'Emergency notification refinement: Alert panels can now be quickly dismissed with an intuitive swipe-up gesture.',
-                      'Automated compass calibration: Compass orientation guide now prompts only once on initial installation.',
-                      'Comprehensive display settings: Light/Dark theme options, high contrast mode, color vision assistance, and screen reader (TalkBack) compatibility.',
-                      'Bilingual support: Complete interface usability in both Indonesian and English.',
-                      'Do Not Disturb override refinement: Alerts can audibly sound during severe disaster emergencies even if the device is set to silent mode.'
-                    ]
-                  }
-                },
-                {
-                  version: 'v1.0.0',
-                  timestamp: {
-                    id: '2026.10.26 (Senin) 09:00 WITA',
-                    en: '2026.10.26 (Mon) 09:00 WITA'
-                  },
-                  title: {
-                    id: 'Peluncuran Rilis Stabil A.T.L.A.S Multi-Threat Telemetry',
-                    en: 'Official Release of A.T.L.A.S Multi-Threat Telemetry'
-                  },
-                  details: {
-                    id: [
-                      'Registrasi identitas resmi berbasis NIK 16-digit yang aman dan terlindungi.',
-                      'Penerapan benteng enkripsi kode dan perlindungan anti-tamper tingkat tinggi.',
-                      'Akses langsung ke Pusat Pengaturan Sistem HP untuk perizinan lokasi latar belakang.',
-                      'Integrasi pengujian sirine kebencanaan nyata ke laci notifikasi dan riwayat sistem ponsel.',
-                      'Pembaruan protokol respons sinyal darurat unit: Pilihan SAYA AMAN ✓ dan BUTUH BANTUAN DARURAT.',
-                      'Status personel saat ping dikirim otomatis berubah ke WAITING // MENUNGGU RESPON.',
-                      'Pemulihan sesi cerdas: Pendaftaran ulang dengan NIK yang sama setelah reset aplikasi otomatis dipulihkan jika nama cocok.',
-                      'Tautan undangan grup unit keluarga langsung membuka aplikasi secara otomatis.',
-                      'Penyesuaian tata letak layar penuh agar nyaman dan tidak terpotong di semua tipe layar ponsel.'
-                    ],
-                    en: [
-                      'Official secure identity registration verified against protected 16-digit ID.',
-                      'High-grade runtime code obfuscation and tamper-resistance defense architecture.',
-                      'Direct access link to Android System Settings for background location permissions.',
-                      'Live disaster siren testing pipeline integrated with system notification tray and logging.',
-                      'Emergency response unit protocol: Instant toggle between I AM SAFE ✓ and NEED EMERGENCY HELP.',
-                      'Telemetry ping status automatically transitions to WAITING FOR RESPONSE upon dispatch.',
-                      'Smart session recovery: Re-registration with the same ID automatically restores existing session if identity matches.',
-                      'Family and unit invitation deep links automatically launch and join groups within the app.',
-                      'Adaptive full-screen viewport layout preventing cutoffs across edge-to-edge displays.'
-                    ]
-                  }
-                },
-                {
-                  version: 'v0.9.8',
-                  timestamp: {
-                    id: '2026.10.20 (Selasa) 14:30 WITA',
-                    en: '2026.10.20 (Tue) 14:30 WITA'
-                  },
-                  title: {
-                    id: 'Peningkatan Algoritma Rute Evakuasi & Deliniasi Zona Bahaya Palu',
-                    en: 'Evacuation Route Optimization & Palu Hazard Zone Mapping'
-                  },
-                  details: {
-                    id: [
-                      'Peningkatan akurasi panduan rute evakuasi tercepat menuju dataran tinggi dan shelter vertikal.',
-                      'Penambahan visualisasi layer peta batas Zona Rawan Bencana (ZRB 4 s.d. ZRB 1) Teluk Palu.',
-                      'Pencegahan tabrakan status bar Android dengan safe-area inset padding adaptif.'
-                    ],
-                    en: [
-                      'Higher accuracy routing to nearest elevated safe zones and vertical evacuation shelters.',
-                      'Visualized Disaster-Prone Zone layers (ZRB 4 to ZRB 1) across the Palu Bay coastal area.',
-                      'Dynamic Android status bar inset padding to eliminate interface clipping.'
-                    ]
-                  }
-                },
-                {
-                  version: 'v0.9.7',
-                  timestamp: {
-                    id: '2026.10.05 (Senin) 11:00 WITA',
-                    en: '2026.10.05 (Mon) 11:00 WITA'
-                  },
-                  title: {
-                    id: 'Peningkatan Stabilitas Pemantauan Lokasi & Efisiensi Baterai',
-                    en: 'Location Tracking Stability & Power Consumption Optimization'
-                  },
-                  details: {
-                    id: [
-                      'Peningkatan kestabilan pemantauan sinyal GPS di latar belakang.',
-                      'Optimasi efisiensi konsumsi daya baterai saat mode pemantauan darurat aktif.',
-                      'Sinkronisasi status offline untuk mempertahankan rute evakuasi saat sinyal terputus.'
-                    ],
-                    en: [
-                      'Enhanced background GPS telemetry stability and satellite acquisition speed.',
-                      'Optimized battery power consumption during continuous emergency monitoring mode.',
-                      'Offline cache synchronization preserving evacuation routing when connectivity drops.'
-                    ]
-                  }
-                },
-                {
-                  version: 'v0.9.6',
-                  timestamp: {
-                    id: '2026.09.28 (Minggu) 16:45 WITA',
-                    en: '2026.09.28 (Sun) 16:45 WITA'
-                  },
-                  title: {
-                    id: 'Penyempurnaan Visualisasi Radius Bahaya Gempa & Kompas',
-                    en: 'Earthquake Hazard Radius Visualization & Compass Alignment'
-                  },
-                  details: {
-                    id: [
-                      'Peningkatan visualisasi radius peringatan guncangan gempa bumi pada peta interaktif.',
-                      'Perbaikan animasi arah jarum kompas darurat saat perangkat digerakkan.',
-                      'Penyelarasan skala intensitas MMI dengan guncangan yang dirasakan di darat.'
-                    ],
-                    en: [
-                      'Interactive map visualization of estimated earthquake shaking radii.',
-                      'Smooth orientation damping for emergency compass needle during rapid movement.',
-                      'MMI intensity scale calibration aligned with ground-motion estimation models.'
-                    ]
-                  }
-                },
-                {
-                  version: 'v0.9.5',
-                  timestamp: {
-                    id: '2026.09.15 (Selasa) 10:15 WITA',
-                    en: '2026.09.15 (Tue) 10:15 WITA'
-                  },
-                  title: {
-                    id: 'Integrasi Feed Informasi Gempa Bumi & Peringatan Dini BMKG',
-                    en: 'BMKG Real-time Earthquake Data & Early Warning Feed Integration'
-                  },
-                  details: {
-                    id: [
-                      'Integrasi data informasi gempa bumi terkini secara langsung dari BMKG (Magnitudo, Kedalaman, Episentrum).',
-                      'Perhitungan otomatis perkiraan dampak guncangan gempa di lokasi pengguna.',
-                      'Protokol siaga tsunami otomatis untuk pesisir Teluk Palu.'
-                    ],
-                    en: [
-                      'Real-time telemetry integration with BMKG earthquake feeds (Magnitude, Depth, Epicenter).',
-                      'Automated local ground shaking intensity estimation at the user device coordinates.',
-                      'Automated tsunami warning alert protocol for the Palu Bay coastline.'
-                    ]
-                  }
-                }
+          {
+                    "version": "v1.1.0",
+                    "timestamp": {
+                              "id": "2026.10.29 (Kamis) 02:15 PM WITA",
+                              "en": "2026.10.29 (Thu) 02:15 PM WITA"
+                    },
+                    "title": {
+                              "id": "Pusat Siaran Komando Darurat & Informasi Maklumat Keselamatan Warga",
+                              "en": "Emergency Command Broadcast Center & Civil Safety Advisories"
+                    },
+                    "details": {
+                              "id": [
+                                        "Pusat Siaran Darurat Posko Komando: Penambahan menu khusus Pesan Siaran Komando di antarmuka warga, memungkinkan masyarakat menerima instruksi keselamatan resmi, arahan evakuasi darurat, dan maklumat situasi bencana langsung dari posko komando secara seketika.",
+                                        "Peringatan Darurat Bertingkat & Penanda Siaga: Setiap maklumat siaran dilengkapi lencana tingkat bahaya (Info Siaga, Peringatan Waspada, Evakuasi Segera) dengan penghitung jumlah pesan baru agar warga langsung mengetahui instruksi yang paling mendesak."
+                              ],
+                              "en": [
+                                        "Command Emergency Broadcast Center: Added dedicated Command Broadcasts menu for citizens, enabling immediate reception of official safety instructions, evacuation directives, and critical alerts directly from command posts.",
+                                        "Graduated Emergency Badges & Threat Indicators: Broadcast advisories are categorized with clear urgency levels (Advisory, Warning, Immediate Evacuation) alongside unread counters for quick comprehension."
+                              ]
+                    }
+          },
+          {
+                    "version": "v1.0.9",
+                    "timestamp": {
+                              "id": "2026.10.28 (Rabu) 08:30 AM WITA",
+                              "en": "2026.10.28 (Wed) 08:30 AM WITA"
+                    },
+                    "title": {
+                              "id": "Penyimpanan Telemetri Luar Jaringan (Offline Queue) & Penyempurnaan Alarm Bahaya",
+                              "en": "Offline Telemetry Storage Queue & Emergency Siren Sound Refinement"
+                    },
+                    "details": {
+                              "id": [
+                                        "Mekanisme Telemetri Luar Jaringan (Offline Queue): Sistem otomatis menyimpan data telemetri dan status keselamatan pengguna saat jaringan internet terputus di tengah bencana, lalu langsung mengirimkannya secara kilat begitu sinyal seluler kembali terhubung.",
+                                        "Penyempurnaan Suara Sirine Bahaya A.T.L.A.S: Mengganti nada bawaan alarm ponsel dengan nada sirine peringatan dini A.T.L.A.S yang lebih lantang, tegas, dan khas agar warga langsung mengenali tanda bahaya bencana.",
+                                        "Keterangan Panduan SMS SOS Terbaca Utuh: Merapikan tata letak tulisan panduan pada jendela SMS Darurat sehingga seluruh petunjuk keselamatan terbaca lengkap dan jelas di semua ukuran layar ponsel.",
+                                        "Pembaruan Masa Simpan Riwayat Warta Gempa: Riwayat berita gempa kini tersimpan rapi selama 1 minggu (7 hari) lengkap dengan penghitung waktu mundur otomatis pada tiap kartu berita."
+                              ],
+                              "en": [
+                                        "Offline Telemetry Storage Mechanism (Offline Queue): Automatically buffers user telemetry and safety reports during network loss, transmitting them immediately once cellular connectivity resumes.",
+                                        "A.T.L.A.S Distinct Emergency Siren Sound: Replaced standard device alarm tones with loud, clear, dual-tone disaster wailing sirens for instant recognition.",
+                                        "Complete SMS SOS Guide Text Readability: Optimized text formatting in the emergency SMS window, ensuring all safety instructions are displayed without cutoffs across all phone displays.",
+                                        "Seismic News Retention Extension: Earthquake reports are now maintained for 1 week (7 days) with dynamic countdown badges on each news card."
+                              ]
+                    }
+          },
+          {
+                    "version": "v1.0.8",
+                    "timestamp": {
+                              "id": "2026.10.27 (Selasa) 11:45 PM WITA",
+                              "en": "2026.10.27 (Tue) 11:45 PM WITA"
+                    },
+                    "title": {
+                              "id": "Perapian Tata Letak Navigasi Taktis & Penyeragaman Identitas Unit",
+                              "en": "Tactical Navigation HUD Optimization & Unit Nomenclature Alignment"
+                    },
+                    "details": {
+                              "id": [
+                                        "Perapian Layar Navigasi Darurat: Tombol pembatalan rute dipindahkan langsung ke dalam kartu shelter terpilih dan memperbaiki pemilihan rute otomatis agar layar navigasi tetap tenang dan tidak memaksakan rute sebelum shelter ditentukan pengguna.",
+                                        "Penyeragaman Nama Unit & Hierarki Komando: Menyeragamkan seluruh sebutan perangkat menjadi Unit di lapangan, menegaskan hierarki identitas (COMMAND-01 untuk Posko Komando Utama, COMMAND-XX untuk Posko Lapangan, serta Warga Mandiri), disertai pembedaan nada sinyal bahaya.",
+                                        "Penautan Anggota Keluarga Timbal-Balik & Dukungan WNA: Mempermudah penautan keluarga via kode QR 6-digit secara otomatis dua arah, registrasi paspor resmi untuk warga negara asing, serta pengiriman cepat status keselamatan SAYA AMAN ✓."
+                              ],
+                              "en": [
+                                        "Tactical Navigation Screen Optimization: Moved route cancellation directly into the active shelter card and prevented premature auto-routing until a shelter is selected.",
+                                        "Unit Nomenclature Standardization & Command Hierarchy: Transitioned all device labels to Unit in the field, formalized authority identification (COMMAND-01 for Primary Control, COMMAND-XX for Regional Posts, and Citizens), paired with distinct tactical alert tones.",
+                                        "Reciprocal Family Unit Pairing Protocol & Foreign Citizen Support: Two-way family pairing with 6-digit verification code, official passport registration for foreign nationals, and instant transmission of I AM SAFE ✓ safety status."
+                              ]
+                    }
+          },
+          {
+                    "version": "v1.0.7",
+                    "timestamp": {
+                              "id": "2026.10.25 (Minggu) 04:20 PM WITA",
+                              "en": "2026.10.25 (Sun) 04:20 PM WITA"
+                    },
+                    "title": {
+                              "id": "Penyelarasan Lokasi Satelit Presisi & Akses Rute Evakuasi Bebas Bahaya",
+                              "en": "High-Precision Satellite Positioning & Hazard-Free Evacuation Access"
+                    },
+                    "details": {
+                              "id": [
+                                        "Penyelarasan & Penstabilan Mesin Lokasi Satelit (Sharelock Tactical Grade): Menghilangkan lonjakan titik koordinat yang melompat-lompat dan meningkatkan akurasi posisi pengguna hingga setara standar pelacakan taktis militer yang sangat presisi.",
+                                        "Pembukaan Jalur Evakuasi Mandiri pada Mode Siaga: Pengguna dapat melihat dan mempelajari rute penyelamatan menuju seluruh shelter aman kapan saja dalam kondisi normal untuk latihan kesiapsiagaan mandiri.",
+                                        "Pembaruan Rute Evakuasi Menghindari Zona Bahaya (ZRB): Jalur penyelamatan otomatis mengarahkan warga menyusuri jalan raya yang aman dan menjauhi area pantai serta zona rawan bencana."
+                              ],
+                              "en": [
+                                        "GPS Telemetry Recalibration (Sharelock Tactical Grade): Real-time drift filtering to eliminate coordinate jumps and elevate location accuracy to high-precision tactical standards.",
+                                        "Standby Evacuation Route Access in Normal Mode: Users can now view and practice evacuation routes to safe shelters in normal conditions without waiting for an active disaster alert.",
+                                        "Evacuation Routing Restructuring & Hazard-Zone Avoidance (ZRB): Safety routes guide citizens along safe road networks while strictly avoiding shorelines and high-risk hazard zones."
+                              ]
+                    }
+          },
+          {
+                    "version": "v1.0.6",
+                    "timestamp": {
+                              "id": "2026.10.22 (Kamis) 08:35 AM WITA",
+                              "en": "2026.10.22 (Thu) 08:35 AM WITA"
+                    },
+                    "title": {
+                              "id": "Penguatan Jalur Evakuasi Multijalur & Verifikasi Shelter Aman",
+                              "en": "Multi-Route Evacuation Reinforcement & Shelter Verification"
+                    },
+                    "details": {
+                              "id": [
+                                        "Kalkulasi Jalur Alternatif: Menyediakan pilihan rute penyelamatan cadangan jika jalur utama terhalang atau mengalami kemacetan saat bencana.",
+                                        "Verifikasi Koordinat Shelter Resmi: Memastikan seluruh titik kumpul evakuasi di Kota Palu telah tervalidasi berada di daratan tinggi yang aman dari gelombang."
+                              ],
+                              "en": [
+                                        "Alternative Route Calculation: Provides backup evacuation corridors in case primary roads are blocked or congested during emergencies.",
+                                        "Official Safe Shelter Verification: Validated that all assembly zones in Palu are geocoded on certified safe elevations."
+                              ]
+                    }
+          },
+          {
+                    "version": "v1.0.5",
+                    "timestamp": {
+                              "id": "2026.10.19 (Senin) 10:15 PM WITA",
+                              "en": "2026.10.19 (Mon) 10:15 PM WITA"
+                    },
+                    "title": {
+                              "id": "Optimasi Peta Responsif, Panel Riwayat & Pemisahan Warta Gempa",
+                              "en": "Responsive Map Optimization, History Panel & Seismic News Separation"
+                    },
+                    "details": {
+                              "id": [
+                                        "Navigasi Peta Responsif: Pergerakan peta lebih halus dan otomatis menyesuaikan orientasi pengguna di lapangan.",
+                                        "Pencatatan Riwayat Evakuasi: Menyimpan catatan simulasi dan jarak evakuasi yang pernah ditempuh pengguna.",
+                                        "Pemisahan Warta Berita Gempa: Warta gempa memiliki kartu tersendiri dengan hitungan mundur waktu kedaluwarsa terpisah dari catatan pembaruan sistem."
+                              ],
+                              "en": [
+                                        "Responsive Map Navigation: Smooth map panning that dynamically aligns with user orientation on the ground.",
+                                        "Evacuation History Logging: Stores recorded simulation logs and travel distances completed by the user.",
+                                        "Seismic News Stream Separation: Earthquake events are displayed in dedicated cards with countdown expiration separate from release logs."
+                              ]
+                    }
+          },
+          {
+                    "version": "v1.0.3",
+                    "timestamp": {
+                              "id": "2026.10.14 (Rabu) 01:20 PM WITA",
+                              "en": "2026.10.14 (Wed) 01:20 PM WITA"
+                    },
+                    "title": {
+                              "id": "Pelacakan Unit Keluarga, Sinyal Darurat & Navigasi Cerdas",
+                              "en": "Family Unit Tracking, Emergency Signals & Smart Navigation"
+                    },
+                    "details": {
+                              "id": [
+                                        "Pemantauan Keselamatan Keluarga: Memungkinkan anggota keluarga saling melihat posisi di peta secara real-time saat keadaan darurat.",
+                                        "Tombol Sinyal Darurat (Emergency Ping): Membunyikan nada dan getaran khusus di ponsel keluarga untuk meminta perhatian atau bantuan cepat.",
+                                        "Navigasi Cerdas Otomatis: Aplikasi langsung menentukan shelter terdekat yang paling aman berdasarkan posisi warga saat itu."
+                              ],
+                              "en": [
+                                        "Family Safety Monitoring: Allows family members to track each other's live locations on the map during emergencies.",
+                                        "Emergency Signal Ping: Triggers distinctive alert sounds and vibrations on family phones to request urgent attention.",
+                                        "Automated Smart Navigation: The system instantly computes the safest and nearest assembly shelter from the user's location."
+                              ]
+                    }
+          },
+          {
+                    "version": "v1.0.2",
+                    "timestamp": {
+                              "id": "2026.10.11 (Minggu) 09:10 AM WITA",
+                              "en": "2026.10.11 (Sun) 09:10 AM WITA"
+                    },
+                    "title": {
+                              "id": "Pilihan Bahasa Antarmuka & Tanda Berita Pembaruan",
+                              "en": "Interface Language Selection & News Update Indicators"
+                    },
+                    "details": {
+                              "id": [
+                                        "Pilihan Bahasa Antarmuka: Menyediakan opsi pergantian bahasa instan antara Bahasa Indonesia dan Bahasa Inggris pada menu pengaturan aplikasi.",
+                                        "Tanda Pengingat Berita Baru: Titik merah pemberitahuan otomatis muncul saat ada warta sistem terbaru dan langsung hilang setelah menu News dibuka."
+                              ],
+                              "en": [
+                                        "Interface Language Selection: Direct toggle between Indonesian and English interface languages in System Settings.",
+                                        "News Update Indicators: Dynamic red indicator dot alerts users of new announcements and clears once the News section is reviewed."
+                              ]
+                    }
+          },
+          {
+                    "version": "v1.0.1",
+                    "timestamp": {
+                              "id": "2026.10.06 (Selasa) 08:45 PM WITA",
+                              "en": "2026.10.06 (Tue) 08:45 PM WITA"
+                    },
+                    "title": {
+                              "id": "Penyempurnaan Notifikasi Darurat & Kemudahan Tampilan",
+                              "en": "Emergency Notification Refinement & Display Accessibility"
+                    },
+                    "details": {
+                              "id": [
+                                        "Notifikasi Tanggap Cepat: Panel peringatan bahaya kini dapat ditutup cepat dengan usapan jari ke atas jika situasi telah kondusif.",
+                                        "Penyesuaian Tampilan Nyaman: Opsi tema gelap dan terang dengan kontras tajam yang nyaman di mata saat evakuasi malam hari.",
+                                        "Penerobosan Mode Hening: Suara alarm darurat bencana tetap dapat berbunyi nyaring meskipun ponsel disetel dalam mode senyap."
+                              ],
+                              "en": [
+                                        "Quick Dismiss Notifications: Emergency alert panels can be dismissed swiftly with a swipe-up gesture.",
+                                        "Comfortable Display Themes: High-contrast Dark and Light themes for clear readability during night-time evacuations.",
+                                        "Silent Mode Override: Crucial disaster alerts sound audibly even if the mobile device is set to silent mode."
+                              ]
+                    }
+          },
+          {
+                    "version": "v1.0.0",
+                    "timestamp": {
+                              "id": "2026.10.02 (Jumat) 07:25 AM WITA",
+                              "en": "2026.10.02 (Fri) 07:25 AM WITA"
+                    },
+                    "title": {
+                              "id": "Peluncuran Sistem Pertahanan & Telemetri Mandiri A.T.L.A.S",
+                              "en": "Launch of A.T.L.A.S Multi-Threat Telemetry System"
+                    },
+                    "details": {
+                              "id": [
+                                        "Pendaftaran Identitas Warga Resmi: Pencatatan nomor identitas kependudukan yang aman untuk memastikan keabsahan data bantuan evakuasi.",
+                                        "Uji Coba Sirine Nyata: Fasilitas pengujian suara sirine bencana untuk memastikan ponsel warga siap berbunyi saat terjadi gempa dan tsunami.",
+                                        "Status Keselamatan Cepat: Tombol pilihan instan SAYA AMAN ✓ dan BUTUH BANTUAN DARURAT untuk melapor ke keluarga dan posko."
+                              ],
+                              "en": [
+                                        "Protected Citizen Identity Registration: Secure identification verifying users for authorized evacuation manifest coordination.",
+                                        "Live Siren Testing Pipeline: Sound verification ensuring mobile devices ring clearly during simulated emergency drills.",
+                                        "Rapid Safety Status: Instant toggle between I AM SAFE ✓ and NEED HELP for emergency reporting."
+                              ]
+                    }
+          },
+          {
+                    "version": "v0.9.8",
+                    "timestamp": {
+                              "id": "2026.09.25 (Jumat) 11:15 PM WITA",
+                              "en": "2026.09.25 (Fri) 11:15 PM WITA"
+                    },
+                    "title": {
+                              "id": "Sinkronisasi Posisi Real-Time & Penghemat Daya Baterai",
+                              "en": "Real-Time Location Synchronization & Battery Optimization"
+                    },
+                    "details": {
+                              "id": [
+                                        "Sinkronisasi Data Posisi Cepat: Memastikan perubahan koordinat lokasi terkirim cepat dengan konsumsi baterai yang sangat hemat.",
+                                        "Pemulihan Sesi Mandiri: Masuk kembali secara otomatis dengan identitas yang sama tanpa perlu mendaftar ulang jika aplikasi dibersihkan."
+                              ],
+                              "en": [
+                                        "Rapid Location Sync: Efficient coordinate telemetry transmission preserving device battery during field movement.",
+                                        "Smart Session Recovery: Reopening the app automatically restores identity without requiring redundant registration."
+                              ]
+                    }
+          },
+          {
+                    "version": "v0.9.7",
+                    "timestamp": {
+                              "id": "2026.09.21 (Senin) 02:40 PM WITA",
+                              "en": "2026.09.21 (Mon) 02:40 PM WITA"
+                    },
+                    "title": {
+                              "id": "Penyaringan Gangguan Sinyal Satelit & Peningkatan Akurasi",
+                              "en": "Satellite Signal Noise Filtering & Accuracy Enhancement"
+                    },
+                    "details": {
+                              "id": [
+                                        "Peredaman Akurasi Melompat: Meredam gangguan sinyal satelit di sekitar gedung bertingkat agar titik posisi pengguna tidak melompat.",
+                                        "Penguncian Titik Koordinat Nyata: Hanya memperbarui rute saat pengguna benar-benar berpindah posisi nyata di lapangan."
+                              ],
+                              "en": [
+                                        "Noise Damping: Filters urban multipath satellite interference to keep user marker coordinates stable.",
+                                        "True Movement Detection: Triggers route recomputation only upon genuine physical positional shifts."
+                              ]
+                    }
+          },
+          {
+                    "version": "v0.9.6",
+                    "timestamp": {
+                              "id": "2026.09.16 (Rabu) 10:50 AM WITA",
+                              "en": "2026.09.16 (Wed) 10:50 AM WITA"
+                    },
+                    "title": {
+                              "id": "Visualisasi Panduan Jalur Evakuasi & Deteksi Kedatangan",
+                              "en": "Evacuation Guidance Visualization & Safe Arrival Detection"
+                    },
+                    "details": {
+                              "id": [
+                                        "Garis Panduan Evakuasi Dinamis: Menampilkan garis bercahaya di jalan raya menuju shelter yang otomatis terpotong saat dilewati.",
+                                        "Deteksi Tiba di Lokasi Aman: Memberikan konfirmasi getaran sukses dan ringkasan evakuasi ketika pengguna telah sampai di shelter tujuan."
+                              ],
+                              "en": [
+                                        "Dynamic Path Guidance: Renders an active route guide along streets, dynamically advancing as users walk.",
+                                        "Safe Arrival Confirmation: Vibrates and displays an arrival summary modal once reaching the safe shelter radius."
+                              ]
+                    }
+          },
+          {
+                    "version": "v0.9.5",
+                    "timestamp": {
+                              "id": "2026.09.11 (Jumat) 05:15 PM WITA",
+                              "en": "2026.09.11 (Fri) 05:15 PM WITA"
+                    },
+                    "title": {
+                              "id": "Penghindaran Jalur Bahaya Pantai & Zona Rawan Bencana",
+                              "en": "Shoreline Hazard Avoidance & Disaster Risk Zone Bypassing"
+                    },
+                    "details": {
+                              "id": [
+                                        "Penghindaran Zona Merah Bahaya: Rute penyelamatan otomatis menjauhkan warga dari garis pantai Teluk Palu dan area genangan air.",
+                                        "Prioritas Jalur Menanjak: Menghitung jalur evakuasi yang secara bertahap membawa pengguna menuju dataran yang lebih tinggi."
+                              ],
+                              "en": [
+                                        "Red Zone Hazard Avoidance: Routing actively directs pedestrians away from the Palu Bay coastline and potential surge zones.",
+                                        "Elevated Path Prioritization: Prioritizes streets with positive incline leading toward high safe ground."
+                              ]
+                    }
+          },
+          {
+                    "version": "v0.9.0",
+                    "timestamp": {
+                              "id": "2026.08.29 (Sabtu) 08:20 AM WITA",
+                              "en": "2026.08.29 (Sat) 08:20 AM WITA"
+                    },
+                    "title": {
+                              "id": "Pemetaan Jaringan Jalan Raya Resmi Kota Palu",
+                              "en": "Official Road Network Graph Integration for Palu City"
+                    },
+                    "details": {
+                              "id": [
+                                        "Rute Berbasis Jalan Nyata: Navigasi evakuasi sepenuhnya mengikuti jalan raya resmi dan jembatan penyeberangan, bukan garis lurus melompati sungai.",
+                                        "Penyimpanan Jaringan Jalan Offline: Peta jalan raya tersimpan di dalam ponsel sehingga rute tetap bisa dihitung tanpa koneksi internet."
+                              ],
+                              "en": [
+                                        "True Street-Network Routing: Navigation strictly follows mapped roads and bridge crossings rather than straight lines across rivers.",
+                                        "Offline Road Graph Storage: Street network data is embedded locally for instant route calculation without data connections."
+                              ]
+                    }
+          },
+          {
+                    "version": "v0.8.0",
+                    "timestamp": {
+                              "id": "2026.07.24 (Jumat) 09:15 AM WITA",
+                              "en": "2026.07.24 (Fri) 09:15 AM WITA"
+                    },
+                    "title": {
+                              "id": "Perenderan Peta Cepat Tanpa Jeda & Rotasi 3D Halus",
+                              "en": "Hardware-Accelerated Fluid Map Rendering & 3D Compass Rotation"
+                    },
+                    "details": {
+                              "id": [
+                                        "Peta Halus Tanpa Patah-Patah: Menggunakan akselerasi grafis perangkat keras sehingga geser dan perbesaran peta terasa sangat ringan dan lancar.",
+                                        "Rotasi 3D Dinamis: Peta dapat diputar mengikuti arah hadap kompas pengguna di lapangan dengan mulus."
+                              ],
+                              "en": [
+                                        "Hardware-Accelerated Rendering: Ultra-smooth map interactions, eliminating visual lag during pan and zoom gestures.",
+                                        "Dynamic 3D Compass Rotation: Map rotates seamlessly in sync with the user's heading."
+                              ]
+                    }
+          },
+          {
+                    "version": "v0.7.5",
+                    "timestamp": {
+                              "id": "2026.06.18 (Kamis) 03:40 PM WITA",
+                              "en": "2026.06.18 (Thu) 03:40 PM WITA"
+                    },
+                    "title": {
+                              "id": "Pemberdayaan Chipset Sensor Satelit & Kelancaran Pelacakan",
+                              "en": "Direct Satellite Sensor Acquisition & Telemetry Optimization"
+                    },
+                    "details": {
+                              "id": [
+                                        "Penguncian Sinyal Satelit Langsung: Menghubungkan aplikasi langsung ke sensor satelit bawaan ponsel untuk mendapatkan koordinat pengguna yang akurat dan stabil.",
+                                        "Optimalisasi Kinerja dan Baterai: Menstabilkan proses pemantauan posisi agar aplikasi tetap lancar, tidak mudah terputus, dan hemat konsumsi baterai."
+                              ],
+                              "en": [
+                                        "Direct Satellite Sensor Interfacing: Interfacing directly with phone satellite sensors for stable and accurate positioning.",
+                                        "Performance & Battery Optimization: Stabilized position monitoring listeners for smooth tracking and minimal battery draw."
+                              ]
+                    }
+          },
+          {
+                    "version": "v0.6.0",
+                    "timestamp": {
+                              "id": "2026.04.22 (Rabu) 10:30 PM WITA",
+                              "en": "2026.04.22 (Wed) 10:30 PM WITA"
+                    },
+                    "title": {
+                              "id": "Sinkronisasi Telemetri Lintas Perangkat & Perbaikan Tampilan Peta",
+                              "en": "Cross-Device Telemetry Synchronization & Map Viewport Stabilization"
+                    },
+                    "details": {
+                              "id": [
+                                        "Perbaikan Tampilan Layar Peta: Memastikan peta langsung terbuka penuh dan tidak berlayar abu-abu saat pertama kali dijalankan di ponsel.",
+                                        "Penyaluran Status Darurat Seketika: Memastikan perubahan status keselamatan antar perangkat terkirim dan diterima secara langsung tanpa jeda."
+                              ],
+                              "en": [
+                                        "Map Display Optimization: Resolves grey blank viewport glitches ensuring maps open full-screen instantly on mobile devices.",
+                                        "Instant Emergency Status Broadcast: Real-time emergency state synchronization delivered across devices without delay."
+                              ]
+                    }
+          },
+          {
+                    "version": "v0.4.0",
+                    "timestamp": {
+                              "id": "2026.02.16 (Senin) 08:15 AM WITA",
+                              "en": "2026.02.16 (Mon) 08:15 AM WITA"
+                    },
+                    "title": {
+                              "id": "Penentuan Titik Kumpul Aman & Verifikasi Lapangan",
+                              "en": "Safe Assembly Shelter Calibration & Field Coordinates Logging"
+                    },
+                    "details": {
+                              "id": [
+                                        "Pemetaan Lokasi Pengungsian Aman: Memasukkan titik kumpul resmi seperti Lapangan Imanuel, Gelanggang Remaja, dan Kompas I ke dalam radar sistem.",
+                                        "Penghitungan Estimasi Jarak: Menghitung perkiraan jarak tempuh dari posisi pengguna ke tempat evakuasi yang dituju."
+                              ],
+                              "en": [
+                                        "Safe Shelter Geolocation Logging: Verified coordinates for official assembly grounds including Imanuel Field, Youth Arena, and Kompas I.",
+                                        "Distance Estimation: Computes approximate travel distance from user position to chosen evacuation grounds."
+                              ]
+                    }
+          },
+          {
+                    "version": "v0.2.0",
+                    "timestamp": {
+                              "id": "2025.11.26 (Rabu) 04:45 PM WITA",
+                              "en": "2025.11.26 (Wed) 04:45 PM WITA"
+                    },
+                    "title": {
+                              "id": "Uji Coba Rute Darat & Evaluasi Penghalang Muara Sungai",
+                              "en": "Ground Routing Trials & Palu River Natural Barrier Audit"
+                    },
+                    "details": {
+                              "id": [
+                                        "Audit Rintangan Lapangan: Menemukan dan mengatasi kelemahan rute lurus yang membelah pemukiman dan muara Sungai Palu yang tidak bisa diseberangi tanpa jembatan.",
+                                        "Uji Coba Sensor Lokasi: Menguji ketahanan sinyal penentu posisi di dalam maupun di luar ruangan."
+                              ],
+                              "en": [
+                                        "Natural Obstacle Audit: Identified navigation barriers such as river estuaries and impassable areas that require bridge routing.",
+                                        "Sensor Reliability Trials: Tested device location stability in both indoor and outdoor settings."
+                              ]
+                    }
+          },
+          {
+                    "version": "v0.1.0",
+                    "timestamp": {
+                              "id": "2025.09.18 (Kamis) 09:20 AM WITA",
+                              "en": "2025.09.18 (Thu) 09:20 AM WITA"
+                    },
+                    "title": {
+                              "id": "Awal Riset Lapangan & Perancangan Sistem Evakuasi Pesisir Palu",
+                              "en": "Field Research Inception & Palu Coastal Evacuation System Architecture"
+                    },
+                    "details": {
+                              "id": [
+                                        "Perancangan Sistem Penyelamatan Mandiri: Penyusunan cetak biru sistem navigasi penyelamatan diri warga pesisir Teluk Palu menghadapi ancaman tsunami.",
+                                        "Pendataan Titik Kumpul Aman: Pengumpulan koordinat ruang terbuka hijau, lapangan, dan gedung evakuasi vertikal di sekitar pesisir."
+                              ],
+                              "en": [
+                                        "Self-Evacuation System Architecture: Conceptual blueprint for real-time coastal tsunami evacuation navigation in Palu Bay.",
+                                        "Safe Assembly Zone Mapping: Documenting elevated open fields, parks, and vertical evacuation buildings."
+                              ]
+                    }
+          }
               ].map(({ version, timestamp, title, details }) => {
                 const itemTimestamp = typeof timestamp === 'string' ? timestamp : (timestamp[lang] || timestamp.id)
                 const itemTitle = typeof title === 'string' ? title : (title[lang] || title.id)

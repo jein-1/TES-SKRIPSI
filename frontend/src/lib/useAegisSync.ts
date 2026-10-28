@@ -24,7 +24,9 @@ export interface AegisSyncEvent {
     | "SHELTER_DELETED"
     | "HAZARD_ZONE_ADDED"
     | "HAZARD_ZONE_UPDATED"
-    | "HAZARD_ZONE_DELETED";
+    | "HAZARD_ZONE_DELETED"
+    | "ADMIN_BROADCAST"
+    | "ADMIN_BROADCAST_DELETE";
   fromId?: string;
   fromName?: string;
   toId?: string;
@@ -40,6 +42,7 @@ export interface AegisSyncEvent {
   ts?: number;
   shelter?: Shelter;
   hazardZone?: HazardZone;
+  broadcast?: any;
   [key: string]: unknown;
 }
 
@@ -147,6 +150,28 @@ export const aegisApi = {
       event: "PING_HELP",
       payload: { fromId, fromName, toId, lat, lng, nik },
     });
+  },
+
+  /** Admin: broadcast emergency instruction message to all units */
+  sendAdminBroadcast: async (broadcast: import("./broadcastStorage").AdminBroadcast) => {
+    await broadcastChannel.send({
+      type: "broadcast",
+      event: "ADMIN_BROADCAST",
+      payload: broadcast,
+    });
+    const { saveAdminBroadcast } = await import("./broadcastStorage");
+    saveAdminBroadcast(broadcast);
+  },
+
+  /** Admin: recall/delete active emergency broadcast */
+  deleteAdminBroadcast: async (id: string) => {
+    await broadcastChannel.send({
+      type: "broadcast",
+      event: "ADMIN_BROADCAST_DELETE",
+      payload: { id },
+    });
+    const { removeAdminBroadcast } = await import("./broadcastStorage");
+    removeAdminBroadcast(id);
   },
 
   /** Broadcast user location (Supabase Upsert & Broadcast) */
@@ -646,6 +671,18 @@ broadcastChannel
   })
   .on("broadcast", { event: "HAZARD_ZONE_DELETED" }, (payload) => {
     listeners.forEach((fn) => fn({ type: "HAZARD_ZONE_DELETED", ...payload.payload }));
+  })
+  .on("broadcast", { event: "ADMIN_BROADCAST" }, (payload) => {
+    import("./broadcastStorage").then(({ saveAdminBroadcast }) => {
+      saveAdminBroadcast(payload.payload);
+    });
+    listeners.forEach((fn) => fn({ type: "ADMIN_BROADCAST", broadcast: payload.payload, ...payload.payload }));
+  })
+  .on("broadcast", { event: "ADMIN_BROADCAST_DELETE" }, (payload) => {
+    import("./broadcastStorage").then(({ removeAdminBroadcast }) => {
+      removeAdminBroadcast(payload.payload.id);
+    });
+    listeners.forEach((fn) => fn({ type: "ADMIN_BROADCAST_DELETE", ...payload.payload }));
   })
   .subscribe();
 

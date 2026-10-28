@@ -15,7 +15,7 @@ import { fetchClientIp } from '../../lib/geocode'
 import { supabase } from '../../lib/supabaseClient'
 
 interface Props {
-  onComplete: (name: string, nik: string) => void
+  onComplete: (name: string, nik: string, citizenship?: CitizenshipType) => void
   onClose?: () => void
 }
 
@@ -225,10 +225,10 @@ export default function FirstVisitModal({ onComplete }: Props) {
 
         // Pemulihan sesi terminal: Jika nama cocok, izinkan registrasi ulang setelah Clear Data / Reset
         if (registeredName && registeredName === inputCleanName) {
-          if (existing.id && (existing.id.toUpperCase().includes('NODE-01') || existing.id === 'NODE-01')) {
+          if (existing.id && (existing.id.toUpperCase().includes('NODE-01') || existing.id.toUpperCase().includes('ARCHITECT'))) {
             localStorage.setItem('atlas_is_node_01', 'true')
-            localStorage.setItem('atlasTerminalId', 'NODE-01')
-            localStorage.setItem('aegisTerminalId', 'NODE-01')
+            localStorage.setItem('atlasTerminalId', 'ARCHITECT 01')
+            localStorage.setItem('aegisTerminalId', 'ARCHITECT 01')
           }
           if (myTerminalId && existing.id !== myTerminalId) {
             try {
@@ -254,8 +254,14 @@ export default function FirstVisitModal({ onComplete }: Props) {
       console.warn("NIK uniqueness check warning:", e)
     }
 
+    localStorage.setItem('atlas_is_wna', citizenship === 'WNA' ? 'true' : 'false')
+    if (citizenship === 'WNA') {
+      localStorage.setItem('atlasTerminalId', 'FOREIGN CITIZEN')
+      localStorage.setItem('aegisTerminalId', 'FOREIGN CITIZEN')
+    }
+
     setTimeout(() => {
-      onComplete(toTitleCase(name), cleanId)
+      onComplete(toTitleCase(name), cleanId, citizenship)
     }, 400)
   }
 

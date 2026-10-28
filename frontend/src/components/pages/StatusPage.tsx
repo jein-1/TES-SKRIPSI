@@ -3,11 +3,19 @@
 // ═══════════════════════════════════════════════════════════════
 import { useState, useEffect } from 'react'
 import { Map, MapMarker, MarkerContent } from '@/components/ui/map'
-import { MapPin, Users, BookOpen, ChevronRight, CheckCircle, Heart, Activity, ChevronLeft, Radio, AlertTriangle, Globe, Clock } from 'lucide-react'
+import { MapPin, Users, BookOpen, ChevronRight, CheckCircle, Heart, Activity, ChevronLeft, Radio, AlertTriangle, Globe, Clock, Megaphone, ShieldAlert, Check, X } from 'lucide-react'
 import { motion, AnimatePresence } from 'motion/react'
 import { loadFamily } from './FamilyPage'
 import { useLanguage } from '../../lib/i18n'
 import type { GempaData } from '../../lib/useBMKG'
+import { enqueueOfflineTelemetry } from '../../lib/offlineQueue'
+import { sendEmergencySmsSos } from '../../lib/smsGateway'
+import {
+  getAdminBroadcasts,
+  markBroadcastAsRead,
+  isBroadcastRelevantForUser,
+  type AdminBroadcast
+} from '../../lib/broadcastStorage'
 
 const PALU_CENTER: [number, number] = [-0.8917, 119.8577]
 
@@ -144,6 +152,25 @@ export default function StatusPage({ onNavigate, userLocation, onBack, userName,
   const [safePressed, setSafePressed] = useState(false)
   const [lastUpdated, setLastUpdated] = useState<string | null>(null)
   const [pulseKey, setPulseKey] = useState(0)
+
+  // Admin Emergency Broadcast State
+  const [broadcasts, setBroadcasts] = useState<AdminBroadcast[]>([])
+  const [dismissedBroadcastIds, setDismissedBroadcastIds] = useState<string[]>([])
+  const [showBroadcastHistory, setShowBroadcastHistory] = useState(false)
+
+  const reloadBroadcasts = () => {
+    setBroadcasts(getAdminBroadcasts())
+  }
+
+  useEffect(() => {
+    reloadBroadcasts()
+    const handleUpdate = () => reloadBroadcasts()
+    window.addEventListener('atlas_admin_broadcast_updated', handleUpdate)
+    return () => window.removeEventListener('atlas_admin_broadcast_updated', handleUpdate)
+  }, [])
+
+  const relevantBroadcasts = broadcasts.filter(b => isBroadcastRelevantForUser(b, userLocation))
+  const activeBroadcast = relevantBroadcasts.length > 0 ? relevantBroadcasts[0] : null
   const [latestQuake, setLatestQuake] = useState<DisasterEvent | null>(() => {
     try {
       const historyKey = 'atlas_earthquake_news_history'
@@ -253,6 +280,12 @@ export default function StatusPage({ onNavigate, userLocation, onBack, userName,
     const now = new Date()
     setLastUpdated(`${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}:${String(now.getSeconds()).padStart(2,'0')} WIB`)
     if ('vibrate' in navigator) navigator.vibrate([100, 50, 200])
+
+    enqueueOfflineTelemetry('safe_report', {
+      terminalId,
+      userPosition,
+      timestamp: Date.now()
+    })
   }
 
   return (
@@ -297,19 +330,111 @@ export default function StatusPage({ onNavigate, userLocation, onBack, userName,
             className="px-2.5 py-1 rounded bg-black/60 border border-nerv-border hover:border-nerv-cyan text-right font-mono transition-colors"
             title={lang === 'id' ? 'Pengaturan Profil' : 'Profile Settings'}
           >
-            <span className="text-[8px] text-slate-500 block uppercase leading-none">NODE</span>
+            <span className="text-[8px] text-slate-500 block uppercase leading-none">UNIT</span>
             <span className={`text-xs font-bold ${
-              terminalId === 'NODE-01' ? 'text-amber-400' : 'text-nerv-cyan'
+              terminalId === 'ARCHITECT 01' || terminalId === 'NODE-01'
+                ? 'text-amber-400'
+                : (terminalId && terminalId.startsWith('COMMAND') ? 'text-nerv-orange' : (terminalId === 'FOREIGN CITIZEN' ? 'text-purple-300' : 'text-nerv-cyan'))
             }`}>
-              {terminalId === 'NODE-01'
-                ? 'NODE-01'
-                : (terminalId ? (terminalId.startsWith('NODE-P') ? terminalId : `NODE-P#${terminalId.slice(-3)}`) : 'NODE-P')}
+              {terminalId === 'ARCHITECT 01' || terminalId === 'NODE-01'
+                ? 'ARCHITECT 01'
+                : (terminalId && terminalId.startsWith('COMMAND') ? terminalId : (terminalId === 'FOREIGN CITIZEN' ? 'FOREIGN CITIZEN' : 'CITIZEN'))}
             </span>
           </button>
         </div>
       </div>
 
       <div className="flex-1 px-4 py-4 space-y-3 font-sans">
+
+        {/* A.T.L.A.S Official Command Broadcast Banner (Pesan Siaran Darurat Admin Komando) */}
+        {activeBroadcast && !dismissedBroadcastIds.includes(activeBroadcast.id) && (
+          <motion.div
+            initial={{ opacity: 0, scale: 0.96 }}
+            animate={{ opacity: 1, scale: 1 }}
+            className={`p-3.5 rounded-xl border relative overflow-hidden shadow-lg ${
+              activeBroadcast.level === 'CRITICAL'
+                ? 'bg-red-950/70 border-red-500/80 shadow-red-500/20 border-l-4 border-l-red-500'
+                : activeBroadcast.level === 'WARNING'
+                ? 'bg-amber-950/70 border-amber-500/80 shadow-amber-500/20 border-l-4 border-l-amber-500'
+                : 'bg-cyan-950/70 border-cyan-500/80 shadow-cyan-500/20 border-l-4 border-l-cyan-500'
+            }`}
+          >
+            <div className="flex items-center justify-between gap-2 border-b border-white/10 pb-2 mb-2">
+              <div className="flex items-center gap-1.5 min-w-0">
+                <ShieldAlert className={`w-4 h-4 shrink-0 ${
+                  activeBroadcast.level === 'CRITICAL' ? 'text-red-400 animate-pulse' : activeBroadcast.level === 'WARNING' ? 'text-amber-400' : 'text-cyan-400'
+                }`} />
+                <span className="font-mono text-[9px] font-black tracking-wider text-white uppercase truncate">
+                  SIARAN RESMI KOMANDO // BEBAS HOAX
+                </span>
+              </div>
+              <div className="flex items-center gap-1 shrink-0">
+                <span className={`px-1.5 py-0.5 rounded text-[8px] font-mono font-bold uppercase ${
+                  activeBroadcast.level === 'CRITICAL'
+                    ? 'bg-red-500/30 text-red-300 border border-red-500/50'
+                    : activeBroadcast.level === 'WARNING'
+                    ? 'bg-amber-500/30 text-amber-300 border border-amber-500/50'
+                    : 'bg-cyan-500/30 text-cyan-300 border border-cyan-500/50'
+                }`}>
+                  {activeBroadcast.level === 'CRITICAL' ? 'DEFCON 1' : activeBroadcast.level === 'WARNING' ? 'DEFCON 2' : 'INFORMASI'}
+                </span>
+                <span className="px-1.5 py-0.5 rounded text-[8px] font-mono font-bold bg-black/60 border border-white/15 text-slate-300">
+                  {activeBroadcast.region || 'SEMUA WILAYAH'}
+                </span>
+              </div>
+            </div>
+
+            <div className="space-y-1">
+              <div className="flex items-center justify-between text-[9px] font-mono text-slate-400">
+                <span className="text-white font-bold">{activeBroadcast.sender || 'COMMAND-01 (POSKO PUSAT)'}</span>
+                <span>{new Date(activeBroadcast.timestamp).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })} WITA</span>
+              </div>
+              <h3 className="text-xs font-bold text-white tracking-wide">
+                {activeBroadcast.title}
+              </h3>
+              <p className="text-[11px] text-slate-200 leading-relaxed font-sans break-words bg-black/40 p-2.5 rounded-lg border border-white/5">
+                {activeBroadcast.message}
+              </p>
+            </div>
+
+            <div className="mt-2.5 pt-2 border-t border-white/10 flex items-center justify-between gap-2">
+              <button
+                type="button"
+                onClick={() => setShowBroadcastHistory(true)}
+                className="text-[10px] font-mono text-slate-400 hover:text-white underline underline-offset-2 transition-colors"
+              >
+                Riwayat Pesan ({relevantBroadcasts.length})
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  markBroadcastAsRead(activeBroadcast.id);
+                  setDismissedBroadcastIds(prev => [...prev, activeBroadcast.id]);
+                }}
+                className="px-2.5 py-1 rounded bg-white/10 hover:bg-white/20 active:scale-95 text-white font-mono text-[10px] font-bold flex items-center gap-1 transition-all"
+              >
+                <Check className="w-3 h-3 text-emerald-400" /> SAYA MENGERTI & MEMATUHI
+              </button>
+            </div>
+          </motion.div>
+        )}
+
+        {/* Quick access to broadcast history if banner is dismissed */}
+        {relevantBroadcasts.length > 0 && (!activeBroadcast || dismissedBroadcastIds.includes(activeBroadcast.id)) && (
+          <button
+            type="button"
+            onClick={() => setShowBroadcastHistory(true)}
+            className="w-full py-2 px-3 rounded-lg bg-black/60 border border-nerv-cyan/40 hover:border-nerv-cyan text-nerv-cyan text-[10px] font-mono font-bold flex items-center justify-between transition-colors shadow-sm"
+          >
+            <div className="flex items-center gap-2">
+              <Megaphone className="w-3.5 h-3.5 animate-pulse" />
+              <span>SIARAN RESMI POSKO KOMANDO ({relevantBroadcasts.length} PESAN)</span>
+            </div>
+            <span className="text-white text-[9px] bg-nerv-cyan/20 px-1.5 py-0.5 rounded">
+              BUKA INSTRUKSI
+            </span>
+          </button>
+        )}
 
         {/* A.T.L.A.S Live Disaster Broadcast Card */}
         {latestQuake && (
@@ -432,6 +557,27 @@ export default function StatusPage({ onNavigate, userLocation, onBack, userName,
                 {t('signalTransmitted')} {lastUpdated}
               </motion.p>
             )}
+
+            {/* Transmisi Darurat via SMS 2G / GSM (Zero Internet Required) */}
+            <div className="mt-4 pt-3 border-t border-slate-800/80 flex justify-center">
+              <button
+                type="button"
+                onClick={() => {
+                  const savedNik = localStorage.getItem('aegis_nik') || ''
+                  sendEmergencySmsSos({
+                    lat: userPosition?.[0],
+                    lng: userPosition?.[1],
+                    userName,
+                    userNik: savedNik,
+                    targetPhone: '115'
+                  })
+                }}
+                className="px-3.5 py-2 rounded-lg bg-red-600/20 border border-red-500/40 text-red-400 hover:bg-red-600 hover:text-white transition-all text-[10px] font-mono font-bold flex items-center gap-1.5 shadow-[0_0_15px_rgba(239,68,68,0.2)] active:scale-95"
+              >
+                <Radio className="w-3.5 h-3.5 animate-pulse" />
+                TRANSMISI SOS DARURAT VIA SMS (115)
+              </button>
+            </div>
           </motion.div>
         )}
 
@@ -485,6 +631,85 @@ export default function StatusPage({ onNavigate, userLocation, onBack, userName,
 
         <div className="h-16" />
       </div>
+
+      {/* Modal Riwayat Siaran Darurat Admin Komando */}
+      <AnimatePresence>
+        {showBroadcastHistory && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-[2100] bg-black/85 backdrop-blur-md flex items-center justify-center p-4"
+          >
+            <div className="w-full max-w-sm max-h-[85vh] rounded-2xl bg-slate-900 border border-nerv-cyan/60 p-5 shadow-[0_0_40px_rgba(6,182,212,0.25)] flex flex-col font-sans">
+              <div className="flex items-center justify-between pb-3 border-b border-slate-800 shrink-0">
+                <div className="flex items-center gap-2">
+                  <Megaphone className="w-4 h-4 text-nerv-cyan animate-pulse" />
+                  <span className="text-xs font-mono font-black text-nerv-cyan tracking-wider">
+                    SIARAN RESMI POSKO KOMANDO
+                  </span>
+                </div>
+                <button
+                  onClick={() => setShowBroadcastHistory(false)}
+                  className="p-1 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition-colors"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+
+              <div className="flex-1 overflow-y-auto py-3 space-y-3 custom-scrollbar text-xs">
+                {relevantBroadcasts.length === 0 ? (
+                  <div className="p-6 text-center text-slate-500 font-mono text-xs">
+                    Belum ada siaran darurat aktif dari Posko Komando untuk wilayah Anda saat ini.
+                  </div>
+                ) : (
+                  relevantBroadcasts.map((b) => (
+                    <div
+                      key={b.id}
+                      className={`p-3 rounded-xl border space-y-1.5 ${
+                        b.level === 'CRITICAL'
+                          ? 'bg-red-950/40 border-red-500/40'
+                          : b.level === 'WARNING'
+                          ? 'bg-amber-950/40 border-amber-500/40'
+                          : 'bg-black/60 border-slate-800'
+                      }`}
+                    >
+                      <div className="flex items-center justify-between text-[9px] font-mono">
+                        <span className="text-nerv-cyan font-bold">{b.sender || 'COMMAND-01'}</span>
+                        <span className="text-slate-400">{new Date(b.timestamp).toLocaleString('id-ID')} WITA</span>
+                      </div>
+                      <div className="flex items-center gap-1.5">
+                        <span className={`px-1.5 py-0.2 rounded text-[8px] font-mono font-bold uppercase ${
+                          b.level === 'CRITICAL' ? 'bg-red-500/20 text-red-400' : b.level === 'WARNING' ? 'bg-amber-500/20 text-amber-400' : 'bg-cyan-500/20 text-cyan-400'
+                        }`}>
+                          {b.level}
+                        </span>
+                        <span className="px-1.5 py-0.2 rounded text-[8px] font-mono font-bold bg-slate-800 text-slate-300">
+                          {b.region}
+                        </span>
+                      </div>
+                      <h4 className="text-xs font-bold text-white leading-snug">{b.title}</h4>
+                      <p className="text-[11px] text-slate-300 leading-relaxed font-sans break-words bg-slate-950/60 p-2 rounded border border-slate-800/80">
+                        {b.message}
+                      </p>
+                    </div>
+                  ))
+                )}
+              </div>
+
+              <div className="pt-3 border-t border-slate-800 shrink-0">
+                <button
+                  type="button"
+                  onClick={() => setShowBroadcastHistory(false)}
+                  className="w-full py-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-white font-mono text-xs font-bold transition-colors"
+                >
+                  TUTUP
+                </button>
+              </div>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </motion.div>
   )
 }

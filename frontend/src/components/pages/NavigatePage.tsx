@@ -20,13 +20,16 @@ import type * as GeoJSON from 'geojson'
 import { polygonCentroid } from '../../lib/zoneOffset'
 import { ZRB_REFERENCE } from '../../lib/evacuation/zrbReference'
 import type { HazardZone } from '../../lib/evacuation/hazardZones'
+import { sendEmergencySmsSos, callEmergency115 } from '../../lib/smsGateway'
 
 interface Props {
   routes: RouteResult[]
-  selectedRoute: number
+  selectedRoute?: number
   tsunamiAlert: boolean
   userPosition: [number, number] | null
   onBack?: () => void
+  onCancelRoute?: () => void
+  onSelectRoute?: (idx: number | undefined) => void
   adminPing?: { fromName: string; role: string; fromId: string; message?: string } | null
   onAdminPingDismiss?: () => void
   onStartGps?: () => void
@@ -35,8 +38,8 @@ interface Props {
   gempa?: GempaData | null
   isGempaDismissed?: boolean
   onDismissGempa?: () => void
-  // Settings — required to forward the selected routing algorithm
   settings?: { algorithm: 'dijkstra' | 'haversine' }
+  isEvacuationCompleted?: boolean
 }
 
 // ── Helpers ────────────────────────────────────────────────────
@@ -97,12 +100,29 @@ function formatManeuver(step?: OsrmStep, fallbackLabel?: string): { label: strin
 // ── Figure-8 Calibration Modal REMOVED — replaced by Google Maps-style direct tracking ──
 
 // ── MAIN ──────────────────────────────────────────────────────
-export default function NavigatePage({ routes, selectedRoute, tsunamiAlert, userPosition, onBack, adminPing, onAdminPingDismiss, onStartGps, onUpdateUserPosition, gempa, isGempaDismissed, onDismissGempa, settings }: Props) {
+export default function NavigatePage({
+  routes,
+  selectedRoute,
+  tsunamiAlert,
+  userPosition,
+  onBack,
+  onCancelRoute,
+  onSelectRoute,
+  adminPing,
+  onAdminPingDismiss,
+  onStartGps,
+  onUpdateUserPosition,
+  gempa,
+  isGempaDismissed,
+  onDismissGempa,
+  settings,
+  isEvacuationCompleted,
+}: Props) {
   const [showMedical, setShowMedical]     = useState(false)
   const [selectedZoneInfo, setSelectedZoneInfo] = useState<HazardZone | null>(null)
   const [deviceHeading, setDeviceHeading] = useState<number | null>(null)
   const [headingLocked, setHeadingLocked] = useState(true)
-  const [activeRouteIdx, setActiveRouteIdx] = useState(selectedRoute)
+  const [activeRouteIdx, setActiveRouteIdx] = useState<number>(() => (tsunamiAlert ? (selectedRoute ?? 0) : (selectedRoute ?? -1)))
   const [showRoutePanel, setShowRoutePanel] = useState(false)
   const [localPos, setLocalPos] = useState<[number,number] | null>(null)
   const [isCalibrating, setIsCalibrating] = useState(false)
@@ -117,6 +137,21 @@ export default function NavigatePage({ routes, selectedRoute, tsunamiAlert, user
   const mapRef = useRef<MapRef | null>(null)
   const [osrmRoutes, setOsrmRoutes] = useState<OsrmRouteData[]>([])
   const [inspectingShelter, setInspectingShelter] = useState<Shelter | null>(null)
+  const [showSmsModal, setShowSmsModal] = useState(false)
+  const [smsTargetPhone, setSmsTargetPhone] = useState('')
+  const [isRouteActive, setIsRouteActive] = useState<boolean>(() => {
+    return tsunamiAlert ? true : (selectedRoute !== undefined && selectedRoute >= 0)
+  })
+
+  const handleCancelRoute = useCallback(() => {
+    setIsRouteActive(false);
+    setCustomTargetRoute(null);
+    setOsrmRoutes([]);
+    setActiveRouteIdx(-1);
+    setInspectingShelter(null);
+    onCancelRoute?.();
+    onSelectRoute?.(undefined);
+  }, [onCancelRoute, onSelectRoute]);
 
   // Pastikan shelter selalu termuat bahkan saat offline tanpa internet
   useEffect(() => {
@@ -195,28 +230,59 @@ export default function NavigatePage({ routes, selectedRoute, tsunamiAlert, user
 
   const handleForceGpsRefresh = async () => {
     setGpsRefreshing(true)
-    setCalibrationFeedback("🛰️ Mengunci sinyal satelit GNSS/GPS presisi...")
+    setCalibrationFeedback("🛰️ Mengunci telemetri posisi (Seluler & Satelit)...")
+
+    // Langsung bebaskan kunci pin manual agar peta tidak membeku
+    setIsManualPinned(false)
+    try {
+      localStorage.removeItem('atlas_manual_pinned')
+      localStorage.removeItem('atlas_manual_pinned_ts')
+    } catch {}
 
     const isNative = typeof window !== "undefined" && Capacitor.isNativePlatform()
     let resolved = false
     let tempWatchId: string | null = null
+    let graceTimer: any = null
+    let bestFixCandidate: { lat: number; lng: number; acc: number; label: string } | null = null
 
-    // Helper untuk menetapkan posisi hasil kunci satelit/fused yang akurat (<= 50m)
+    // Helper untuk menetapkan posisi hasil kunci satelit/fused yang akurat
     const commitGpsFix = (lat: number, lng: number, acc: number, label: string) => {
       if (resolved) return
       resolved = true
+      if (graceTimer) clearTimeout(graceTimer)
       if (tempWatchId && isNative) {
         Geolocation.clearWatch({ id: tempWatchId }).catch(() => {})
         tempWatchId = null
       }
       setGpsRefreshing(false)
-      // Hapus pin manual HANYA SETELAH posisi benar-benar terkunci secara akurat!
-      setIsManualPinned(false)
-      try {
-        localStorage.removeItem('atlas_manual_pinned')
-      } catch {}
+      handleApplyNewPosition([lat, lng], `✓ Posisi terkunci: [${lat.toFixed(4)}, ${lng.toFixed(4)}] (±${Math.round(acc)}m via ${label})`, false)
+    }
 
-      handleApplyNewPosition([lat, lng], `✓ Lokasi presisi terkunci: [${lat.toFixed(4)}, ${lng.toFixed(4)}] (±${Math.round(acc)}m via ${label})`, false)
+    const processCandidate = (lat: number, lng: number, acc: number, defaultLabel?: string) => {
+      if (resolved) return
+      const label = defaultLabel || (acc <= 25 ? "GNSS Satelit Multi-Band" : acc <= 60 ? "Fused Multi-Sensor" : "Jaringan Seluler BTS")
+      if (!bestFixCandidate || acc < bestFixCandidate.acc) {
+        bestFixCandidate = { lat, lng, acc, label }
+      }
+
+      // Kunci instan jika sinyal GNSS satelit / presisi tinggi tercapai (<= 35m)
+      if (acc <= 35) {
+        commitGpsFix(lat, lng, acc, label)
+        return
+      }
+
+      // Jika dalam gedung dan sinyal BTS seluler tersedia (<= 500m)
+      if (acc <= 500) {
+        setCalibrationFeedback(`📡 Sinyal seluler terdeteksi (±${Math.round(acc)}m via ${label})...`)
+        if (!graceTimer) {
+          // Beri jeda 2.5 detik untuk satelit; jika terhalang beton, otomatis gunakan seluler terbaik
+          graceTimer = setTimeout(() => {
+            if (bestFixCandidate && !resolved) {
+              commitGpsFix(bestFixCandidate.lat, bestFixCandidate.lng, bestFixCandidate.acc, bestFixCandidate.label)
+            }
+          }, 2500)
+        }
+      }
     }
 
     try {
@@ -224,27 +290,34 @@ export default function NavigatePage({ routes, selectedRoute, tsunamiAlert, user
     } catch {}
 
     if (isNative) {
-      // 1. Coba pembacaan langsung dari FusedLocationProvider (Google Play Services / Wi-Fi / Satelit)
-      Geolocation.getCurrentPosition({ enableHighAccuracy: true, timeout: 8000, maximumAge: 30000 })
+      // 1. Jalur Seluler Instan (Network Provider — cepat merespons di dalam gedung tebal!)
+      Geolocation.getCurrentPosition({ enableHighAccuracy: false, timeout: 4000, maximumAge: 60000 })
         .then((pos) => {
-          if (pos?.coords && (pos.coords.accuracy ?? 100) <= 50) {
-            commitGpsFix(pos.coords.latitude, pos.coords.longitude, pos.coords.accuracy || 15, (pos.coords.accuracy ?? 100) <= 20 ? "GNSS Satelit" : "Fused Wi-Fi/GPS")
+          if (pos?.coords) {
+            const acc = pos.coords.accuracy ?? 150
+            processCandidate(pos.coords.latitude, pos.coords.longitude, acc, "Jaringan Seluler BTS")
           }
         })
         .catch(() => {})
 
-      // 2. Multi-sample Watcher (Sharelock Grade): pantau stream posisi sampai akurasi <= 50m
+      // 2. Jalur Satelit Presisi GNSS (High Accuracy)
+      Geolocation.getCurrentPosition({ enableHighAccuracy: true, timeout: 8000, maximumAge: 0 })
+        .then((pos) => {
+          if (pos?.coords) {
+            const acc = pos.coords.accuracy ?? 30
+            processCandidate(pos.coords.latitude, pos.coords.longitude, acc)
+          }
+        })
+        .catch(() => {})
+
+      // 3. Multi-sample Watcher (Sharelock Grade)
       try {
         tempWatchId = await Geolocation.watchPosition(
-          { enableHighAccuracy: true, maximumAge: 5000 },
+          { enableHighAccuracy: true, maximumAge: 0 },
           (pos, err) => {
             if (resolved || err || !pos?.coords) return
             const acc = pos.coords.accuracy ?? 100
-            if (acc <= 50) {
-              commitGpsFix(pos.coords.latitude, pos.coords.longitude, acc, acc <= 20 ? "GNSS Satelit" : "Fused Wi-Fi/GPS")
-            } else {
-              setCalibrationFeedback(`🛰️ Sinyal posisi terdeteksi, memperjelas presisi (±${Math.round(acc)}m)...`)
-            }
+            processCandidate(pos.coords.latitude, pos.coords.longitude, acc)
           }
         )
       } catch (e) {
@@ -255,8 +328,9 @@ export default function NavigatePage({ routes, selectedRoute, tsunamiAlert, user
       if (typeof window !== "undefined" && "geolocation" in navigator) {
         navigator.geolocation.getCurrentPosition(
           (pos) => {
-            if (pos?.coords && (pos.coords.accuracy ?? 100) <= 50) {
-              commitGpsFix(pos.coords.latitude, pos.coords.longitude, pos.coords.accuracy, "Browser GPS/Wi-Fi")
+            if (pos?.coords) {
+              const acc = pos.coords.accuracy ?? 50
+              processCandidate(pos.coords.latitude, pos.coords.longitude, acc, "Browser Geolocation")
             }
           },
           () => {},
@@ -265,145 +339,44 @@ export default function NavigatePage({ routes, selectedRoute, tsunamiAlert, user
       }
     }
 
-    // Safety timeout: jika dalam 12 detik satelit belum terkunci (<= 50m)
-    // PERTAHANKAN PIN MANUAL ATAU KOORDINAT TERAKHIR PENGGUNA!
+    // Safety timeout: jika dalam 6 detik sinyal belum <= 35m, gunakan kandidat terbaik
     setTimeout(() => {
       if (resolved) return
+      if (bestFixCandidate) {
+        commitGpsFix(bestFixCandidate.lat, bestFixCandidate.lng, bestFixCandidate.acc, bestFixCandidate.label)
+        return
+      }
       resolved = true
+      if (graceTimer) clearTimeout(graceTimer)
       if (tempWatchId && isNative) {
         Geolocation.clearWatch({ id: tempWatchId }).catch(() => {})
         tempWatchId = null
       }
       setGpsRefreshing(false)
-      const isManual = localStorage.getItem('atlas_manual_pinned') === 'true'
-      if (isManual) {
-        setCalibrationFeedback("⚠️ Sinyal GPS lemah di dalam gedung tebal. Posisi pin manual Anda tetap dipertahankan.")
-      } else {
-        setCalibrationFeedback("⚠️ Sinyal GPS lemah di dalam gedung tebal. Pastikan GPS & Wi-Fi aktif.")
-      }
-    }, 12000)
+      setCalibrationFeedback("⚠️ Sinyal posisi belum tertangkap di dalam ruangan. Menunggu pembaruan telemetri...")
+    }, 6000)
   }
 
-  // ── HIGH-PRECISION GPS TRACKING (Google Maps-style, "sharelock" grade) ──
-  // Uses Kalman-weighted multi-sample smoothing for sub-10m accuracy
-  const gpsFilterRef = useRef<{ lat: number; lng: number; acc: number; ts: number } | null>(null)
-
+  // ── HIGH-PRECISION GPS TRACKING (Authoritative App.tsx Engine) ──
+  // Sinkronisasi koordinat langsung dari App.tsx (Kalman-filtered Sharelock Grade)
+  // Menghilangkan duplikasi watchPosition yang memicu lag dan jeda saat berjalan
   useEffect(() => {
     const isManual = localStorage.getItem('atlas_manual_pinned') === 'true'
     if (userPosition && !isManual) {
       setLocalPos(userPosition)
-      setViewport(v => ({ ...v, center: [userPosition[1], userPosition[0]] }))
+      if (headingLocked) {
+        setViewport(v => ({ ...v, center: [userPosition[1], userPosition[0]] }))
+      }
     }
-    let watchId: string | null = null;
-    let browserWatchId: number | null = null;
-
-    // Kalman-inspired position filter: blends new readings with previous position
-    // weighted by accuracy — low accuracy readings are mostly ignored
-    const applyPositionFilter = (lat: number, lng: number, accuracy: number) => {
-      // JIKA PENGGUNA SEDANG MENGGUNAKAN PIN MANUAL, JANGAN TIMPA DENGAN UPDATE GPS OTOMATIS!
-      if (localStorage.getItem('atlas_manual_pinned') === 'true') {
-        const now = Date.now()
-        gpsFilterRef.current = { lat, lng, acc: accuracy, ts: now }
-        return
-      }
-
-      // Saring akurasi: tolak sinyal kasar / BTS seluler (> 50m) agar tidak melompat ke pemancar kota,
-      // tetapi terima Fused Wi-Fi indoor Google Maps / WhatsApp (15-50m)
-      if (accuracy > 50) {
-        return
-      }
-
-      const prev = gpsFilterRef.current
-      const now = Date.now()
-
-      // Accept directly if first reading or accuracy < 25m
-      if (!prev || accuracy < 25) {
-        gpsFilterRef.current = { lat, lng, acc: accuracy, ts: now }
-        setLocalPos([lat, lng])
-        onUpdateUserPosition?.([lat, lng])
-        return
-      }
-
-      // If new reading is significantly more accurate, trust it more
-      const accRatio = prev.acc / Math.max(accuracy, 1)
-      const weight = Math.min(1, Math.max(0.05, 1 / (1 + accRatio * 0.5)))
-
-      // Time decay: older previous readings get less trust
-      const timeDelta = (now - prev.ts) / 1000
-      const timeWeight = Math.min(1, weight + timeDelta * 0.1)
-
-      const filteredLat = prev.lat + (lat - prev.lat) * timeWeight
-      const filteredLng = prev.lng + (lng - prev.lng) * timeWeight
-      const filteredAcc = prev.acc + (accuracy - prev.acc) * timeWeight
-
-      gpsFilterRef.current = { lat: filteredLat, lng: filteredLng, acc: filteredAcc, ts: now }
-      setLocalPos([filteredLat, filteredLng])
-      onUpdateUserPosition?.([filteredLat, filteredLng])
-    }
-
-    const isNative = typeof window !== "undefined" && Capacitor.isNativePlatform()
-
-    // 1. Browser Geolocation HANYA untuk Desktop / Browser Web (bukan Native Android)
-    if (!isNative && typeof window !== "undefined" && "geolocation" in navigator) {
-      navigator.geolocation.getCurrentPosition(
-        (p) => {
-          if (p.coords.accuracy <= 50) {
-            applyPositionFilter(p.coords.latitude, p.coords.longitude, p.coords.accuracy)
-            if (localStorage.getItem('atlas_manual_pinned') !== 'true') {
-              setViewport(v => ({ ...v, center: [p.coords.longitude, p.coords.latitude] }))
-            }
-          }
-        },
-        () => {},
-        { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
-      );
-
-      browserWatchId = navigator.geolocation.watchPosition(
-        (p) => {
-          if (p.coords.accuracy <= 50) {
-            applyPositionFilter(p.coords.latitude, p.coords.longitude, p.coords.accuracy)
-          }
-        },
-        () => {},
-        { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 }
-      );
-    }
-
-    // 2. Capacitor native watch (FusedLocationProvider on Android — Sharelock Accuracy)
-    const startWatch = async () => {
-      if (!isNative) return;
-      try {
-        await Geolocation.requestPermissions()
-      } catch {}
-      try {
-        watchId = await Geolocation.watchPosition(
-          { enableHighAccuracy: true, maximumAge: 0, timeout: 15000 },
-          (p, err) => {
-            if (err || !p || !p.coords) return;
-            const acc = p.coords.accuracy || 10
-            if (acc <= 35) {
-              applyPositionFilter(p.coords.latitude, p.coords.longitude, acc)
-            }
-          }
-        );
-      } catch (e) {
-        console.warn('[ATLAS GPS] Capacitor watch fallback:', e)
-      }
-    };
-    startWatch();
-
-    return () => {
-      if (watchId) Geolocation.clearWatch({ id: watchId }).catch(() => {});
-      if (browserWatchId !== null) navigator.geolocation.clearWatch(browserWatchId);
-    };
-  }, [userPosition])
+  }, [userPosition, headingLocked])
 
   useEffect(() => {
     onStartGps?.()
-  }, [])
+  }, [onStartGps])
 
-  // Calibration modal removed — compass orientation is handled automatically
-  const emergency = tsunamiAlert
+  // Status Darurat: Otomatis nonaktif jika sesi evakuasi pengguna telah selesai (Sudah Aman)
+  const isEvacSafeSession = isEvacuationCompleted || (typeof window !== 'undefined' && sessionStorage.getItem('atlas_evacuation_completed') === 'true')
+  const emergency = tsunamiAlert && !isEvacSafeSession
 
   const [shelterVersion, setShelterVersion] = useState(0)
 
@@ -439,10 +412,14 @@ export default function NavigatePage({ routes, selectedRoute, tsunamiAlert, user
   useEffect(() => {
     if (selectedRoute !== undefined && selectedRoute >= 0) {
       setActiveRouteIdx(selectedRoute)
+      setIsRouteActive(true)
+    } else if (selectedRoute === undefined && !tsunamiAlert) {
+      setActiveRouteIdx(-1)
+      setIsRouteActive(false)
     }
-  }, [selectedRoute])
+  }, [selectedRoute, tsunamiAlert])
 
-  const route       = activeRoutes[activeRouteIdx] || activeRoutes[0]
+  const route       = activeRouteIdx >= 0 ? (activeRoutes[activeRouteIdx] || activeRoutes[0]) : (emergency ? activeRoutes[0] : null)
   const shelter     = route ? shelters.find(s => s.id === route.shelterId || s.name === route.shelterName) : undefined
   const shelterPosRaw: [number, number] | undefined = shelter
     ? [shelter.lat, shelter.lng]
@@ -477,6 +454,95 @@ export default function NavigatePage({ routes, selectedRoute, tsunamiAlert, user
       }))
     }
   }, [effectivePos?.[0], effectivePos?.[1], emergency, heading, headingLocked, inspectingShelter, isCalibrating])
+
+  // Google Maps-style fitBounds helper (Smooth animated zoom-out to fit user, route & shelter)
+  const fitRouteBounds = useCallback((destLngLat?: [number, number], customCoords?: [number, number][]) => {
+    if (!effectivePos) return;
+    const pts: [number, number][] = [effectivePos];
+    if (destLngLat) pts.push(destLngLat);
+    if (customCoords && customCoords.length > 0) {
+      customCoords.forEach(c => pts.push(c));
+    }
+    
+    let minLng = pts[0][0], maxLng = pts[0][0];
+    let minLat = pts[0][1], maxLat = pts[0][1];
+    for (const [lng, lat] of pts) {
+      if (lng < minLng) minLng = lng;
+      if (lng > maxLng) maxLng = lng;
+      if (lat < minLat) minLat = lat;
+      if (lat > maxLat) maxLat = lat;
+    }
+    
+    userInteractedRef.current = true;
+    if (mapRef.current && typeof (mapRef.current as any).fitBounds === 'function') {
+      try {
+        (mapRef.current as any).fitBounds(
+          [[minLng, minLat], [maxLng, maxLat]],
+          {
+            padding: { top: 130, bottom: 250, left: 60, right: 60 },
+            maxZoom: 16,
+            duration: 900,
+            essential: true
+          }
+        );
+        return;
+      } catch (err) {
+        console.warn('[ATLAS MAP] fitBounds fallback:', err);
+      }
+    }
+    
+    // Fallback if mapRef.current.fitBounds is not directly available
+    const centerLng = (minLng + maxLng) / 2;
+    const centerLat = (minLat + maxLat) / 2;
+    const dLng = Math.abs(maxLng - minLng);
+    const dLat = Math.abs(maxLat - minLat);
+    const maxDelta = Math.max(dLng, dLat);
+    let calculatedZoom = 14;
+    if (maxDelta > 0.15) calculatedZoom = 11;
+    else if (maxDelta > 0.08) calculatedZoom = 12;
+    else if (maxDelta > 0.04) calculatedZoom = 13;
+    else if (maxDelta > 0.02) calculatedZoom = 14;
+    else calculatedZoom = 15;
+    
+    setViewport(v => ({
+      ...v,
+      center: [centerLng, centerLat],
+      zoom: calculatedZoom
+    }));
+  }, [effectivePos]);
+
+  // Memoized Hazard Zones to prevent heavy polygon recalculations during map drag/pan (lag fix)
+  const memoizedHazardZones = useMemo(() => {
+    return hazardZones.map((zone) => {
+      const centroid = polygonCentroid(zone.coords);
+      const color = ZRB_REFERENCE[zone.zrbLevel]?.color || '#ef4444';
+      const nF = Math.floor(zone.coords.length / 2);
+      
+      const front   = zone.coords.slice(0, nF);
+      const backRev = zone.coords.slice(nF);
+      const back    = [...backRev].reverse();
+      const quads = nF >= 2 ? front.slice(0, -1).flatMap((p1, qi) => {
+        const p2 = front[qi+1], b1 = back[qi], b2 = back[qi+1];
+        if (!p2 || !b1 || !b2) return [];
+        return [[ [p1[1],p1[0]], [p2[1],p2[0]], [b2[1],b2[0]], [b1[1],b1[0]], [p1[1],p1[0]] ]];
+      }) : [];
+      const fillGeom = quads.length > 0
+        ? { type: 'MultiPolygon' as const, coordinates: quads }
+        : { type: 'Polygon' as const, coordinates: [zone.coords.map(c => [c[1], c[0]])] };
+        
+      const frontGeom = nF >= 2 ? { type: 'LineString' as const, coordinates: zone.coords.slice(0, nF).map(c => [c[1], c[0]]) } : null;
+      const backGeom = nF >= 2 ? { type: 'LineString' as const, coordinates: zone.coords.slice(nF).map(c => [c[1], c[0]]) } : null;
+
+      return {
+        zone,
+        centroid,
+        color,
+        fillGeom,
+        frontGeom,
+        backGeom
+      };
+    });
+  }, [hazardZones]);
 
   const distanceM   = (effectivePosRaw && shelterPosRaw) ? haversineM(effectivePosRaw, shelterPosRaw) : (route?.totalDistance ? route.totalDistance * 1000 : 0)
   const distLabel   = osrmRoutes.length > 0 ? (osrmRoutes[0].distance < 1000 ? `${Math.round(osrmRoutes[0].distance)}m` : `${(osrmRoutes[0].distance/1000).toFixed(1)} km`) : (distanceM < 1000 ? `${Math.round(distanceM)}m` : `${(distanceM/1000).toFixed(1)} km`)
@@ -611,29 +677,58 @@ export default function NavigatePage({ routes, selectedRoute, tsunamiAlert, user
         </div>
       </div>
 
-      {/* Active shelter card */}
-      {route && (
+      {/* Active shelter card with in-card Cancel button */}
+      {(emergency || isRouteActive) && route && (
         <div className="shrink-0 px-3 pt-2 pb-1.5">
-          <div className={`p-3 rounded-2xl border flex items-center gap-3 ${
-            emergency ? 'border-red-800/40' : 'border-slate-700/40'
-          }`} style={{background: emergency ? '#160808' : '#0f1a2e'}}>
-            <div className={`w-1 self-stretch rounded-full shrink-0 ${emergency ? 'bg-red-500' : 'bg-emerald-500'}`}/>
-            <div className="flex-1 min-w-0">
-              <p className="text-[9px] text-slate-500 uppercase tracking-widest font-bold">
-                {emergency ? '🚨 Rute Evakuasi Aktif' : '🏠 Shelter Terdekat'}
-              </p>
-              <p className="text-sm font-black text-white truncate">{route.shelterName}</p>
+          <div
+            className={`p-3 rounded-2xl border flex items-center gap-3 transition-transform ${
+              emergency ? 'border-red-800/40' : 'border-slate-700/40'
+            }`}
+            style={{background: emergency ? '#160808' : '#0f1a2e'}}
+          >
+            <div
+              onClick={() => {
+                if (shelterPos) {
+                  fitRouteBounds(shelterPos, osrmRoutes[0]?.coordinates || route.coordinates?.map((c: any) => [c[1], c[0]]));
+                }
+              }}
+              className="flex items-center gap-3 flex-1 min-w-0 cursor-pointer"
+              title="Ketuk untuk melihat seluruh rute dan shelter di peta"
+            >
+              <div className={`w-1 self-stretch rounded-full shrink-0 ${emergency ? 'bg-red-500' : 'bg-emerald-500'}`}/>
+              <div className="flex-1 min-w-0">
+                <p className="text-[9px] text-slate-500 uppercase tracking-widest font-bold">
+                  {emergency ? '🚨 Rute Evakuasi Aktif' : '🏠 Shelter Terpilih'}
+                </p>
+                <p className="text-sm font-black text-white truncate">{route.shelterName}</p>
+              </div>
+              <div className="text-right shrink-0">
+                <p className={`text-base font-black ${emergency ? 'text-red-300' : 'text-white'}`}>{distLabel}</p>
+                <p className="text-[9px] text-slate-500 font-bold">{etaMin} mnt berjalan</p>
+              </div>
             </div>
-            <div className="text-right shrink-0">
-              <p className={`text-base font-black ${emergency ? 'text-red-300' : 'text-white'}`}>{distLabel}</p>
-              <p className="text-[9px] text-slate-500 font-bold">{etaMin} mnt berjalan</p>
-            </div>
+
+            {/* In-card Cancel Button */}
+            {!emergency && (
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  handleCancelRoute();
+                }}
+                className="px-2.5 py-1.5 rounded-xl bg-red-950/80 border border-red-500/50 hover:bg-red-900 text-red-300 hover:text-white text-[10px] font-mono font-bold transition-colors flex items-center gap-1 shrink-0 active:scale-95 shadow-sm"
+                title="Batalkan proyeksi rute"
+              >
+                <X className="w-3.5 h-3.5 text-red-400" />
+                <span>BATAL</span>
+              </button>
+            )}
           </div>
         </div>
       )}
 
       {/* MAP */}
-      <div className="flex-1 relative overflow-hidden min-h-0">
+      <div className="flex-1 relative overflow-hidden min-h-0" style={{ willChange: 'transform', transform: 'translateZ(0)' }}>
         <Map
           ref={mapRef}
           viewport={viewport}
@@ -649,57 +744,40 @@ export default function NavigatePage({ routes, selectedRoute, tsunamiAlert, user
         >
           {/* BMKG GEMPA TERKINI (Epicenter & Radius) - Removed from User POV to avoid squished view, but Overlay widget is kept at the top */}
 
-          {/* Hazard Zones MapGeoJSON */}
-          {hazardZones.map((zone, i) => {
-            const centroid = polygonCentroid(zone.coords);
-            const color = ZRB_REFERENCE[zone.zrbLevel]?.color || '#ef4444';
-            const nF = Math.floor(zone.coords.length / 2);
-            
-            const front   = zone.coords.slice(0, nF);
-            const backRev = zone.coords.slice(nF);
-            const back    = [...backRev].reverse();
-            const quads = nF >= 2 ? front.slice(0, -1).flatMap((p1, qi) => {
-              const p2 = front[qi+1], b1 = back[qi], b2 = back[qi+1];
-              if (!p2 || !b1 || !b2) return [];
-              return [[ [p1[1],p1[0]], [p2[1],p2[0]], [b2[1],b2[0]], [b1[1],b1[0]], [p1[1],p1[0]] ]];
-            }) : [];
-            const fillGeom = quads.length > 0
-              ? { type: 'MultiPolygon' as const, coordinates: quads }
-              : { type: 'Polygon' as const, coordinates: [zone.coords.map(c => [c[1], c[0]])] };
-              
-            return (
+          {/* Hazard Zones MapGeoJSON (Memoized for smooth 60fps pan/zoom) */}
+          {memoizedHazardZones.map((item, i) => (
             <Fragment key={`hazard-group-${i}`}>
               <MapGeoJSON 
                 key={`hazard-fill-${i}`}
-                data={{ type: 'Feature', properties: {}, geometry: fillGeom as any }}
-                fillPaint={{ 'fill-color': color, 'fill-opacity': 0.12 }}
+                data={{ type: 'Feature', properties: {}, geometry: item.fillGeom as any }}
+                fillPaint={{ 'fill-color': item.color, 'fill-opacity': 0.12 }}
                 fillHoverPaint={{ 'fill-opacity': 0.25 }}
                 interactive={true}
-                onClick={() => setSelectedZoneInfo(zone)}
+                onClick={() => setSelectedZoneInfo(item.zone)}
               />
-              {nF >= 2 && (
+              {item.frontGeom && (
                 <MapGeoJSON
                   key={`hazard-front-${i}`}
-                  data={{ type: 'Feature', properties: {}, geometry: { type: 'LineString', coordinates: zone.coords.slice(0, nF).map(c => [c[1], c[0]]) } as any }}
-                  linePaint={{ 'line-color': color, 'line-width': 1.5, 'line-opacity': 0.9 }}
+                  data={{ type: 'Feature', properties: {}, geometry: item.frontGeom as any }}
+                  linePaint={{ 'line-color': item.color, 'line-width': 1.5, 'line-opacity': 0.9 }}
                 />
               )}
-              {nF >= 2 && (
+              {item.backGeom && (
                 <MapGeoJSON
                   key={`hazard-back-${i}`}
-                  data={{ type: 'Feature', properties: {}, geometry: { type: 'LineString', coordinates: zone.coords.slice(nF).map(c => [c[1], c[0]]) } as any }}
-                  linePaint={{ 'line-color': color, 'line-width': 1, 'line-opacity': 0.6, 'line-dasharray': [5, 4] }}
+                  data={{ type: 'Feature', properties: {}, geometry: item.backGeom as any }}
+                  linePaint={{ 'line-color': item.color, 'line-width': 1, 'line-opacity': 0.6, 'line-dasharray': [5, 4] }}
                 />
               )}
-              <MapMarker latitude={centroid[0]} longitude={centroid[1]}>
+              <MapMarker latitude={item.centroid[0]} longitude={item.centroid[1]}>
                 <MarkerContent>
                   <div style={{ pointerEvents: 'none' }} className="bg-black/50 text-white text-[10px] px-2 py-0.5 rounded-full whitespace-nowrap font-bold shadow-sm">
-                    {zone.name}
+                    {item.zone.name}
                   </div>
                 </MarkerContent>
               </MapMarker>
             </Fragment>
-          )})}
+          ))}
 
           {/* Shelters — Hanya dari pengaturan Admin */}
           {shelters.map((s) => {
@@ -739,17 +817,19 @@ export default function NavigatePage({ routes, selectedRoute, tsunamiAlert, user
             )
           })}
 
-          {/* Routes (OSRM or Dijkstra road graph or straight line) - HANYA MUNCUL SAAT DARURAT */}
-          {emergency && (() => {
+          {/* Routes (OSRM or Dijkstra road graph or straight line) - AKTIF JIKA DARURAT ATAU DIPILIH */}
+          {(() => {
+            if (!emergency && !isRouteActive) return null;
             const osrmValid = osrmRoutes.length > 0 && osrmRoutes[0].coordinates.length > 1;
             const osrmSnapDist = osrmRoutes[0]?.startSnapDistMeters ?? 0;
             const preferDijkstra = !!(route?.coordinates && route.coordinates.length > 1 && (osrmSnapDist > 35 || !osrmValid));
+            const routeColor = emergency ? "#ef4444" : "#06b6d4";
 
             if (!preferDijkstra && osrmValid) {
               return (
                 <MapRoute 
                   coordinates={osrmRoutes[0].coordinates} 
-                  color={emergency ? "#ef4444" : "#6366f1"}
+                  color={routeColor}
                   width={6}
                   opacity={0.9}
                 />
@@ -758,8 +838,8 @@ export default function NavigatePage({ routes, selectedRoute, tsunamiAlert, user
             if (route?.coordinates && route.coordinates.length > 1) {
               return (
                 <MapRoute 
-                  coordinates={route.coordinates.map(c => [c[1], c[0]])} 
-                  color={emergency ? "#ef4444" : "#6366f1"}
+                  coordinates={route.coordinates.map((c: any) => [c[1], c[0]])} 
+                  color={routeColor}
                   width={6}
                   opacity={0.9}
                 />
@@ -769,7 +849,7 @@ export default function NavigatePage({ routes, selectedRoute, tsunamiAlert, user
               return (
                 <MapRoute 
                   coordinates={[effectivePos, shelterPos]} 
-                  color={emergency ? "#ef4444" : "#6366f1"}
+                  color={routeColor}
                   width={4}
                   opacity={0.9}
                   dashArray={[2, 2]}
@@ -987,6 +1067,15 @@ export default function NavigatePage({ routes, selectedRoute, tsunamiAlert, user
             <MapPin className="w-5 h-5"/>
           </button>
 
+          {/* Tactical SOS SMS Button (100% Offline / Basarnas 115) */}
+          <button
+            onClick={() => setShowSmsModal(true)}
+            className="w-11 h-11 rounded-full flex items-center justify-center border transition-all bg-red-600/90 border-red-500/80 text-white hover:bg-red-500 active:scale-95 shadow-[0_0_15px_rgba(239,68,68,0.5)]"
+            title="Kirim Sinyal SOS Darurat via SMS 2G (Tanpa Internet / Basarnas 115)"
+          >
+            <Radio className="w-5 h-5 text-white animate-pulse" />
+          </button>
+
           {emergency && (
             <button onClick={() => setHeadingLocked(!headingLocked)}
               className={`w-11 h-11 rounded-full flex items-center justify-center border shadow-lg ${
@@ -1029,7 +1118,7 @@ export default function NavigatePage({ routes, selectedRoute, tsunamiAlert, user
                 <span className="text-[9px] font-bold text-slate-400">{gempa.Jam.split(' ')[0]}</span>
               </div>
               <p className="text-[11px] text-slate-300 font-medium truncate">Mag {gempa.Magnitude} • Kd {gempa.Kedalaman}</p>
-              <p className="text-[9px] text-slate-400 truncate">{gempa.Wilayah}</p>
+              <p className="text-[9px] text-slate-400 line-clamp-2 break-words leading-tight">{gempa.Wilayah}</p>
             </div>
           </div>
         )}
@@ -1050,16 +1139,21 @@ export default function NavigatePage({ routes, selectedRoute, tsunamiAlert, user
             return (
               <button key={`${r.shelterId || r.shelterName}-${i}`} onClick={() => {
                 setActiveRouteIdx(i);
+                setIsRouteActive(true);
+                onSelectRoute?.(i);
                 if (effectivePos && r.coordinates && r.coordinates.length > 0) {
                   const dest = r.coordinates[r.coordinates.length - 1];
+                  const destLngLat: [number, number] = [dest[1], dest[0]];
+                  const routePts: [number, number][] = r.coordinates.map(c => [c[1], c[0]]);
+                  fitRouteBounds(destLngLat, routePts);
                   fetchOsrmRoute(effectivePos[0], effectivePos[1], dest[1], dest[0])
-                    .then(osrm => setOsrmRoutes(osrm))
+                    .then(osrm => {
+                      setOsrmRoutes(osrm);
+                      if (osrm.length > 0 && osrm[0].coordinates.length > 1) {
+                        fitRouteBounds(destLngLat, osrm[0].coordinates);
+                      }
+                    })
                     .catch(() => {});
-                  setViewport(v => ({
-                    ...v,
-                    center: [(effectivePos[0] + dest[1]) / 2, (effectivePos[1] + dest[0]) / 2],
-                    zoom: Math.min(v.zoom, 14)
-                  }));
                 }
               }}
                 className={`w-full flex items-center gap-3 px-3 py-2.5 border-b border-slate-800/30 text-left transition-colors ${isAct ? 'bg-indigo-600/20' : 'hover:bg-slate-800/40'}`}>
@@ -1275,11 +1369,21 @@ export default function NavigatePage({ routes, selectedRoute, tsunamiAlert, user
               </div>
 
               <div className="flex gap-2">
+                {isRouteActive && (activeRoutes[activeRouteIdx]?.shelterId === inspectingShelter.id || activeRoutes[activeRouteIdx]?.shelterName === inspectingShelter.name) && (
+                  <button
+                    onClick={handleCancelRoute}
+                    className="px-3 py-2.5 bg-red-950/70 border border-red-500/50 hover:bg-red-900/60 text-red-400 rounded-xl text-xs font-bold flex items-center justify-center gap-1 transition-colors"
+                  >
+                    <X className="w-3.5 h-3.5" /> Batalkan Rute
+                  </button>
+                )}
                 <button
                   onClick={() => {
+                    setIsRouteActive(true);
                     const rIdx = activeRoutes.findIndex(r => r.shelterId === inspectingShelter.id || r.shelterName === inspectingShelter.name);
                     if (rIdx !== -1) {
                       setActiveRouteIdx(rIdx);
+                      onSelectRoute?.(rIdx);
                     } else {
                       const userLat = effectivePosRaw ? effectivePosRaw[0] : -0.8917;
                       const userLng = effectivePosRaw ? effectivePosRaw[1] : 119.8577;
@@ -1297,16 +1401,19 @@ export default function NavigatePage({ routes, selectedRoute, tsunamiAlert, user
                       };
                       setCustomTargetRoute(dynamicRoute);
                       setActiveRouteIdx(0);
+                      onSelectRoute?.(0);
                     }
                     if (effectivePos) {
+                      const destLngLat: [number, number] = [inspectingShelter.lng, inspectingShelter.lat];
+                      fitRouteBounds(destLngLat);
                       fetchOsrmRoute(effectivePos[0], effectivePos[1], inspectingShelter.lng, inspectingShelter.lat)
-                        .then(r => setOsrmRoutes(r))
+                        .then(r => {
+                          setOsrmRoutes(r);
+                          if (r.length > 0 && r[0].coordinates.length > 1) {
+                            fitRouteBounds(destLngLat, r[0].coordinates);
+                          }
+                        })
                         .catch(() => {});
-                      setViewport(v => ({
-                        ...v,
-                        center: [(effectivePos[0] + inspectingShelter.lng) / 2, (effectivePos[1] + inspectingShelter.lat) / 2],
-                        zoom: Math.min(v.zoom, 14)
-                      }));
                     }
                     setInspectingShelter(null);
                   }}
@@ -1318,6 +1425,105 @@ export default function NavigatePage({ routes, selectedRoute, tsunamiAlert, user
             </div>
           </motion.div>
         )}
+
+        {/* Tactical Emergency SMS SOS Modal */}
+        {showSmsModal && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-[2000] bg-black/85 backdrop-blur-md flex items-center justify-center p-4"
+          >
+            <div className="w-full max-w-sm rounded-2xl bg-slate-900 border border-red-500/60 p-5 shadow-[0_0_40px_rgba(239,68,68,0.35)] font-sans">
+              <div className="flex items-center justify-between pb-3 border-b border-slate-800">
+                <div className="flex items-center gap-2">
+                  <div className="w-3 h-3 rounded-full bg-red-500 animate-ping" />
+                  <span className="text-xs font-mono font-black text-red-400 tracking-wider">
+                    TRANSMISI SOS DARURAT // OFFLINE
+                  </span>
+                </div>
+                <button
+                  onClick={() => setShowSmsModal(false)}
+                  className="p-1 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition-colors"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+
+              <div className="my-4 space-y-3 text-xs">
+                {/* Opsi 1: Hotline Resmi Panggilan Suara Basarnas 115 */}
+                <div className="p-3 rounded-xl bg-red-950/40 border border-red-500/40 space-y-2">
+                  <div className="flex items-center justify-between">
+                    <span className="font-mono font-bold text-red-400 text-[10px]">HOTLINE RESMI SAR</span>
+                    <span className="px-1.5 py-0.5 rounded bg-red-500/20 text-red-300 text-[9px] font-bold">BEBAS PULSA</span>
+                  </div>
+                  <p className="text-[11px] text-slate-300 leading-snug">
+                    Panggilan telepon darurat suara langsung ke Basarnas. Operator seluler hanya melayani telepon suara untuk nomor 115 (tanpa kuota internet).
+                  </p>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      callEmergency115();
+                    }}
+                    className="w-full py-2.5 rounded-lg bg-red-600 hover:bg-red-500 active:scale-95 text-white font-mono font-bold text-xs flex items-center justify-center gap-2 shadow-lg shadow-red-600/30 transition-all"
+                  >
+                    <Phone className="w-4 h-4" /> PANGGIL BASARNAS (115)
+                  </button>
+                </div>
+
+                {/* Opsi 2: SMS Darurat GSM ke Kontak Keluarga / Kerabat */}
+                <div className="p-3 rounded-xl bg-black/60 border border-slate-800 space-y-2.5">
+                  <div className="flex items-center justify-between">
+                    <span className="font-mono font-bold text-nerv-cyan text-[10px]">SMS SOS 2G (KELUARGA / RELAWAN)</span>
+                    <span className="px-1.5 py-0.5 rounded bg-nerv-cyan/20 text-nerv-cyan text-[9px] font-bold">OFFLINE</span>
+                  </div>
+                  
+                  <div className="space-y-1">
+                    <label className="text-[10px] text-slate-400 font-mono">NOMOR HP TUJUAN (KELUARGA/KERABAT):</label>
+                    <input
+                      type="tel"
+                      value={smsTargetPhone}
+                      onChange={(e) => setSmsTargetPhone(e.target.value)}
+                      placeholder="08xxxxxxxxxx"
+                      className="w-full px-2.5 py-1.5 rounded-lg bg-slate-900 border border-slate-700 text-white font-mono text-xs focus:border-nerv-cyan focus:outline-none placeholder:text-slate-600"
+                    />
+                    <p className="text-[10px] text-slate-400 font-mono leading-tight">
+                      *(Opsional) Kosongkan jika ingin memilih nomor tujuan langsung di aplikasi SMS HP.
+                    </p>
+                  </div>
+
+                  <div className="p-2.5 rounded bg-slate-950/80 border border-slate-800 text-[10px] font-mono text-slate-400 space-y-1">
+                    <div className="text-nerv-cyan break-words">📍 Pos: {effectivePosRaw ? `${effectivePosRaw[0].toFixed(5)}, ${effectivePosRaw[1].toFixed(5)}` : 'UNKNOWN'}</div>
+                    <div className="text-white break-words">🏠 Shelter: {activeRoutes[activeRouteIdx]?.shelterName || 'Titik Aman'}</div>
+                    <div className="text-emerald-400 break-words leading-tight">⏱️ Disertai nama, NIK, waktu detik & tautan Google Maps</div>
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const userName = localStorage.getItem('atlasUserName') || localStorage.getItem('aegis_username') || localStorage.getItem('aegisUserName') || 'KORBAN';
+                      const userNik = localStorage.getItem('atlasUserNik') || localStorage.getItem('aegis_nik') || localStorage.getItem('aegisUserNik') || '';
+                      const shelterName = activeRoutes[activeRouteIdx]?.shelterName || 'Shelter Evakuasi Terdekat';
+                      sendEmergencySmsSos({
+                        lat: effectivePosRaw ? effectivePosRaw[0] : undefined,
+                        lng: effectivePosRaw ? effectivePosRaw[1] : undefined,
+                        userName,
+                        userNik,
+                        shelterName,
+                        targetPhone: smsTargetPhone
+                      });
+                      setShowSmsModal(false);
+                    }}
+                    className="w-full py-2.5 rounded-lg bg-nerv-cyan/20 hover:bg-nerv-cyan/30 border border-nerv-cyan/60 active:scale-95 text-nerv-cyan hover:text-white font-mono font-bold text-xs flex items-center justify-center gap-2 transition-all shadow-md shadow-nerv-cyan/20"
+                  >
+                    <Radio className="w-4 h-4 animate-pulse" /> KIRIM SMS SOS
+                  </button>
+                </div>
+              </div>
+            </div>
+          </motion.div>
+        )}
+
       </AnimatePresence>
     </motion.div>
   )

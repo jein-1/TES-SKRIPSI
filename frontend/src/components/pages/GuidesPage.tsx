@@ -6,7 +6,8 @@ import { useState } from 'react'
 import {
   ChevronDown, ChevronUp, ArrowRight, ChevronLeft,
   Waves, Activity, Droplets, Wind, Flame, ShieldAlert,
-  Heart, AlertTriangle, CheckCircle2, Shield
+  Heart, AlertTriangle, CheckCircle2, Shield,
+  BookOpen, Radio, Phone, MapPin, Compass, Users, Target, Cpu, Layers, Zap, Search, SlidersHorizontal
 } from 'lucide-react'
 import { motion, AnimatePresence } from 'motion/react'
 import { useLanguage } from '../../lib/i18n'
@@ -210,6 +211,142 @@ const FIRST_AID_PROTOCOLS = [
   }
 ]
 
+export interface GlossaryTerm {
+  term: string
+  code: string
+  badge: string
+  badgeColor: string
+  summary: string
+  detail: string
+  examples?: string[]
+}
+
+export const GLOSSARY_TERMS: GlossaryTerm[] = [
+  {
+    term: 'DEFCON (Defense Readiness Condition)',
+    code: 'SYSTEM STATE // ALERT MATRIX',
+    badge: 'DARURAT & SIAGA',
+    badgeColor: 'bg-red-500/20 text-red-400 border-red-500/40',
+    summary: 'Tingkat kesiapsiagaan taktis pertahanan hidup-mati sistem A.T.L.A.S.',
+    detail: 'DEFCON adalah protokol standar kesiapsiagaan operasional darurat. Pada sistem A.T.L.A.S:\n\n• DEFCON 1 (Merah Alert): Status bahaya maksimal saat gempa signifikan atau ancaman tsunami terdeteksi. Seluruh antarmuka beralih menjadi Cockpit Taktis Darurat, layar HP dipaksa tetap menyala (wake-lock), sirine melolong, kompas mengunci arah shelter terdekat, dan jalur evakuasi menyala merah dengan panduan belokan demi belokan.\n\n• DEFCON 5 (Cyan Normal): Status damai/normal. Warga dapat mengeksplorasi peta, simulasi rute mandiri, memantau telemetri sensor, dan mengecek keselamatan unit keluarga.',
+    examples: ['DEFCON 1: Tsunami hazard active / Evakuasi seketika', 'DEFCON 5: Monitoring telemetri damai']
+  },
+  {
+    term: 'TERMINAL (ARCHITECT 01 / COMMAND-01 / CITIZEN)',
+    code: 'DISTRIBUTED ARCHITECTURE',
+    badge: 'IDENTITAS RESMI',
+    badgeColor: 'bg-cyan-500/20 text-cyan-400 border-cyan-500/40',
+    summary: 'Pengenal taktis resmi perangkat dalam jaringan telemetri terdesentralisasi A.T.L.A.S.',
+    detail: 'Setiap instalasi aplikasi terikat secara kriptografis pada 1 perangkat fisik (1 HP = 1 Registrasi Resmi):\n\n• ARCHITECT 01: Master Terminal Pengembang Sentral / Arsitek Sistem A.T.L.A.S.\n\n• COMMAND-01: Terminal Petugas Administrator / Pusat Komando Evakuasi BPBD. Memiliki wewenang untuk mengelola shelter, menyiarkan peringatan darurat massal (ping broadcast), dan memantau status sensor daerah.\n\n• CITIZEN: Terminal Personel Warga Terdaftar. Berfungsi sebagai terminal evakuasi dan suar telemetri keselamatan keluarga.',
+    examples: ['ARCHITECT 01: Arsitek & Pengembang', 'COMMAND-01: Kepala Operasi / Admin Komando', 'CITIZEN: Terminal Personel Warga']
+  },
+  {
+    term: 'ZRB (Zona Rawan Bencana Kota Palu)',
+    code: 'GEOLOGICAL RISK ZONING',
+    badge: 'TATA RUANG MITIGASI',
+    badgeColor: 'bg-orange-500/20 text-orange-400 border-orange-500/40',
+    summary: 'Klasifikasi peta bahaya geologi pasca-bencana Palu 2018 oleh Badan Geologi & BMKG.',
+    detail: 'Peta Kota Palu dibagi menjadi 4 zona kerentanan tanah:\n\n• ZRB 4 (Zona Terlarang - Merah Tua): Wilayah bahaya sangat tinggi meliputi jalur aktif Sesar Palu Koro, zona likuefaksi masif (Petobo & Balaroa), dan sempadan pantai tsunami. Dilarang mendirikan bangunan hunian. Algoritma A.T.L.A.S memberikan penalti berat agar rute evakuasi membelokkan warga menjauhi zona ini.\n\n• ZRB 3 (Zona Terbatas - Oranye): Area rentan genangan tsunami dan longsoran lereng perbukitan.\n\n• ZRB 2 (Zona Bersyarat - Kuning): Area bahaya sedang dengan syarat konstruksi bangunan tahan gempa.\n\n• ZRB 1 (Zona Pengembangan - Hijau): Wilayah stabil yang ditunjuk sebagai lokasi shelter dan titik kumpul evakuasi aman.',
+    examples: ['ZRB 4: Petobo, Balaroa, Garis Pantai Sesar', 'ZRB 1: Pusat Elevasi Aman']
+  },
+  {
+    term: 'Sharelock Grade & Dual-Layer GNSS',
+    code: 'TELEMETRY ACCURACY',
+    badge: 'PRESISI SHARELOCK',
+    badgeColor: 'bg-emerald-500/20 text-emerald-400 border-emerald-500/40',
+    summary: 'Sistem pelacakan posisi real-time tanpa cache basi (maximumAge: 0) sekelas WhatsApp & Google Maps.',
+    detail: 'Menggunakan arsitektur penentuan posisi multi-sensor paralel:\n\n• Layer 1 (BTS Jaringan Seluler): Mengunci koordinat secara instan saat pengguna berada di dalam gedung bertingkat, rumah tebal, atau basement sebelum satelit GPS terlihat.\n\n• Layer 2 (Satelit GNSS High-Accuracy): Menangkap multi-konstelasi satelit (GPS, GLONASS, Galileo, BeiDou) saat di luar ruangan.\n\n• Filter Kalman Adaptif: Menstabilkan pergerakan koordinat agar tidak melompat-lompat (jitter-free) saat pengguna berjalan atau berlari.',
+    examples: ['Presisi: Akurasi hingga < 10 meter', 'Realtime: Stale cache 0 ms']
+  },
+  {
+    term: 'Sentinel Latar Belakang (24/7 Service)',
+    code: 'FOREGROUND DAEMON',
+    badge: 'SIAGA OTOMATIS',
+    badgeColor: 'bg-purple-500/20 text-purple-400 border-purple-500/40',
+    summary: 'Layanan Android permanen berdaya baterai rendah yang terus siaga mendengarkan sinyal bencana.',
+    detail: 'Aplikasi A.T.L.A.S dilengkapi layanan latar belakang permanen (Android Foreground Service). Meskipun aplikasi ditutup atau layar ponsel mati terkunci di kantong celana, Sentinel tetap mendengarkan siaran gempa BMKG dan siaran darurat Administrator. Jika ada ancaman gempa signifikan, HP akan otomatis bergetar keras dan membunyikan sirine evakuasi seketika.',
+    examples: ['Bekerja saat layar mati', 'Konsumsi baterai sangat minim']
+  },
+  {
+    term: 'Algoritma Dijkstra vs Haversine',
+    code: 'NAVIGATION ENGINE',
+    badge: 'LOGIKA RUTE EVAKUASI',
+    badgeColor: 'bg-blue-500/20 text-blue-400 border-blue-500/40',
+    summary: 'Dua mesin komputasi pemilihan rute jalan evakuasi di dalam aplikasi.',
+    detail: '• Dijkstra (Evakuasi Jalan Nyata): Menghitung lintasan jalan raya, gang, dan lorong kota Palu yang nyata dengan memperhitungkan rintangan zona bahaya ZRB 4. Bekerja 100% offline tanpa kuota internet.\n\n• Haversine (Garis Lurus Geodetik): Menghitung jarak lurus melengkung bumi (as the crow flies) untuk penentuan cepat shelter terdekat secara instan.',
+    examples: ['Dijkstra: Pilihan default rute aman', 'Haversine: Estimasi jarak fisik terdekat']
+  },
+  {
+    term: 'SOS Dual-Channel (Offline 2G vs Voice 115)',
+    code: 'EMERGENCY TRANSMISSION',
+    badge: 'KOMUNIKASI KRITIS',
+    badgeColor: 'bg-rose-500/20 text-rose-400 border-rose-500/40',
+    summary: 'Dua kanal transmisi darurat saat jaringan internet data 4G/5G padam.',
+    detail: '• Panggilan Suara 115: Panggilan darurat resmi ke Basarnas yang 100% BEBAS PULSA dan langsung diangkat oleh operator SAR (nomor 3-digit di Indonesia hanya melayani suara, bukan SMS).\n\n• SMS 2G GSM: Transmisi pesan teks darurat ke kontak keluarga/kerabat yang memuat nama, NIK, koordinat presisi detik, shelter tujuan, dan tautan langsung Google Maps untuk navigasi penjemputan.',
+    examples: ['115: Hotline Telepon Bebas Pulsa', 'SMS: Broadcast ke Nomor HP Keluarga']
+  }
+]
+
+export interface FeatureGuide {
+  title: string
+  tag: string
+  color: string
+  desc: string
+  steps: { step: string; instruction: string }[]
+}
+
+export const FEATURE_GUIDES: FeatureGuide[] = [
+  {
+    title: 'PETA TAKTIS & EVAKUASI CERDAS (NAVIGASI)',
+    tag: 'TACTICAL MAP',
+    color: '#00E5FF',
+    desc: 'Panduan navigasi rute evakuasi menuju shelter terdekat baik di situasi normal (simulasi) maupun saat darurat bencana.',
+    steps: [
+      { step: '01', instruction: 'Buka menu NAVIGASI. Titik biru menunjukkan posisi presisi Anda saat ini.' },
+      { step: '02', instruction: 'Pilih shelter tujuan dari panel bawah (seperti Kantor DPR atau Lapangan Imanuel). Kamera peta akan otomatis zoom out (Auto-Fit Bounds Google Maps) memperlihatkan posisi Anda, seluruh kelokan rute, dan shelter tujuan.' },
+      { step: '03', instruction: 'Garis rute berwarna Cyan A.T.L.A.S di mode normal, dan otomatis berubah menjadi Merah Menyala saat darurat bencana (DEFCON 1).' },
+      { step: '04', instruction: 'Jika berada di basement atau gedung tebal, gunakan tombol Kalibrasi Manual (Pin Oranye) untuk menggeser titik koordinat secara manual.' },
+      { step: '05', instruction: 'Jika sinyal internet mati dan butuh bantuan, tekan tombol Radio SOS Merah untuk menelepon Basarnas 115 (bebas pulsa) atau mengirim SMS berkoordinat presisi ke keluarga.' }
+    ]
+  },
+  {
+    title: 'TELEMETRI SENSOR & PERINGATAN DINI (STATUS)',
+    tag: 'SEISMIC INTEL',
+    color: '#FF5722',
+    desc: 'Pusat intelijen gempa bumi BMKG dan pemantauan sensor real-time se-Teluk Palu.',
+    steps: [
+      { step: '01', instruction: 'Periksa kartu gempa terkini di bagian atas (Magnitudo, Kedalaman, Jam, dan Potensi Tsunami).' },
+      { step: '02', instruction: 'Pantau status radar sensor: Buoy Tsunami laut Teluk Palu, Stasiun Seismograf Sesar Palu Koro, dan sensor getaran tanah.' },
+      { step: '03', instruction: 'Gunakan tombol SIMULASI EVAKUASI untuk menguji kesiapan sirine dan antarmuka komando darurat secara mandiri.' },
+      { step: '04', instruction: 'Tekan tombol LAPOR STATUS DARURAT jika Anda membutuhkan evakuasi cepat dari tim penyelamat.' }
+    ]
+  },
+  {
+    title: 'DIREKTORI & KESELAMATAN KELUARGA (UNIT)',
+    tag: 'PERSONNEL DIRECTORY',
+    color: '#22c55e',
+    desc: 'Sistem pelacakan dan konfirmasi status aman anggota keluarga terdaftar.',
+    steps: [
+      { step: '01', instruction: 'Tekan tombol Tambah Anggota Unit untuk menghubungkan keluarga.' },
+      { step: '02', instruction: 'Pindai QR Code perangkat keluarga Anda atau masukkan kode verifikasi 6-digit untuk otentikasi aman.' },
+      { step: '03', instruction: 'Pantau status seluruh anggota keluarga: Hijau (Aman / Secure) atau Merah (Butuh Bantuan / Danger).' },
+      { step: '04', instruction: 'Lihat titik lokasi terakhir keluarga Anda yang ditampilkan langsung di peta terpadu.' }
+    ]
+  },
+  {
+    title: 'PROFIL PERSONEL & PENGATURAN SISTEM',
+    tag: 'SYSTEM CONFIG',
+    color: '#a855f7',
+    desc: 'Pengaturan identitas resmi perangkat, bahasa antarmuka, dan algoritma routing.',
+    steps: [
+      { step: '01', instruction: 'Lengkapi Nama Lengkap dan NIK 16-digit resmi pada profil Anda agar data identitas terverifikasi saat berada di posko evakuasi.' },
+      { step: '02', instruction: 'Buka menu Pengaturan untuk memilih bahasa antarmuka (Bahasa Indonesia atau English).' },
+      { step: '03', instruction: 'Pilih algoritma rute: Dijkstra (rekomendasi rute jalan nyata aman) atau Haversine (jarak lurus geodetik).' },
+      { step: '04', instruction: 'Periksa riwayat evakuasi dan catatan rilis pembaruan sistem pada menu Warta & Log.' }
+    ]
+  }
+]
+
 export default function GuidesPage({ onNavigateMap, onBack }: { onNavigateMap: () => void; onBack?: () => void }) {
   const { lang, t } = useLanguage()
   const [activeTab, setActiveTab] = useState<'disaster' | 'medical'>('disaster')
@@ -238,11 +375,11 @@ export default function GuidesPage({ onNavigateMap, onBack }: { onNavigateMap: (
             <div className="flex items-center gap-2 mb-0.5">
               <div className="w-2 h-2 rounded-full bg-nerv-orange animate-ping" />
               <p className="text-[10px] font-mono font-bold tracking-widest text-nerv-orange uppercase">
-                A.T.L.A.S // TACTICAL DIRECTIVES
+                A.T.L.A.S // TACTICAL PROTOCOLS
               </p>
             </div>
             <h2 className="text-sm font-mono font-bold text-white truncate uppercase">
-              {lang === 'id' ? 'BUKU PANDUAN 6 BENCANA & P3K' : '6 DISASTER DIRECTIVES & FIRST AID'}
+              {lang === 'id' ? 'PROTOKOL MITIGASI & MEDIS P3K' : 'TACTICAL PROTOCOLS & FIRST AID'}
             </h2>
           </div>
         </div>
@@ -257,26 +394,26 @@ export default function GuidesPage({ onNavigateMap, onBack }: { onNavigateMap: (
         <div className="grid grid-cols-2 gap-2 p-1 rounded-lg bg-black/60 border border-nerv-border font-mono text-xs">
           <button
             onClick={() => setActiveTab('disaster')}
-            className={`py-2 px-3 rounded font-bold uppercase tracking-wider flex items-center justify-center gap-1.5 transition-all ${
+            className={`py-2 px-2 rounded font-bold uppercase tracking-wider flex items-center justify-center gap-1.5 transition-all ${
               activeTab === 'disaster'
                 ? 'bg-nerv-orange text-black shadow-[0_0_12px_rgba(255,87,34,0.4)]'
                 : 'text-slate-400 hover:text-white'
             }`}
           >
-            <ShieldAlert className="w-3.5 h-3.5" />
-            <span>{lang === 'id' ? '6 PROTOKOL BENCANA' : '6 DISASTER DIRECTIVES'}</span>
+            <ShieldAlert className="w-4 h-4 shrink-0" />
+            <span>{lang === 'id' ? 'PROTOKOL BENCANA' : 'DISASTER PROTOCOLS'}</span>
           </button>
 
           <button
             onClick={() => setActiveTab('medical')}
-            className={`py-2 px-3 rounded font-bold uppercase tracking-wider flex items-center justify-center gap-1.5 transition-all ${
+            className={`py-2 px-2 rounded font-bold uppercase tracking-wider flex items-center justify-center gap-1.5 transition-all ${
               activeTab === 'medical'
-                ? 'bg-nerv-cyan text-black shadow-[0_0_12px_rgba(0,229,255,0.4)]'
+                ? 'bg-rose-500 text-white shadow-[0_0_12px_rgba(244,63,94,0.4)]'
                 : 'text-slate-400 hover:text-white'
             }`}
           >
-            <Heart className="w-3.5 h-3.5" />
-            <span>{lang === 'id' ? 'PANDUAN MEDIS P3K' : 'FIRST AID PROTOCOLS'}</span>
+            <Heart className="w-4 h-4 shrink-0" />
+            <span>{lang === 'id' ? 'MEDIS & P3K' : 'FIRST AID'}</span>
           </button>
         </div>
 

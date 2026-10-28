@@ -19,12 +19,12 @@ export async function requestNotifPermission() {
     notifPermGranted = display === 'granted'
     // Buat notification channel high-priority untuk Android
     await LocalNotifications.createChannel?.({
-      id: 'tsunami-alert',
-      name: 'PERINGATAN TSUNAMI',
-      description: 'Notifikasi darurat tsunami',
+      id: 'critical_alerts',
+      name: 'A.T.L.A.S Peringatan Kritis (Critical Alerts)',
+      description: 'Saluran sirine peringatan dini tsunami dan gempa bumi kuat',
       importance: 5,        // IMPORTANCE_HIGH
       visibility: 1,        // VISIBILITY_PUBLIC — tampil di lock screen
-      sound: 'default',
+      sound: 'atlas_siren.wav',
       vibration: true,
       lights: true,
       lightColor: '#FF0000',
@@ -45,8 +45,8 @@ export async function sendTsunamiNotification(active: boolean) {
           id: 9001,
           title: '🚨 PERINGATAN TSUNAMI!',
           body: 'Segera lakukan evakuasi. Buka aplikasi untuk rute aman.',
-          channelId: 'tsunami-alert',
-          sound: 'default',
+          channelId: 'critical_alerts',
+          sound: 'atlas_siren.wav',
           actionTypeId: 'OPEN_APP',
           extra: { action: 'TSUNAMI_ALERT' },
           // Full screen intent — tampil otomatis di lock screen

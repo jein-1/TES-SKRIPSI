@@ -187,19 +187,19 @@ export const translations = {
     swipeToDismiss: 'Geser ke atas untuk menghapus notifikasi',
 
     // Profile & Node Identity
-    terminalIdentity: 'IDENTITAS TERMINAL',
-    nodeIdentity: 'IDENTITAS NODE',
-    nodePublic: 'NODE-P // WARGA',
-    nodeCommand: 'NODE-01 // KOMANDO',
+    terminalIdentity: 'IDENTITAS UNIT',
+    nodeIdentity: 'IDENTITAS UNIT',
+    nodePublic: 'CITIZEN',
+    nodeCommand: 'ARCHITECT 01 // PENGEMBANG',
     authenticatedStatus: 'TERAUTENTIKASI RESMI',
     fullNameLabel: 'NAMA LENGKAP TERDAFTAR',
     nikRegisteredLabel: 'NIK KTP TERVERIFIKASI',
-    regionalTelemetryNode: 'Node Telemetri Regional',
-    reclaimNodeTitle: 'Verifikasi Hak Akses Komando (Node-01)',
-    reclaimNodeDesc: 'Masukkan PIN Kredensial Komando untuk menetapkan perangkat ini sebagai NODE-01.',
-    enterPin: 'Masukkan PIN Komando',
+    regionalTelemetryNode: 'Unit Telemetri Regional',
+    reclaimNodeTitle: 'Verifikasi Hak Akses Kredensial',
+    reclaimNodeDesc: 'Masukkan PIN Kredensial Pengembang / Komando untuk menetapkan status unit perangkat.',
+    enterPin: 'Masukkan PIN Kredensial',
     verifyPin: 'Verifikasi',
-    invalidPin: 'PIN Komando tidak valid'
+    invalidPin: 'PIN Kredensial tidak valid'
   },
   en: {
     fullName: 'Autonomous Threat Location & Alert System',
@@ -271,7 +271,7 @@ export const translations = {
     scanQrBtn: 'Scan QR',
     myQrBtn: 'My QR',
     noFamilyYet: 'No Family Members Linked',
-    noFamilyDesc: 'Add family personnel by scanning their terminal QR code or sharing your own.',
+    noFamilyDesc: 'Tambahkan anggota keluarga dengan memindai kode QR unit mereka atau bagikan QR Anda.',
     statusSafeText: 'SAFE',
     statusEvacText: 'EVACUATING',
     statusDangerText: 'EMERGENCY',
@@ -339,18 +339,18 @@ export const translations = {
     swipeToDismiss: 'Swipe up to dismiss notification',
 
     // Profile & Node Identity
-    terminalIdentity: 'TERMINAL IDENTITY',
-    nodeIdentity: 'NODE IDENTITY',
-    nodePublic: 'NODE-P // CITIZEN',
-    nodeCommand: 'NODE-01 // COMMAND',
+    terminalIdentity: 'UNIT IDENTITY',
+    nodeIdentity: 'UNIT IDENTITY',
+    nodePublic: 'CITIZEN',
+    nodeCommand: 'ARCHITECT 01 // ARCHITECT',
     authenticatedStatus: 'OFFICIALLY AUTHENTICATED',
     fullNameLabel: 'REGISTERED FULL NAME',
     nikRegisteredLabel: 'VERIFIED NATIONAL ID (NIK)',
-    regionalTelemetryNode: 'Regional Telemetry Node',
-    reclaimNodeTitle: 'Verify Command Node (Node-01)',
-    reclaimNodeDesc: 'Enter Command Credential PIN to designate this device as NODE-01.',
-    enterPin: 'Enter Command PIN',
+    regionalTelemetryNode: 'Regional Telemetry Unit',
+    reclaimNodeTitle: 'Verify Credential Access',
+    reclaimNodeDesc: 'Enter Credential PIN to designate unit authorization.',
+    enterPin: 'Enter Credential PIN',
     verifyPin: 'Verify',
-    invalidPin: 'Invalid Command PIN'
+    invalidPin: 'Invalid Credential PIN'
   }
 }

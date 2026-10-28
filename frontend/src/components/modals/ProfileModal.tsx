@@ -45,10 +45,10 @@ export default function ProfileModal({ isOpen, onClose, userName, userNik, termi
   const [showConfirmReset, setShowConfirmReset] = useState(false)
   const [copiedField, setCopiedField] = useState<'name' | 'nik' | null>(null)
   
-  // Developer Node-01 Authentication State
-  const [isNode01, setIsNode01] = useState(() => {
+  // Developer Architect Authentication State
+  const [isArchitect01, setIsArchitect01] = useState(() => {
     return localStorage.getItem('atlas_is_node_01') === 'true' || 
-           (terminalId && (terminalId.includes('01') || terminalId.toUpperCase().includes('NODE-01')))
+           (terminalId && (terminalId.includes('ARCHITECT') || terminalId === 'NODE-01'))
   })
   const [showClaimPin, setShowClaimPin] = useState(false)
   const [claimPin, setClaimPin] = useState('')
@@ -58,9 +58,9 @@ export default function ProfileModal({ isOpen, onClose, userName, userNik, termi
     const clean = claimPin.trim()
     if (clean === '0101' || clean === '7271' || clean === '1945') {
       localStorage.setItem('atlas_is_node_01', 'true')
-      localStorage.setItem('atlasTerminalId', 'NODE-01')
-      localStorage.setItem('aegisTerminalId', 'NODE-01')
-      setIsNode01(true)
+      localStorage.setItem('atlasTerminalId', 'ARCHITECT 01')
+      localStorage.setItem('aegisTerminalId', 'ARCHITECT 01')
+      setIsArchitect01(true)
       setShowClaimPin(false)
       setPinError(false)
       window.location.reload()
@@ -139,26 +139,32 @@ export default function ProfileModal({ isOpen, onClose, userName, userNik, termi
               <div className="flex items-center justify-between">
                 <div>
                   <span className="text-[9px] text-slate-500 uppercase block font-mono">
-                    {lang === 'id' ? 'IDENTITAS NODE' : 'NODE IDENTITY'}
+                    {lang === 'id' ? 'IDENTITAS UNIT' : 'UNIT IDENTITY'}
                   </span>
                   <div className="flex items-center gap-2 mt-0.5">
                     <span className={`text-xs font-black tracking-wider ${
-                      isNode01 ? 'text-amber-400 font-mono' : 'text-nerv-cyan font-mono'
+                      isArchitect01 
+                        ? 'text-amber-400 font-mono' 
+                        : (terminalId && terminalId.startsWith('COMMAND') ? 'text-nerv-orange font-mono' : (terminalId === 'FOREIGN CITIZEN' ? 'text-purple-300 font-mono' : 'text-nerv-cyan font-mono'))
                     }`}>
-                      {isNode01 
-                        ? (lang === 'id' ? 'NODE-01 // KOMANDO' : 'NODE-01 // COMMAND') 
-                        : (lang === 'id' 
-                            ? `NODE-P // WARGA #${terminalId ? (terminalId.startsWith('NODE-P') ? terminalId.replace('NODE-P', '') : terminalId.slice(-4).toUpperCase()) : '001'}` 
-                            : `NODE-P // CITIZEN #${terminalId ? (terminalId.startsWith('NODE-P') ? terminalId.replace('NODE-P', '') : terminalId.slice(-4).toUpperCase()) : '001'}`)}
+                      {isArchitect01 
+                        ? 'ARCHITECT 01 // PENGEMBANG' 
+                        : (terminalId && terminalId.startsWith('COMMAND')
+                            ? `${terminalId} // KOMANDO`
+                            : (terminalId === 'FOREIGN CITIZEN' ? 'FOREIGN CITIZEN' : 'CITIZEN'))}
                     </span>
                     <span className={`text-[8px] font-bold px-1.5 py-0.5 rounded uppercase font-mono ${
-                      isNode01 
+                      isArchitect01 
                         ? 'bg-amber-500/20 border border-amber-500/50 text-amber-300'
-                        : 'bg-nerv-cyan/20 border border-nerv-cyan/40 text-nerv-cyan'
+                        : (terminalId && terminalId.startsWith('COMMAND')
+                            ? 'bg-nerv-orange/20 border border-nerv-orange/50 text-nerv-orange'
+                            : (terminalId === 'FOREIGN CITIZEN' ? 'bg-purple-500/20 border border-purple-500/50 text-purple-300' : 'bg-nerv-cyan/20 border border-nerv-cyan/40 text-nerv-cyan'))
                     }`}>
-                      {isNode01 
-                        ? (lang === 'id' ? 'OPERATOR KOMANDO' : 'COMMAND OPERATOR')
-                        : (lang === 'id' ? 'TERDAFTAR RESMI' : 'OFFICIALLY REGISTERED')}
+                      {isArchitect01 
+                        ? (lang === 'id' ? 'DEVELOPER UTAMA' : 'LEAD ARCHITECT')
+                        : (terminalId && terminalId.startsWith('COMMAND')
+                            ? (lang === 'id' ? 'OPERATOR KOMANDO' : 'COMMAND OPERATOR')
+                            : (terminalId === 'FOREIGN CITIZEN' ? (lang === 'id' ? 'WARGA ASING (PASPOR)' : 'FOREIGN CITIZEN') : (lang === 'id' ? 'WARGA SIPIL' : 'CIVILIAN UNIT')))}
                     </span>
                   </div>
                 </div>
@@ -172,8 +178,8 @@ export default function ProfileModal({ isOpen, onClose, userName, userNik, termi
                 </div>
               </div>
 
-              {/* Node-01 Verification (for command device setup) */}
-              {!isNode01 && (
+              {/* Node-01 / Architect Verification */}
+              {!isArchitect01 && (
                 <div className="pt-2 border-t border-white/5 flex items-center justify-between">
                   <span className="text-[9px] text-slate-500">
                     {lang === 'id' ? 'Pindah perangkat dinas?' : 'Transferred command device?'}
@@ -184,7 +190,7 @@ export default function ProfileModal({ isOpen, onClose, userName, userNik, termi
                       onClick={() => setShowClaimPin(true)}
                       className="text-[9px] font-mono text-nerv-orange hover:underline font-bold"
                     >
-                      {lang === 'id' ? '[ Verifikasi Node-01 ]' : '[ Verify Node-01 ]'}
+                      {lang === 'id' ? '[ Verifikasi ARCHITECT / KOMANDO ]' : '[ Verify ARCHITECT / COMMAND ]'}
                     </button>
                   ) : (
                     <div className="flex items-center gap-1.5">
@@ -216,7 +222,7 @@ export default function ProfileModal({ isOpen, onClose, userName, userNik, termi
               )}
               {pinError && (
                 <p className="text-[9px] text-red-400 font-sans">
-                  {lang === 'id' ? 'PIN Komando tidak valid.' : 'Invalid Command PIN.'}
+                  {lang === 'id' ? 'PIN Kredensial tidak valid.' : 'Invalid Credential PIN.'}
                 </p>
               )}
             </div>

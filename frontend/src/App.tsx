@@ -43,7 +43,7 @@ import StatusPage from "./components/pages/StatusPage";
 import NavigatePage from "./components/pages/NavigatePage";
 import FamilyPage from "./components/pages/FamilyPage";
 import GuidesPage from "./components/pages/GuidesPage";
-import MenuPage from "./components/pages/MenuPage";
+import MenuPage, { LATEST_NEWS_VERSION } from "./components/pages/MenuPage";
 import { fetchLocationName, fetchIpLocation } from "./lib/geocode";
 import { useLanguage } from "./lib/i18n";
 import { useAegisSync, aegisApi } from "./lib/useAegisSync";
@@ -57,6 +57,8 @@ import { registerWebPush } from "./lib/usePushNotification";
 import { Geolocation } from "@capacitor/geolocation";
 import { Capacitor } from "@capacitor/core";
 import { Haptics, ImpactStyle } from "@capacitor/haptics";
+import { enqueueOfflineTelemetry, flushOfflineTelemetryQueue } from "./lib/offlineQueue";
+import { getAdminBroadcasts, type AdminBroadcast } from "./lib/broadcastStorage";
 // â”€â”€ UI Libraries â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 import {
   AlertTriangle,
@@ -91,6 +93,7 @@ import {
   CheckCircle2,
   Users,
   BookOpen,
+  ShieldAlert,
   Home,
   Edit2,
   Target,
@@ -100,6 +103,8 @@ import {
   Droplets,
   Wind,
   Flame,
+  Megaphone,
+  Send,
 } from "lucide-react";
 import { motion, AnimatePresence, useDragControls } from "motion/react";
 
@@ -293,7 +298,7 @@ function App() {
     return null;
   });
   const [routes, setRoutes] = useState<RouteResult[]>([]);
-  const [selectedRoute, setSelectedRoute] = useState(0);
+  const [selectedRoute, setSelectedRoute] = useState<number | undefined>(undefined);
   const [showPanel, setShowPanel] = useState(false);
   const [isCalculating, setIsCalculating] = useState(false);
   const [flyToPos, setFlyToPos] = useState<[number, number] | null>(null);
@@ -308,6 +313,34 @@ function App() {
     distanceKm: number;
     walkingMin: number;
   } | null>(null);
+
+  const batteryLevelRef = useRef<number | null>(null);
+  const gpsSmoothRef = useRef<{ lat: number; lng: number; acc: number; ts: number } | null>(null);
+
+  // Pantau baterai untuk dynamic power-saving rate throttling
+  useEffect(() => {
+    const updateBat = async () => {
+      try {
+        const { Device } = await import("@capacitor/device");
+        const info = await Device.getBatteryInfo();
+        if (info && info.batteryLevel != null) {
+          batteryLevelRef.current = Math.round(info.batteryLevel * 100);
+        }
+      } catch {}
+    };
+    updateBat();
+    const interval = setInterval(updateBat, 60000);
+    return () => clearInterval(interval);
+  }, []);
+
+  // Store-and-Forward Telemetry: auto flush antrean saat koneksi online kembali
+  useEffect(() => {
+    const handleOnline = () => {
+      flushOfflineTelemetryQueue();
+    };
+    window.addEventListener('online', handleOnline);
+    return () => window.removeEventListener('online', handleOnline);
+  }, []);
 
   // ── GPS & Alert state ──────────────────────────────────────────
   const { lang, t } = useLanguage();
@@ -355,6 +388,17 @@ function App() {
     }
     return false;
   });
+
+  const [isEvacuationCompleted, setIsEvacuationCompleted] = useState<boolean>(() => {
+    if (typeof window !== "undefined") {
+      return sessionStorage.getItem("atlas_evacuation_completed") === "true";
+    }
+    return false;
+  });
+  const isEvacuationCompletedRef = useRef(isEvacuationCompleted);
+  useEffect(() => {
+    isEvacuationCompletedRef.current = isEvacuationCompleted;
+  }, [isEvacuationCompleted]);
   
   useEmergencyNotification(tsunamiAlert);
   
@@ -424,6 +468,25 @@ function App() {
   const [adminPingMessage, setAdminPingMessage] = useState("");
   const [pingReplies, setPingReplies] = useState<{ id: string; name: string; nik?: string; ts: number }[]>([]);
   const [pingSentToast, setPingSentToast] = useState<{ name: string; ts: number } | null>(null);
+  
+  // ── Admin Emergency Broadcast State ─────────────────────────────────
+  const [showAdminBroadcastModal, setShowAdminBroadcastModal] = useState(false);
+  const [adminBroadcastTitle, setAdminBroadcastTitle] = useState("");
+  const [adminBroadcastMessage, setAdminBroadcastMessage] = useState("");
+  const [adminBroadcastLevel, setAdminBroadcastLevel] = useState<'CRITICAL' | 'WARNING' | 'INFO'>('CRITICAL');
+  const [adminBroadcastRegion, setAdminBroadcastRegion] = useState("SEMUA WILAYAH");
+  const [adminBroadcastList, setAdminBroadcastList] = useState<AdminBroadcast[]>(() => {
+    try { return getAdminBroadcasts(); } catch { return []; }
+  });
+  const [isSendingBroadcast, setIsSendingBroadcast] = useState(false);
+
+  useEffect(() => {
+    const handleBroadcastUpdate = () => {
+      setAdminBroadcastList(getAdminBroadcasts());
+    };
+    window.addEventListener('atlas_admin_broadcast_updated', handleBroadcastUpdate);
+    return () => window.removeEventListener('atlas_admin_broadcast_updated', handleBroadcastUpdate);
+  }, []);
   
   // ── Shelter interaction state ──────────────────────────────────────────
   const [selectedShelterId, setSelectedShelterId] = useState<string | null>(null);
@@ -772,6 +835,34 @@ function App() {
   const [historyFilter, setHistoryFilter] = useState<HistoryFilter>("all");
   const [dismissedGempaTime, setDismissedGempaTime] = useState<string | null>(null);
 
+  const [hasMenuUnread, setHasMenuUnread] = useState(() => {
+    try {
+      return (
+        localStorage.getItem("atlas_last_read_log_version") !== LATEST_NEWS_VERSION ||
+        localStorage.getItem("atlas_has_unread_earthquake_news") === "true"
+      );
+    } catch {
+      return false;
+    }
+  });
+
+  useEffect(() => {
+    const checkUnread = () => {
+      try {
+        setHasMenuUnread(
+          localStorage.getItem("atlas_last_read_log_version") !== LATEST_NEWS_VERSION ||
+          localStorage.getItem("atlas_has_unread_earthquake_news") === "true"
+        );
+      } catch {}
+    };
+    window.addEventListener("atlas_changelog_read", checkUnread);
+    window.addEventListener("atlas_news_read", checkUnread);
+    return () => {
+      window.removeEventListener("atlas_changelog_read", checkUnread);
+      window.removeEventListener("atlas_news_read", checkUnread);
+    };
+  }, []);
+
   const isGempaDismissed = useMemo(() => {
     if (!gempa) return true;
     if (dismissedGempaTime === gempa.DateTime) return true;
@@ -810,24 +901,34 @@ function App() {
     setDismissedGempaTime(gempa.DateTime);
   }, [gempa]);
 
-  // ── Persistent Terminal ID (NODE-01 for Developer vs NODE-P for Public) ──
+  // ── Persistent Unit ID (ARCHITECT 01 vs COMMAND-01 vs CITIZEN / FOREIGN CITIZEN) ──
   const [terminalId, setTerminalId] = useState<string>(() => {
     const isNode01 = localStorage.getItem("atlas_is_node_01") === "true";
     if (isNode01) {
-      localStorage.setItem("atlasTerminalId", "NODE-01");
-      localStorage.setItem("aegisTerminalId", "NODE-01");
-      return "NODE-01";
+      localStorage.setItem("atlasTerminalId", "ARCHITECT 01");
+      localStorage.setItem("aegisTerminalId", "ARCHITECT 01");
+      return "ARCHITECT 01";
     }
 
+    const isWna = localStorage.getItem("atlas_is_wna") === "true";
     let s = localStorage.getItem("atlasTerminalId") || localStorage.getItem("aegisTerminalId");
     if (s) {
-      if (s.startsWith("NODE-01")) return s;
-      s = s.replace(/^(AEGIS|ATLAS)-?/i, "NODE-P");
-      localStorage.setItem("atlasTerminalId", s);
-      localStorage.setItem("aegisTerminalId", s);
-      return s;
+      if (s === "NODE-01" || s.includes("ARCHITECT")) {
+        localStorage.setItem("atlasTerminalId", "ARCHITECT 01");
+        localStorage.setItem("aegisTerminalId", "ARCHITECT 01");
+        return "ARCHITECT 01";
+      }
+      if (s.startsWith("COMMAND")) return s;
+      if (s === "FOREIGN CITIZEN" || isWna) {
+        localStorage.setItem("atlasTerminalId", "FOREIGN CITIZEN");
+        localStorage.setItem("aegisTerminalId", "FOREIGN CITIZEN");
+        return "FOREIGN CITIZEN";
+      }
+      localStorage.setItem("atlasTerminalId", "CITIZEN");
+      localStorage.setItem("aegisTerminalId", "CITIZEN");
+      return "CITIZEN";
     }
-    const fallbackId = `NODE-P${Math.floor(Math.random() * 900 + 100)}`;
+    const fallbackId = isWna ? "FOREIGN CITIZEN" : "CITIZEN";
     localStorage.setItem("atlasTerminalId", fallbackId);
     localStorage.setItem("aegisTerminalId", fallbackId);
     return fallbackId;
@@ -905,14 +1006,15 @@ function App() {
   }, []);
 
   useEffect(() => {
-    // Migrate any legacy AEGIS IDs across localStorage on startup
+    // Migrate any legacy terminal IDs across localStorage on startup
     try {
-      ["aegisTerminalId", "aegisId"].forEach((key) => {
+      ["aegisTerminalId", "aegisId", "atlasTerminalId", "atlasId"].forEach((key) => {
         const val = localStorage.getItem(key);
         if (val) {
-          const migrated = val.replace(/^(AEGIS|ATLAS)-?/i, "NODE-P");
+          let migrated = "CITIZEN";
+          if (val === "NODE-01" || val.includes("ARCHITECT")) migrated = "ARCHITECT 01";
+          else if (val.startsWith("COMMAND")) migrated = val;
           localStorage.setItem(key, migrated);
-          localStorage.setItem(key.replace("aegis", "atlas"), migrated);
         }
       });
     } catch (_) {}
@@ -920,15 +1022,15 @@ function App() {
     import("@capacitor/core").then(({ Capacitor }) => {
       if (Capacitor.isNativePlatform()) {
         import("@capacitor/device").then(({ Device }) => {
-          Device.getId().then((info) => {
+          Device.getId().then(() => {
             const isNode01 = localStorage.getItem("atlas_is_node_01") === "true";
             if (isNode01) return;
-            if (info.identifier) {
-              const pubId = `NODE-P${info.identifier.slice(-4).toUpperCase()}`;
-              setTerminalId(pubId);
-              localStorage.setItem("atlasTerminalId", pubId);
-              localStorage.setItem("aegisTerminalId", pubId);
-            }
+            const current = localStorage.getItem("atlasTerminalId");
+            if (current && (current.includes("ARCHITECT") || current.startsWith("COMMAND"))) return;
+            const pubId = "CITIZEN";
+            setTerminalId(pubId);
+            localStorage.setItem("atlasTerminalId", pubId);
+            localStorage.setItem("aegisTerminalId", pubId);
           });
         });
         import('./lib/nativeSettings').then(({ NativeSettings }) => {
@@ -1070,11 +1172,20 @@ function App() {
     setTimeout(() => startGpsTracking(), 800);
   };
 
+  // Persist a fresh GPS fix so the next launch can restore it briefly (never a stale one)
+  const persistPosition = useCallback((pos: [number, number]) => {
+    try {
+      localStorage.setItem('atlas_user_position', JSON.stringify(pos));
+      localStorage.setItem('atlas_user_position_ts', String(Date.now()));
+    } catch {}
+  }, []);
+
   // Manual location update (calibrated via map click or drag)
   const handleManualLocationUpdate = useCallback((newPos: [number, number]) => {
     setUserPosition(newPos);
     setFlyToPos(newPos);
-    localStorage.setItem('atlas_user_position', JSON.stringify(newPos));
+    persistPosition(newPos);
+    localStorage.setItem('atlas_manual_pinned_ts', String(Date.now()));
     fetchLocationName(newPos[0], newPos[1]).then((name) => {
       if (name) setUserLocationName(name);
     });
@@ -1086,9 +1197,9 @@ function App() {
     );
     lastRouteCalcResultsRef.current = routeResults;
     setRoutes(routeResults);
-    setSelectedRoute(0);
+    if (tsunamiAlert) setSelectedRoute(0);
     setIsCalculating(false);
-  }, [settings.algorithm]);
+  }, [settings.algorithm, persistPosition]);
 
   // ── GPS ────────────────────────────────────────────────────────────────────
 
@@ -1146,9 +1257,11 @@ function App() {
     // Reset flags when GPS is freshly started
     panelUserClosedRef.current = false;
     hasFirstGPSFixRef.current = false;
-    arrivedFiredRef.current = false;
-    setArrivedShelterId(null);
-    setArrivalSummary(null);
+    if (!isEvacuationCompletedRef.current && (typeof window === 'undefined' || sessionStorage.getItem('atlas_evacuation_completed') !== 'true')) {
+      arrivedFiredRef.current = false;
+      setArrivedShelterId(null);
+      setArrivalSummary(null);
+    }
     setGpsTracking(true);
     setGpsError(null);
     setIsCalculating(true);
@@ -1171,15 +1284,18 @@ function App() {
 
     if (!hasManualPin) {
       if (isNativePlatform) {
-        Geolocation.getCurrentPosition({ enableHighAccuracy: true, timeout: 8000, maximumAge: 30000 })
+        // Jalur 1 (Seluler Cepat): Jangan tunggu satelit, tangkap sinyal BTS operator dalam < 2 detik
+        Geolocation.getCurrentPosition({ enableHighAccuracy: false, timeout: 5000, maximumAge: 60000 })
           .then((pos) => {
             if (localStorage.getItem('atlas_manual_pinned') === 'true') return;
-            const acc = pos.coords.accuracy || 15;
-            if (acc > 50) return; // Tolak BTS seluler kasar (> 50m)
+            const acc = pos.coords.accuracy || 100;
+            if (acc > 500) return;
+            if (hasFirstGPSFixRef.current) return;
             hasFirstGPSFixRef.current = true;
             const newPos: [number, number] = [pos.coords.latitude, pos.coords.longitude];
             setGpsAccuracy(acc);
             setUserPosition(newPos);
+            persistPosition(newPos);
             setFlyToPos(newPos);
             fetchLocationName(newPos[0], newPos[1]).then((name) => {
               if (name) setUserLocationName(name);
@@ -1192,7 +1308,35 @@ function App() {
             );
             lastRouteCalcResultsRef.current = routeResults;
             setRoutes(routeResults);
-            setSelectedRoute(0);
+            if (tsunamiAlert) setSelectedRoute(0);
+            setIsCalculating(false);
+          })
+          .catch(() => {});
+
+        // Jalur 2 (Satelit Presisi GNSS): Ambil sinyal presisi tinggi jika tersedia
+        Geolocation.getCurrentPosition({ enableHighAccuracy: true, timeout: 10000, maximumAge: 0 })
+          .then((pos) => {
+            if (localStorage.getItem('atlas_manual_pinned') === 'true') return;
+            const acc = pos.coords.accuracy || 15;
+            if (acc > 300) return;
+            hasFirstGPSFixRef.current = true;
+            const newPos: [number, number] = [pos.coords.latitude, pos.coords.longitude];
+            setGpsAccuracy(acc);
+            setUserPosition(newPos);
+            persistPosition(newPos);
+            setFlyToPos(newPos);
+            fetchLocationName(newPos[0], newPos[1]).then((name) => {
+              if (name) setUserLocationName(name);
+            });
+            const routeResults = findOptimalEvacuationRoutes(
+              newPos[0],
+              newPos[1],
+              99,
+              settings.algorithm as 'dijkstra' | 'haversine',
+            );
+            lastRouteCalcResultsRef.current = routeResults;
+            setRoutes(routeResults);
+            if (tsunamiAlert) setSelectedRoute(0);
             setIsCalculating(false);
           })
           .catch((err) => {
@@ -1203,7 +1347,7 @@ function App() {
           (pos) => {
             if (localStorage.getItem('atlas_manual_pinned') === 'true') return;
             const acc = pos.coords.accuracy || 15;
-            if (acc > 50) return;
+            if (acc > 500) return;
             hasFirstGPSFixRef.current = true;
             const newPos: [number, number] = [
               pos.coords.latitude,
@@ -1211,6 +1355,7 @@ function App() {
             ];
             setGpsAccuracy(acc);
             setUserPosition(newPos);
+            persistPosition(newPos);
             setFlyToPos(newPos);
             fetchLocationName(newPos[0], newPos[1]).then((name) => {
               if (name) setUserLocationName(name);
@@ -1223,7 +1368,7 @@ function App() {
             );
             lastRouteCalcResultsRef.current = routeResults;
             setRoutes(routeResults);
-            setSelectedRoute(0);
+            if (tsunamiAlert) setSelectedRoute(0);
             setIsCalculating(false);
           },
           (err) => {
@@ -1239,7 +1384,14 @@ function App() {
 
     try {
       const watchId = await Geolocation.watchPosition(
-        { enableHighAccuracy: true, maximumAge: 5000, timeout: 20000 },
+        {
+          enableHighAccuracy: true,
+          maximumAge: 0,
+          timeout: 20000,
+          // Android: minta pembaruan cepat sekelas share-location
+          interval: 2000,
+          minimumUpdateInterval: 1000,
+        },
         (pos, err) => {
           if (err) {
             console.warn("GPS Error:", err);
@@ -1247,21 +1399,60 @@ function App() {
           }
           if (!pos || !pos.coords) return;
 
-          // If the user manually pinned their location, do NOT overwrite it
-          const isCurrentlyPinned = typeof window !== "undefined" && localStorage.getItem('atlas_manual_pinned') === 'true';
-          if (isCurrentlyPinned) return;
+          const rawAcc = pos.coords.accuracy || 50;
 
-          // Saring akurasi: tolak BTS kasar (> 50m), terima Fused Wi-Fi indoor / Satelit GNSS (<= 50m)
-          const acc = pos.coords.accuracy || 15;
-          if (acc > 50) return;
+          // Pin manual hanya menahan GPS sementara.
+          // Setelah 2 menit atau jika akurasi presisi (<= 35m) masuk, lepaskan otomatis
+          if (typeof window !== "undefined" && localStorage.getItem('atlas_manual_pinned') === 'true') {
+            const pinnedAt = Number(localStorage.getItem('atlas_manual_pinned_ts') || 0);
+            const pinAge = Date.now() - pinnedAt;
+            const shouldRelease = rawAcc <= 35 && (pinnedAt === 0 || pinAge > 120000);
+            if (!shouldRelease) return;
+            localStorage.removeItem('atlas_manual_pinned');
+            localStorage.removeItem('atlas_manual_pinned_ts');
+          }
+
+          // Tolak bacaan ekstrem yang tidak masuk akal (> 500m)
+          if (rawAcc > 500) return;
+
+          const rawLat = pos.coords.latitude;
+          const rawLng = pos.coords.longitude;
+          const fixNow = Date.now();
+          const prev = gpsSmoothRef.current;
+
+          // Deteksi anomali multipath: kecepatan tidak wajar untuk evakuasi (> 45 m/s)
+          if (prev) {
+            const dtSec = Math.max((fixNow - prev.ts) / 1000, 0.5);
+            const distM = calculateHaversine(prev.lat, prev.lng, rawLat, rawLng) * 1000;
+            const speedMs = distM / dtSec;
+            if (speedMs > 45 && rawAcc > 25) return;
+            // Jangan biarkan fix seluler kasar menimpa fix presisi satelit yang masih segar (< 30s)
+            if (prev.acc <= 25 && rawAcc > 80 && fixNow - prev.ts < 30000) return;
+          }
+
+          // Kalman Adaptive Smoothing
+          let lat = rawLat;
+          let lng = rawLng;
+          let acc = rawAcc;
+          if (prev && rawAcc >= 20) {
+            const accRatio = prev.acc / Math.max(rawAcc, 1);
+            const weight = Math.min(1, Math.max(0.25, 1 / (1 + accRatio * 0.5)));
+            const elapsed = Math.min(10, (fixNow - prev.ts) / 1000);
+            const k = Math.min(1, weight + elapsed * 0.1);
+            const movedM = calculateHaversine(prev.lat, prev.lng, rawLat, rawLng) * 1000;
+            if (movedM < 15) {
+              lat = prev.lat + (rawLat - prev.lat) * k;
+              lng = prev.lng + (rawLng - prev.lng) * k;
+              acc = prev.acc + (rawAcc - prev.acc) * k;
+            }
+          }
+          gpsSmoothRef.current = { lat, lng, acc, ts: fixNow };
 
           setGpsAccuracy(acc);
-          const newPos: [number, number] = [
-            pos.coords.latitude,
-            pos.coords.longitude,
-          ];
+          const newPos: [number, number] = [lat, lng];
 
           setUserPosition(newPos);
+          persistPosition(newPos);
           fetchLocationName(newPos[0], newPos[1]).then((name) => {
             if (name) setUserLocationName(name);
           });
@@ -1270,9 +1461,9 @@ function App() {
             hasFirstGPSFixRef.current = true;
             setFlyToPos(newPos);
           }
+
           
-          // ── THROTTLE ROUTE CALCULATION ──
-          // Calculate if: (1) no previous calc, OR (2) moved > 15m, OR (3) > 4 seconds passed
+          // ── THROTTLE ROUTE CALCULATION (Dynamic Geofencing & Battery Optimization) ──
           const now = Date.now();
           const timeDiff = now - lastRouteCalcTimeRef.current;
           let movedDist = 0;
@@ -1282,8 +1473,17 @@ function App() {
               newPos[0], newPos[1]
             ) * 1000; // convert km to meters
           }
-          
-          if (!lastRouteCalcPosRef.current || movedDist > 15 || timeDiff >= 4000) {
+
+          const isLowBattery = batteryLevelRef.current !== null && batteryLevelRef.current <= 20;
+          const isEvacSafe = isEvacuationCompletedRef.current || (typeof window !== "undefined" && sessionStorage.getItem('atlas_evacuation_completed') === 'true');
+          const isSafeInShelter = arrivedShelterId !== null || isEvacSafe;
+          // Zona Bahaya (Tsunami Alert aktif & belum sampai shelter): respon cepat 8m / 3s
+          // Zona Aman (Shelter / Sudah Evakuasi) atau Baterai Rendah (<= 20%): mode hemat daya 25m / 15s
+          // Standar: 12m / 4s
+          const requiredDist = (isSafeInShelter || isLowBattery) ? 25 : (tsunamiAlertRef.current && !isEvacSafe ? 8 : 12);
+          const requiredTime = (isSafeInShelter || isLowBattery) ? 15000 : (tsunamiAlertRef.current && !isEvacSafe ? 3000 : 4000);
+
+          if (!lastRouteCalcPosRef.current || movedDist > requiredDist || timeDiff >= requiredTime) {
             lastRouteCalcPosRef.current = newPos;
             lastRouteCalcTimeRef.current = now;
             
@@ -1296,10 +1496,10 @@ function App() {
             lastRouteCalcResultsRef.current = routeResults;
             
             setRoutes(routeResults);
-            setSelectedRoute(0);
+            if (tsunamiAlertRef.current && !isEvacSafe) setSelectedRoute(0);
             setIsCalculating(false);
-            // Only open panel if user hasn't manually closed it
-            if (!panelUserClosedRef.current) {
+            // Only open panel if user hasn't manually closed it and not already evacuated
+            if (!panelUserClosedRef.current && !isEvacSafe) {
               setShowPanel(true);
             }
             const isRealAlert = typeof window !== "undefined" && localStorage.getItem("aegisRealTsunami") === "true";
@@ -1365,8 +1565,8 @@ function App() {
           }
 
           // ── Arrival detection: check if within shelter radius with dynamic GPS tolerance ──
-          // Only fires once per GPS session (arrivedFiredRef prevents repeat triggers)
-          if (!arrivedFiredRef.current) {
+          // Hanya dievaluasi jika belum terpicu dan sesi belum dikunci sebagai aman
+          if (!arrivedFiredRef.current && !isEvacuationCompletedRef.current && (typeof window === 'undefined' || sessionStorage.getItem('atlas_evacuation_completed') !== 'true')) {
             const toRad = (d: number) => d * (Math.PI / 180);
             const arrived = shelters.find((sh) => {
               const R = 6371000; // metres
@@ -1388,31 +1588,22 @@ function App() {
             });
             if (arrived) {
               arrivedFiredRef.current = true;
-              // ── STOP EVERYTHING — like Google Maps ending navigation ──
-              // 1. Stop GPS watch
-              if (gpsWatchRef.current !== null) {
-                if (typeof gpsWatchRef.current === "string") {
-                  Geolocation.clearWatch({ id: gpsWatchRef.current });
-                } else {
-                  navigator.geolocation.clearWatch(
-                    gpsWatchRef.current as number,
-                  );
-                }
-                gpsWatchRef.current = null;
-              }
-              // 2. Stop alarm & deactivate tsunami alert
-              alarmRef.current.stop();
-              setGpsTracking(false);
-              setTsunamiAlert(false);
+              isEvacuationCompletedRef.current = true;
+              setIsEvacuationCompleted(true);
+              // Kunci status evakuasi selesai agar saat keluar shelter tidak memicu sirine lagi
               if (typeof window !== 'undefined') {
+                sessionStorage.setItem('atlas_evacuation_completed', 'true');
                 sessionStorage.removeItem('aegisSimulating');
                 localStorage.removeItem('aegisRealTsunami');
               }
+              // Hentikan sirine darurat secara tuntas
+              alarmRef.current.stop();
+              setTsunamiAlert(false);
               setShowPanel(false);
-              // 3. Haptic feedback (arrived!)
+              // Haptic feedback (arrived!)
               if ("vibrate" in navigator)
                 navigator.vibrate([200, 100, 200, 100, 400]);
-              // 4. Show arrival state ONLY if not shown this session
+              // Tampilkan modal kedatangan HANYA sekali per sesi
               if (!arrivalShownRef.current) {
                 arrivalShownRef.current = true;
                 sessionStorage.setItem('aegisArrivalShown', 'true');
@@ -1464,10 +1655,13 @@ function App() {
   // â”€â”€ Tsunami â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   const activateTsunamiAlert = useCallback((disasterType: string = 'tsunami') => {
     setActiveDisasterType(disasterType);
+    setIsEvacuationCompleted(false);
+    isEvacuationCompletedRef.current = false;
     setTsunamiAlert(true);
     if (typeof window !== "undefined") {
       sessionStorage.setItem("aegisSimulating", "true");
       sessionStorage.setItem("atlasActiveDisasterType", disasterType);
+      sessionStorage.removeItem("atlas_evacuation_completed");
     }
     setShowTsunamiConfirm(false);
     if (!alarmMuted && settings.soundAlert) alarmRef.current.start();
@@ -1487,10 +1681,13 @@ function App() {
 
   const deactivateTsunamiAlert = useCallback(() => {
     setTsunamiAlert(false);
+    setIsEvacuationCompleted(false);
+    isEvacuationCompletedRef.current = false;
     setActiveDisasterType('tsunami');
     if (typeof window !== "undefined") {
       sessionStorage.removeItem("aegisSimulating");
       sessionStorage.removeItem("atlasActiveDisasterType");
+      sessionStorage.removeItem("atlas_evacuation_completed");
     }
     alarmRef.current.stop();
     aegisApi.setTsunami(false);
@@ -1526,7 +1723,7 @@ function App() {
       setTimeout(() => {
         const routeResults = findOptimalEvacuationRoutes(lat, lng, 99, settings.algorithm as 'dijkstra' | 'haversine');
         setRoutes(routeResults);
-        setSelectedRoute(0);
+        if (tsunamiAlert) setSelectedRoute(0);
         setShowPanel(true);
         setIsCalculating(false);
         const isRealAlert = typeof window !== "undefined" && localStorage.getItem("aegisRealTsunami") === "true";
@@ -1677,6 +1874,10 @@ function App() {
     if (event.type === "TSUNAMI") {
       const active = event.active as boolean;
       if (active) {
+        // Jika pengguna sudah berhasil evakuasi ke shelter di sesi ini, jangan bunyikan sirine lagi!
+        if (isEvacuationCompletedRef.current || (typeof window !== "undefined" && sessionStorage.getItem('atlas_evacuation_completed') === 'true')) {
+          return;
+        }
         if (typeof window !== "undefined") localStorage.setItem("aegisRealTsunami", "true");
         setTsunamiAlert(true);
         setActivePage("navigate");
@@ -1692,8 +1893,6 @@ function App() {
         vibrateIntervalRef.current = setInterval(doVibrate, 1200);
         if (settings.soundAlert) alarmRef.current.start();
         // ALWAYS restart GPS when tsunami activates so location is broadcast immediately
-        // (gpsAutoStartedRef may already be true from app startup, but we still need to
-        //  restart so the GPS callback sees tsunamiAlertRef=true and broadcasts location)
         gpsAutoStartedRef.current = true;
         arrivedFiredRef.current = false; // reset arrival so detection runs fresh
         arrivalShownRef.current = false; // reset so arrival modal can show this session
@@ -1701,7 +1900,12 @@ function App() {
         setTimeout(() => startGpsTracking(), 300);
         sendTsunamiNotification(true);
       } else {
-        if (typeof window !== "undefined") localStorage.removeItem("aegisRealTsunami");
+        if (typeof window !== "undefined") {
+          localStorage.removeItem("aegisRealTsunami");
+          sessionStorage.removeItem("atlas_evacuation_completed");
+        }
+        setIsEvacuationCompleted(false);
+        isEvacuationCompletedRef.current = false;
         setTsunamiAlert(false);
         alarmRef.current.stop();
         if (vibrateIntervalRef.current) {
@@ -1967,14 +2171,20 @@ function App() {
       const { active, ok } = await aegisApi.getTsunami();
       if (ok) {
         if (active) {
+          if (sessionStorage.getItem('atlas_evacuation_completed') === 'true') {
+            return;
+          }
           if (typeof window !== "undefined") localStorage.setItem("aegisRealTsunami", "true");
           setTsunamiAlert(true);
           setActivePage("navigate");
         } else {
-          if (typeof window !== "undefined" && localStorage.getItem("aegisRealTsunami") === "true") {
-            localStorage.removeItem("aegisRealTsunami");
-            setTsunamiAlert(false);
-            if (!isAdminURL) setActivePage("status");
+          if (typeof window !== "undefined") {
+            sessionStorage.removeItem("atlas_evacuation_completed");
+            if (localStorage.getItem("aegisRealTsunami") === "true") {
+              localStorage.removeItem("aegisRealTsunami");
+              setTsunamiAlert(false);
+              if (!isAdminURL) setActivePage("status");
+            }
           }
         }
       } else {
@@ -2063,6 +2273,8 @@ function App() {
               tsunamiAlert={tsunamiAlert}
               userPosition={userPosition}
               onBack={() => setActivePage("status")}
+              onCancelRoute={() => setSelectedRoute(undefined)}
+              onSelectRoute={(idx) => setSelectedRoute(idx)}
               adminPing={adminPing}
               onAdminPingDismiss={() => {
                 if (adminPing?.fromId) {
@@ -2073,6 +2285,7 @@ function App() {
               onStartGps={!gpsTracking ? startGpsTracking : undefined}
               onUpdateUserPosition={handleManualLocationUpdate}
               settings={{ algorithm: settings.algorithm }}
+              isEvacuationCompleted={isEvacuationCompleted}
             />
           )}
           {activePage === "family" && (
@@ -2417,12 +2630,12 @@ function App() {
               code: "02"
             },
             { page: "family" as ActivePage, Icon: Users, label: lang === 'id' ? 'UNIT' : 'UNITS', code: "03" },
-            { page: "guides" as ActivePage, Icon: BookOpen, label: lang === 'id' ? 'PANDUAN' : 'MANUAL', code: "04" },
+            { page: "guides" as ActivePage, Icon: ShieldAlert, label: lang === 'id' ? 'PROTOKOL' : 'PROTOCOLS', code: "04" },
             { page: "menu" as ActivePage, Icon: Menu, label: lang === 'id' ? 'MENU' : 'MENU', code: "05" },
           ].map(({ page, Icon, label, code }) => {
             const isAlert = page === "navigate" && tsunamiAlert;
             const isFamilyAlert = page === "family" && hasFamilyPing;
-            const isMenuUpdate = false;
+            const isMenuUpdate = page === "menu" && hasMenuUnread;
             const isActive = activePage === page;
             return (
               <button
@@ -2644,7 +2857,6 @@ function App() {
                         onClick={() => {
                           setArrivalSummary(null);
                           setArrivedShelterId(null);
-                          setUserPosition(null);
                           setRoutes([]);
                         }}
                         className="w-full py-3 bg-slate-800/80 hover:bg-slate-700 active:bg-slate-900 text-slate-300 rounded-2xl font-bold text-sm tracking-wide transition-colors"
@@ -2690,82 +2902,114 @@ function App() {
     >
       {/* â•â•â• MOBILE HEADER â€” 2-row compact layout for all screen sizes â•â•â• */}
       <header
-        className={`md:hidden shrink-0 z-50 relative transition-colors duration-500 backdrop-blur-md
+        className={`md:hidden shrink-0 z-50 relative transition-colors duration-500 backdrop-blur-md w-full overflow-hidden
         ${tsunamiAlert ? "bg-red-950/95 border-b border-red-900/50" : "bg-[#0a1020]/95 border-b border-slate-800/60"}`}
       >
-        {/* Row 1: Brand + SIMULASI button */}
-        <div className="flex items-center justify-between gap-2 px-3 pt-2 pb-1">
+        {/* Row 1: Brand + Menu #1 SIARAN + SIMULASI buttons */}
+        <div className="flex items-center justify-between gap-1.5 px-2.5 pt-2 pb-1 w-full">
           {/* Brand */}
-          <div className="flex items-center gap-2 min-w-0">
+          <div className="flex items-center gap-1.5 min-w-0 flex-1">
+            <button
+              onClick={() => setShowLeftSidebar(!showLeftSidebar)}
+              className="p-1 hover:bg-slate-800 rounded-lg text-slate-400 hover:text-white transition-colors shrink-0"
+              title="Buka Menu Navigasi"
+            >
+              <Menu className="w-4 h-4" />
+            </button>
             <div
-              className={`w-8 h-8 rounded-xl flex items-center justify-center shrink-0 ${tsunamiAlert ? "bg-red-500/20 border border-red-500/30" : "bg-indigo-500/20 border border-indigo-500/30"}`}
+              className={`w-7 h-7 rounded-lg flex items-center justify-center shrink-0 ${tsunamiAlert ? "bg-red-500/20 border border-red-500/30" : "bg-indigo-500/20 border border-indigo-500/30"}`}
             >
               <Shield
-                className={`w-4 h-4 ${tsunamiAlert ? "text-red-400" : "text-indigo-400"}`}
+                className={`w-3.5 h-3.5 ${tsunamiAlert ? "text-red-400" : "text-indigo-400"}`}
               />
             </div>
-            <div className="min-w-0">
-              <h1 className="text-white font-black text-sm tracking-widest leading-none font-mono">
+            <div className="min-w-0 flex items-center gap-1">
+              <h1 className="text-white font-black text-xs sm:text-sm tracking-wider leading-none font-mono shrink-0">
                 A.T.L.A.S
               </h1>
-              <p className="text-[9px] text-nerv-orange font-mono mt-0.5 truncate">
-                AUTONOMOUS THREAT LOCATION & ALERT SYSTEM · {userLocationName ? userLocationName.split(' // ')[0] : 'REGIONAL NODE'}
-              </p>
+              <span className="text-[8px] text-nerv-orange font-mono font-bold px-1 py-0.2 rounded bg-nerv-orange/10 border border-nerv-orange/30 shrink-0">
+                KOMANDO
+              </span>
             </div>
           </div>
-          {/* SIMULASI button */}
-          <button
-            onClick={() =>
-              tsunamiAlert
-                ? deactivateTsunamiAlert()
-                : setShowTsunamiConfirm(true)
-            }
-            className={`shrink-0 flex items-center gap-1.5 px-3 py-1.5 rounded-xl font-bold text-[10px] transition-all min-h-0
-              ${tsunamiAlert ? "bg-red-500/30 text-red-200 border border-red-500/50" : "bg-red-600 text-white"}`}
-          >
-            <div
-              className={`w-1.5 h-1.5 rounded-full shrink-0 ${tsunamiAlert ? "bg-red-400 animate-pulse" : "bg-red-300"}`}
-            />
-            {tsunamiAlert ? "STOP SIMULASI" : "SIMULASI"}
-          </button>
+
+          {/* Action buttons (Menu #1 SIARAN + SIMULASI) */}
+          <div className="flex items-center gap-1 shrink-0">
+            {/* MENU NO. 1: SIARAN KOMANDO */}
+            <button
+              onClick={() => setShowAdminBroadcastModal(true)}
+              className="flex items-center gap-1 px-2 py-1 rounded-lg bg-amber-500/20 hover:bg-amber-500/30 border border-amber-500/40 text-amber-300 font-bold text-[10px] shrink-0 active:scale-95 transition-all shadow-xs"
+              title="Konsol Siaran Darurat Komando (Menu #1)"
+            >
+              <Megaphone className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+              <span className="tracking-wide">SIARAN</span>
+              {adminBroadcastList.length > 0 ? (
+                <span className="w-3.5 h-3.5 rounded-full bg-amber-500 text-black text-[8px] font-bold flex items-center justify-center shrink-0">
+                  {adminBroadcastList.length}
+                </span>
+              ) : (
+                <span className="w-1.5 h-1.5 rounded-full bg-amber-400 shrink-0" />
+              )}
+            </button>
+
+            {/* SIMULASI button */}
+            <button
+              onClick={() =>
+                tsunamiAlert || isEvacuationCompleted
+                  ? deactivateTsunamiAlert()
+                  : setShowTsunamiConfirm(true)
+              }
+              className={`shrink-0 flex items-center gap-1 px-2.5 py-1 rounded-lg font-bold text-[10px] active:scale-95 transition-all min-h-0
+                ${tsunamiAlert ? "bg-red-500/30 text-red-200 border border-red-500/50" : isEvacuationCompleted ? "bg-emerald-900/60 text-emerald-300 border border-emerald-500/50" : "bg-red-600 hover:bg-red-500 text-white"}`}
+              title="Simulasi Respon Tanggap Bencana"
+            >
+              <div
+                className={`w-1.5 h-1.5 rounded-full shrink-0 ${tsunamiAlert ? "bg-red-400 animate-pulse" : isEvacuationCompleted ? "bg-emerald-400" : "bg-red-300"}`}
+              />
+              <span>{tsunamiAlert ? "STOP" : isEvacuationCompleted ? "RESET" : "SIMULASI"}</span>
+            </button>
+          </div>
         </div>
 
-        {/* Row 2: Status chips */}
-        <div className="flex items-center gap-2 px-3 pb-2 flex-wrap">
-          <div
-            className={`flex items-center gap-1 px-2 py-0.5 rounded-full text-[9px] font-bold border
-            ${tsunamiAlert ? "bg-red-900/50 border-red-700/50 text-red-300" : "bg-emerald-900/30 border-emerald-700/30 text-emerald-400"}`}
-          >
-            <Radio
-              className={`w-2.5 h-2.5 ${tsunamiAlert ? "animate-pulse" : ""}`}
-            />
-            <span>SENSOR AKTIF</span>
+        {/* Row 2: Location subtitle + Status chips */}
+        <div className="flex items-center justify-between gap-1 px-2.5 pb-1.5 text-[9px] font-mono border-t border-slate-800/40 pt-1 w-full">
+          <div className="text-nerv-orange truncate min-w-0 flex items-center gap-1 font-bold">
+            <span className="w-1.5 h-1.5 rounded-full bg-nerv-orange/80 shrink-0" />
+            <span className="truncate">
+              POSKO KOMANDO · {userLocationName ? userLocationName.split(' // ')[0] : 'PALU SELATAN'}
+            </span>
           </div>
-          <div
-            className={`flex items-center gap-1 px-2 py-0.5 rounded-full text-[9px] font-bold border
-            ${gpsTracking ? "bg-indigo-900/50 border-indigo-700/50 text-indigo-300" : "bg-slate-800/50 border-slate-700/50 text-slate-500"}`}
-          >
-            <Satellite
-              className={`w-2.5 h-2.5 ${gpsTracking ? "animate-pulse" : ""}`}
-            />
-            <span>{gpsTracking ? "GPS AKTIF" : "GPS OFFLINE"}</span>
-          </div>
-          {/* GPS accuracy badge */}
-          {gpsAccuracy !== null && (
+          <div className="flex items-center gap-1 shrink-0">
             <div
-              className={`flex items-center gap-1 px-2 py-0.5 rounded-full text-[9px] font-bold border
-              ${
-                gpsAccuracy <= 20
-                  ? "bg-emerald-900/30 border-emerald-700/30 text-emerald-400"
-                  : gpsAccuracy <= 50
-                    ? "bg-amber-900/30 border-amber-700/30 text-amber-400"
-                    : "bg-red-900/30 border-red-700/30 text-red-400"
-              }`}
+              className={`flex items-center gap-1 px-1.5 py-0.5 rounded text-[8px] font-bold border shrink-0
+              ${tsunamiAlert ? "bg-red-900/50 border-red-700/50 text-red-300" : "bg-emerald-900/30 border-emerald-700/30 text-emerald-400"}`}
             >
-              <Crosshair className="w-2.5 h-2.5" />
-              <span>Â±{Math.round(gpsAccuracy)}m</span>
+              <Radio className={`w-2 h-2 ${tsunamiAlert ? "animate-pulse" : ""}`} />
+              <span>SENSOR</span>
             </div>
-          )}
+            <div
+              className={`flex items-center gap-1 px-1.5 py-0.5 rounded text-[8px] font-bold border shrink-0
+              ${gpsTracking ? "bg-indigo-900/50 border-indigo-700/50 text-indigo-300" : "bg-slate-800/50 border-slate-700/50 text-slate-500"}`}
+            >
+              <Satellite className={`w-2 h-2 ${gpsTracking ? "animate-pulse" : ""}`} />
+              <span>{gpsTracking ? "GPS" : "OFF"}</span>
+            </div>
+            {gpsAccuracy !== null && (
+              <div
+                className={`flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[8px] font-bold border shrink-0
+                ${
+                  gpsAccuracy <= 20
+                    ? "bg-emerald-900/30 border-emerald-700/30 text-emerald-400"
+                    : gpsAccuracy <= 50
+                      ? "bg-amber-900/30 border-amber-700/30 text-amber-400"
+                      : "bg-red-900/30 border-red-700/30 text-red-400"
+                }`}
+              >
+                <Crosshair className="w-2 h-2" />
+                <span>±{Math.round(gpsAccuracy)}m</span>
+              </div>
+            )}
+          </div>
         </div>
       </header>
 
@@ -2856,18 +3100,31 @@ function App() {
         {/* Right: actions + avatar */}
         <div className="flex items-center gap-3">
           <button
+            onClick={() => setShowAdminBroadcastModal(true)}
+            className="flex items-center gap-2 px-3.5 py-1.5 rounded-lg bg-amber-500/10 hover:bg-amber-500/20 border border-amber-500/40 text-amber-300 font-bold text-xs transition-all shadow-sm"
+            title="Buka Konsol Siaran Darurat Komando"
+          >
+            <Megaphone className="w-4 h-4 text-amber-400" />
+            <span>SIARAN KOMANDO</span>
+            {adminBroadcastList.length > 0 && (
+              <span className="px-1.5 py-0.2 rounded-full bg-amber-500 text-black text-[9px] font-mono font-bold flex items-center justify-center">
+                {adminBroadcastList.length}
+              </span>
+            )}
+          </button>
+          <button
             onClick={() =>
-              tsunamiAlert
+              tsunamiAlert || isEvacuationCompleted
                 ? deactivateTsunamiAlert()
                 : setShowTsunamiConfirm(true)
             }
             className={`flex items-center gap-2 px-4 py-1.5 rounded-lg font-bold text-sm transition-all
-              ${tsunamiAlert ? "bg-red-500/20 text-red-200 border border-red-500/50" : "bg-red-600 hover:bg-red-500 text-white border border-transparent"}`}
+              ${tsunamiAlert ? "bg-red-500/20 text-red-200 border border-red-500/50" : isEvacuationCompleted ? "bg-emerald-900/40 text-emerald-300 border border-emerald-500/50" : "bg-red-600 hover:bg-red-500 text-white border border-transparent"}`}
           >
             <AlertTriangle
-              className={`w-4 h-4 ${tsunamiAlert ? "animate-pulse text-red-400" : ""}`}
+              className={`w-4 h-4 ${tsunamiAlert ? "animate-pulse text-red-400" : isEvacuationCompleted ? "text-emerald-400" : ""}`}
             />
-            {tsunamiAlert ? "HENTIKAN SIMULASI" : "SIMULASI TSUNAMI"}
+            {tsunamiAlert ? "HENTIKAN SIMULASI" : isEvacuationCompleted ? "RESET SIMULASI" : "SIMULASI TSUNAMI"}
           </button>
           <button
             onClick={handleLogout}
@@ -2893,85 +3150,153 @@ function App() {
         {/* â•â•â• DESKTOP LEFT SIDEBAR â•â•â• */}
         <AnimatePresence initial={false}>
           {showLeftSidebar && (
-            <motion.aside
-              initial={{ width: 0, opacity: 0 }}
-              animate={{ width: 220, opacity: 1 }}
-              exit={{ width: 0, opacity: 0 }}
-              className="bg-[#0b1120] border-r border-slate-800 hidden lg:flex flex-col z-40 relative shrink-0 overflow-hidden whitespace-nowrap"
-            >
-              <div className="w-[220px]">
-                <div className="p-6 pb-2">
-                  <h3 className="text-[10px] font-bold text-nerv-orange tracking-widest uppercase mb-1">
-                    A.T.L.A.S
-                  </h3>
-                  <p className="text-[9px] text-slate-400 font-mono tracking-tight leading-tight whitespace-normal">
-                    Autonomous Threat Location & Alert System
-                  </p>
-                </div>
-                <nav className="flex-1 mt-4">
-                  {[
-                    { page: "map" as ActivePage, Icon: MapIcon, label: "MAP" },
-                    {
-                      page: "settings" as ActivePage,
-                      Icon: SlidersHorizontal,
-                      label: "SETTINGS",
-                    },
-                  ].map(({ page, Icon, label }) => (
+            <>
+              {/* Mobile Sidebar Backdrop */}
+              <motion.div
+                key="sidebar-backdrop"
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                onClick={() => setShowLeftSidebar(false)}
+                className="fixed inset-0 z-[1100] bg-black/60 backdrop-blur-xs lg:hidden"
+              />
+
+              <motion.aside
+                key="sidebar-panel"
+                initial={{ x: -240, opacity: 0 }}
+                animate={{ x: 0, opacity: 1 }}
+                exit={{ x: -240, opacity: 0 }}
+                transition={{ type: "spring", damping: 26, stiffness: 300 }}
+                className="fixed top-0 bottom-0 left-0 z-[1200] lg:static lg:z-40 bg-[#0b1120] border-r border-slate-800 flex flex-col shrink-0 overflow-y-auto whitespace-nowrap shadow-2xl lg:shadow-none w-[240px] lg:w-[220px]"
+              >
+                <div className="w-full flex-1 flex flex-col">
+                  <div className="p-5 pb-2 flex items-start justify-between">
+                    <div>
+                      <h3 className="text-[10px] font-bold text-nerv-orange tracking-widest uppercase mb-1">
+                        A.T.L.A.S
+                      </h3>
+                      <p className="text-[9px] text-slate-400 font-mono tracking-tight leading-tight whitespace-normal">
+                        Autonomous Threat Location & Alert System
+                      </p>
+                    </div>
                     <button
-                      key={page}
-                      onClick={() => setActivePage(page)}
-                      className={`w-full flex items-center gap-3 px-6 py-3 transition-colors relative
-                        ${activePage === page ? "bg-[#1e293b]/50 border-r-2 border-indigo-500 text-indigo-300" : "text-slate-500 hover:text-slate-300"}`}
+                      onClick={() => setShowLeftSidebar(false)}
+                      className="p-1 rounded-lg bg-slate-800/80 text-slate-400 hover:text-white lg:hidden ml-2 transition-colors"
+                      title="Tutup Menu"
                     >
-                      <Icon className="w-5 h-5" />
-                      <span className="font-semibold text-sm tracking-wide">
-                        {label}
-                      </span>
-                      {page === "history" && evacuationHistory.length > 0 && (
-                        <span className="ml-auto mr-1 text-[9px] bg-indigo-500 text-white rounded-full px-1.5 py-0.5 font-bold">
-                          {evacuationHistory.length}
-                        </span>
-                      )}
+                      <X className="w-4 h-4" />
                     </button>
-                  ))}
-                </nav>
-                <div className="p-6 mt-auto">
-                  <button
-                    onClick={() => setShowAddShelter(true)}
-                    className="flex items-center gap-3 text-indigo-400 hover:text-indigo-300 transition-colors mb-4"
-                  >
-                    <Plus className="w-5 h-5" />
-                    <span className="font-semibold text-sm tracking-wide">
-                      TAMBAH SHELTER
-                    </span>
-                  </button>
-                  <button
-                    onClick={() => {
-                      setDrawingZoneMode(true);
-                      setDrawingZoneCoords([]);
-                      setManualBackOverrides({});
-                      setDrawingZoneDepthKm(0.2);
-                      setDrawingZoneFlipSide(false);
-                    }}
-                    className="flex items-center gap-3 text-red-400 hover:text-red-300 transition-colors mb-4"
-                  >
-                    <Plus className="w-5 h-5" />
-                    <span className="font-semibold text-sm tracking-wide">
-                      ZONA BAHAYA
-                    </span>
-                  </button>
-                  <button
-                    onClick={() => setShowShelters(true)}
-                    className="flex items-center gap-3 text-slate-500 hover:text-indigo-400 transition-colors"
-                  >
-                    <HelpCircle className="w-5 h-5" />
-                    <span className="font-semibold text-sm tracking-wide">
-                      SUPPORT / INFO
-                    </span>
-                  </button>
+                  </div>
+                  {/* MENU NO. 1: KONSOL SIARAN KOMANDO */}
+                  <div className="px-3 pt-3 pb-2">
+                    <button
+                      onClick={() => {
+                        setShowAdminBroadcastModal(true);
+                        if (window.innerWidth < 1024) setShowLeftSidebar(false);
+                      }}
+                      className="w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl bg-gradient-to-r from-amber-500/20 to-orange-500/10 border border-amber-500/40 hover:border-amber-400 text-amber-300 hover:text-amber-200 transition-all shadow-sm text-left group"
+                    >
+                      <div className="w-8 h-8 rounded-lg bg-amber-500/20 border border-amber-500/40 flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform">
+                        <Megaphone className="w-4 h-4 text-amber-400" />
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center justify-between gap-1">
+                          <span className="font-bold text-xs tracking-wide text-amber-200">
+                            SIARAN KOMANDO
+                          </span>
+                          {adminBroadcastList.length > 0 ? (
+                            <span className="px-1.5 py-0.2 rounded-full bg-amber-500 text-black text-[9px] font-mono font-bold flex items-center justify-center">
+                              {adminBroadcastList.length}
+                            </span>
+                          ) : (
+                            <span className="text-[8px] bg-amber-500/20 text-amber-300 border border-amber-500/40 rounded px-1 font-mono font-bold">
+                              SIAP
+                            </span>
+                          )}
+                        </div>
+                        <p className="text-[9px] text-amber-400/70 font-mono truncate">
+                          Konsol Siaran Darurat Resmi
+                        </p>
+                      </div>
+                    </button>
+                  </div>
+
+                  <nav className="flex-1 mt-1">
+                    {[
+                      { page: "map" as ActivePage, Icon: MapIcon, label: "MAP" },
+                      { page: "sensors" as ActivePage, Icon: Radio, label: "SENSORS" },
+                      {
+                        page: "settings" as ActivePage,
+                        Icon: SlidersHorizontal,
+                        label: "SETTINGS",
+                      },
+                    ].map(({ page, Icon, label }) => (
+                      <button
+                        key={page}
+                        onClick={() => {
+                          setActivePage(page);
+                          if (window.innerWidth < 1024) setShowLeftSidebar(false);
+                        }}
+                        className={`w-full flex items-center gap-3 px-6 py-3 transition-colors relative
+                          ${activePage === page ? "bg-[#1e293b]/50 border-r-2 border-indigo-500 text-indigo-300" : "text-slate-500 hover:text-slate-300"}`}
+                      >
+                        <Icon className="w-5 h-5" />
+                        <span className="font-semibold text-sm tracking-wide">
+                          {label}
+                        </span>
+                        {page === "history" && evacuationHistory.length > 0 && (
+                          <span className="ml-auto mr-1 text-[9px] bg-indigo-500 text-white rounded-full px-1.5 py-0.5 font-bold">
+                            {evacuationHistory.length}
+                          </span>
+                        )}
+                      </button>
+                    ))}
+                  </nav>
+                  <div className="p-6 mt-auto">
+                    <button
+                      onClick={() => {
+                        setShowAddShelter(true);
+                        if (window.innerWidth < 1024) setShowLeftSidebar(false);
+                      }}
+                      className="flex items-center gap-3 text-indigo-400 hover:text-indigo-300 transition-colors mb-4"
+                    >
+                      <Plus className="w-5 h-5" />
+                      <span className="font-semibold text-sm tracking-wide">
+                        TAMBAH SHELTER
+                      </span>
+                    </button>
+                    <button
+                      onClick={() => {
+                        setDrawingZoneMode(true);
+                        setDrawingZoneCoords([]);
+                        setManualBackOverrides({});
+                        setDrawingZoneDepthKm(0.2);
+                        setDrawingZoneFlipSide(false);
+                        if (window.innerWidth < 1024) setShowLeftSidebar(false);
+                      }}
+                      className="flex items-center gap-3 text-red-400 hover:text-red-300 transition-colors mb-4"
+                    >
+                      <Plus className="w-5 h-5" />
+                      <span className="font-semibold text-sm tracking-wide">
+                        ZONA BAHAYA
+                      </span>
+                    </button>
+                    <button
+                      onClick={() => {
+                        setShowShelters(true);
+                        if (window.innerWidth < 1024) setShowLeftSidebar(false);
+                      }}
+                      className="flex items-center gap-3 text-slate-500 hover:text-indigo-400 transition-colors"
+                    >
+                      <HelpCircle className="w-5 h-5" />
+                      <span className="font-semibold text-sm tracking-wide">
+                        SUPPORT / INFO
+                      </span>
+                    </button>
+                  </div>
                 </div>
-              </div>
-            </motion.aside>
+              </motion.aside>
+            </>
           )}
         </AnimatePresence>
 
@@ -2981,7 +3306,7 @@ function App() {
 
           {/* Admin A.T.L.A.S Tactical Search Bar */}
           {isAdminURL && (
-            <div className="absolute top-4 left-4 z-[900] w-72 sm:w-80 pointer-events-auto">
+            <div className="absolute top-3 left-3 right-3 sm:right-auto sm:left-4 sm:top-4 z-[900] sm:w-80 pointer-events-auto">
               <div className="relative">
                 <div className="flex items-center gap-2 px-3 py-2 rounded-xl bg-black/85 backdrop-blur-md border border-nerv-border shadow-[0_4px_25px_rgba(0,0,0,0.6)] focus-within:border-nerv-orange transition-all">
                   <Search className="w-4 h-4 text-nerv-orange shrink-0" />
@@ -3057,7 +3382,7 @@ function App() {
 
           {/* BMKG OVERLAY */}
           {gempa && !isGempaDismissed && (
-            <div className="absolute top-4 left-1/2 -translate-x-1/2 z-[600] bg-slate-900/90 backdrop-blur-md border border-slate-700 rounded-2xl p-4 shadow-2xl w-[90%] max-w-sm">
+            <div className="absolute top-[62px] sm:top-4 left-3 right-3 sm:left-1/2 sm:-translate-x-1/2 sm:right-auto z-[600] bg-slate-900/90 backdrop-blur-md border border-slate-700 rounded-2xl p-4 shadow-2xl sm:w-[90%] sm:max-w-sm">
               <button
                 onClick={handleDismissGempa}
                 className="absolute top-2 right-2 p-1.5 text-slate-400 hover:text-white hover:bg-slate-800 rounded-full transition-colors z-10"
@@ -5406,14 +5731,14 @@ function App() {
               animate={{ opacity: 1, y: 0, scale: 1 }}
               exit={{ opacity: 0, y: 24, scale: 0.96 }}
               transition={{ type: 'spring', damping: 28, stiffness: 320 }}
-              className="fixed bottom-[72px] md:bottom-6 left-1/2 md:left-auto -translate-x-1/2 md:translate-x-0 md:right-6 z-[600] w-[92vw] max-w-sm"
+              className="fixed bottom-[72px] md:bottom-6 left-1/2 md:left-auto -translate-x-1/2 md:translate-x-0 md:right-6 z-[600] w-[92vw] max-w-sm max-h-[calc(100dvh-120px)] md:max-h-[85vh] flex flex-col"
             >
-              <div className="bg-[#0d1929]/95 backdrop-blur-md border border-indigo-500/30 rounded-2xl shadow-[0_8px_40px_rgba(99,102,241,0.25)] overflow-hidden">
+              <div className="bg-[#0d1929]/95 backdrop-blur-md border border-indigo-500/30 rounded-2xl shadow-[0_8px_40px_rgba(99,102,241,0.25)] overflow-hidden flex flex-col max-h-full">
                 {/* Top accent */}
-                <div className="h-0.5 w-full bg-gradient-to-r from-indigo-700 via-indigo-400 to-indigo-700" />
+                <div className="h-0.5 w-full bg-gradient-to-r from-indigo-700 via-indigo-400 to-indigo-700 shrink-0" />
 
                 {/* Header */}
-                <div className="flex items-start justify-between px-4 pt-4 pb-2">
+                <div className="flex items-start justify-between px-4 pt-4 pb-2 shrink-0">
                   <div className="flex items-center gap-3 min-w-0">
                     <div className="w-10 h-10 rounded-xl bg-indigo-500/20 border border-indigo-500/30 flex items-center justify-center text-xl shrink-0">🏠</div>
                     <div className="min-w-0">
@@ -5432,7 +5757,7 @@ function App() {
                 </div>
 
                 {/* Info grid */}
-                <div className="px-4 pb-4 space-y-2.5">
+                <div className="px-4 pb-4 space-y-2.5 overflow-y-auto flex-1 min-h-0 custom-scrollbar">
                   {/* Address */}
                   {s.address && (
                     <div className="flex items-start gap-2.5 p-3 rounded-xl bg-slate-900/60 border border-slate-800">
@@ -5876,6 +6201,264 @@ function App() {
                     <Radio className="w-3.5 h-3.5" />
                     KIRIM PING
                   </button>
+                </div>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* ─── ADMIN EMERGENCY BROADCAST / DISPATCH MODAL ─── */}
+      <AnimatePresence>
+        {showAdminBroadcastModal && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-[3200] flex items-center justify-center bg-black/85 backdrop-blur-md p-4 font-mono"
+          >
+            <motion.div
+              initial={{ scale: 0.95, y: 20 }}
+              animate={{ scale: 1, y: 0 }}
+              exit={{ scale: 0.95, y: 20 }}
+              className="w-full max-w-xl bg-[#0b101c] border border-amber-500/40 rounded-2xl shadow-[0_20px_70px_rgba(245,158,11,0.25)] overflow-hidden flex flex-col max-h-[90vh]"
+            >
+              {/* Header */}
+              <div className="h-1 w-full bg-gradient-to-r from-amber-600 via-nerv-orange to-red-600" />
+              <div className="p-4 border-b border-slate-800 flex items-center justify-between shrink-0">
+                <div className="flex items-center gap-3">
+                  <div className="w-9 h-9 rounded-xl bg-amber-500/20 border border-amber-500/40 flex items-center justify-center">
+                    <Megaphone className="w-5 h-5 text-amber-400 animate-pulse" />
+                  </div>
+                  <div>
+                    <h2 className="text-sm font-black text-white uppercase tracking-wider flex items-center gap-2">
+                      KONSOL SIARAN DARURAT RESMI
+                      <span className="text-[9px] px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-300 border border-amber-500/40 font-mono font-bold">
+                        TACTICAL DISPATCH
+                      </span>
+                    </h2>
+                    <p className="text-[10px] text-slate-400 mt-0.5">
+                      Pancaran instruksi resmi komando ke seluruh unit aktif di lapangan
+                    </p>
+                  </div>
+                </div>
+                <button
+                  onClick={() => setShowAdminBroadcastModal(false)}
+                  className="w-8 h-8 rounded-lg bg-slate-800 hover:bg-slate-700 flex items-center justify-center text-slate-400 hover:text-white transition-colors"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+
+              {/* Scrollable Content */}
+              <div className="flex-1 overflow-y-auto custom-scrollbar p-5 space-y-5">
+                {/* 1. Level / Urgency */}
+                <div className="space-y-1.5">
+                  <label className="text-[10px] text-slate-400 uppercase tracking-widest font-bold block">
+                    TINGKAT URGENSI SIARAN (DEFCON LEVEL):
+                  </label>
+                  <div className="grid grid-cols-3 gap-2">
+                    {[
+                      { id: 'CRITICAL', label: 'KRITIS (DEFCON 1)', desc: 'Evakuasi Segera', color: 'border-red-500 bg-red-950/60 text-red-300' },
+                      { id: 'WARNING', label: 'PERINGATAN (DEFCON 2)', desc: 'Potensi Bahaya', color: 'border-amber-500 bg-amber-950/60 text-amber-300' },
+                      { id: 'INFO', label: 'INFORMASI (DEFCON 3)', desc: 'Panduan & Bantuan', color: 'border-cyan-500 bg-cyan-950/60 text-cyan-300' },
+                    ].map((lvl) => (
+                      <button
+                        key={lvl.id}
+                        type="button"
+                        onClick={() => setAdminBroadcastLevel(lvl.id as any)}
+                        className={`p-2 rounded-xl border text-left transition-all ${
+                          adminBroadcastLevel === lvl.id
+                            ? `${lvl.color} ring-2 ring-white/20 shadow-lg`
+                            : 'border-slate-800 bg-slate-900/60 text-slate-500 hover:text-slate-300'
+                        }`}
+                      >
+                        <span className="text-[10px] font-bold block">{lvl.label}</span>
+                        <span className="text-[9px] opacity-75 font-sans block">{lvl.desc}</span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* 2. Target Region */}
+                <div className="space-y-1.5">
+                  <div className="flex items-center justify-between">
+                    <label className="text-[10px] text-slate-400 uppercase tracking-widest font-bold">
+                      SASARAN WILAYAH TELEMETRI:
+                    </label>
+                    <span className="text-[9px] text-nerv-cyan font-mono">
+                      Target: {adminBroadcastRegion}
+                    </span>
+                  </div>
+                  <div className="flex flex-wrap gap-1.5">
+                    {[
+                      'SEMUA WILAYAH',
+                      'Kota Palu',
+                      'Kab. Donggala',
+                      'Kab. Sigi',
+                      'Kab. Parigi Moutong',
+                      'Pesisir Teluk Palu'
+                    ].map((reg) => (
+                      <button
+                        key={reg}
+                        type="button"
+                        onClick={() => setAdminBroadcastRegion(reg)}
+                        className={`px-2.5 py-1 rounded-lg text-[10px] font-mono transition-all ${
+                          adminBroadcastRegion === reg
+                            ? 'bg-amber-500 text-black font-bold'
+                            : 'bg-slate-900 border border-slate-800 text-slate-400 hover:text-white'
+                        }`}
+                      >
+                        {reg}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* 3. Broadcast Title */}
+                <div className="space-y-1.5">
+                  <label className="text-[10px] text-slate-400 uppercase tracking-widest font-bold block">
+                    JUDUL INSTRUKSI SIARAN:
+                  </label>
+                  <input
+                    type="text"
+                    value={adminBroadcastTitle}
+                    onChange={(e) => setAdminBroadcastTitle(e.target.value)}
+                    placeholder="Contoh: INSTRUKSI EVAKUASI PRIORITAS // HINDARI PESISIR"
+                    className="w-full px-3 py-2 bg-slate-900 border border-slate-700 rounded-xl text-xs text-white font-mono focus:border-amber-500 focus:outline-none placeholder:text-slate-600"
+                  />
+                  <div className="flex flex-wrap gap-1 pt-0.5">
+                    {[
+                      'EVAKUASI SEGERA KE TEMPAT TINGGI',
+                      'PENGALIHAN RUTE: HINDARI JEMBATAN UTAMA',
+                      'POSKO BANTUAN MEDIS DIBUKA DI TES SMPN 1',
+                      'SIMULASI RESPON DARURAT SEDANG BERLANGSUNG'
+                    ].map((template) => (
+                      <button
+                        key={template}
+                        type="button"
+                        onClick={() => setAdminBroadcastTitle(template)}
+                        className="text-[9px] px-2 py-0.5 rounded bg-slate-800/80 hover:bg-slate-700 text-slate-300 font-mono transition-colors"
+                      >
+                        + {template}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* 4. Broadcast Message Body */}
+                <div className="space-y-1.5">
+                  <label className="text-[10px] text-slate-400 uppercase tracking-widest font-bold block">
+                    ISI PESAN INSTRUKSI TAKTIS LENGKAP:
+                  </label>
+                  <textarea
+                    rows={3}
+                    value={adminBroadcastMessage}
+                    onChange={(e) => setAdminBroadcastMessage(e.target.value)}
+                    placeholder="Tuliskan arahan taktis yang jelas untuk warga dan relawan. Misal: Terjadi kenaikan gelombang air laut di pesisir barat. Seluruh warga sektor pesisir segera bergerak menuju Shelter Gedung Balai Desa..."
+                    className="w-full px-3 py-2 bg-slate-900 border border-slate-700 rounded-xl text-xs text-white font-mono focus:border-amber-500 focus:outline-none placeholder:text-slate-600 resize-none leading-relaxed"
+                  />
+                </div>
+
+                {/* Send Button */}
+                <button
+                  type="button"
+                  disabled={!adminBroadcastTitle.trim() || !adminBroadcastMessage.trim() || isSendingBroadcast}
+                  onClick={async () => {
+                    if (!adminBroadcastTitle.trim() || !adminBroadcastMessage.trim()) return;
+                    setIsSendingBroadcast(true);
+                    try {
+                      const newBroadcast: AdminBroadcast = {
+                        id: `bc-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+                        title: adminBroadcastTitle.trim(),
+                        message: adminBroadcastMessage.trim(),
+                        sender: userName || "COMMAND-01 (POSKO KOMANDO)",
+                        role: adminRole || "COMMAND-01",
+                        level: adminBroadcastLevel,
+                        region: adminBroadcastRegion,
+                        timestamp: Date.now(),
+                        expiresAt: Date.now() + 48 * 3600 * 1000,
+                      };
+                      await aegisApi.sendAdminBroadcast(newBroadcast);
+                      setAdminBroadcastTitle("");
+                      setAdminBroadcastMessage("");
+                      setAdminBroadcastList(getAdminBroadcasts());
+                      setPingSentToast({ name: `Semua Unit (${adminBroadcastRegion})`, ts: Date.now() });
+                      setTimeout(() => setPingSentToast(null), 3500);
+                    } catch (e) {
+                      console.error("Gagal menyiarkan pesan:", e);
+                    } finally {
+                      setIsSendingBroadcast(false);
+                    }
+                  }}
+                  className="w-full py-3 rounded-xl bg-gradient-to-r from-amber-500 to-nerv-orange hover:from-amber-400 hover:to-nerv-orange text-black font-black text-xs uppercase tracking-wider flex items-center justify-center gap-2 shadow-lg shadow-amber-500/25 active:scale-95 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  <Send className="w-4 h-4" />
+                  {isSendingBroadcast ? 'MEMANCARKAN KE SELURUH UNIT...' : 'PANCARKAN SIARAN DARURAT SEKARANG'}
+                </button>
+
+                {/* 5. Active Broadcasts List */}
+                <div className="pt-3 border-t border-slate-800 space-y-2.5">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[10px] text-slate-400 uppercase tracking-widest font-bold">
+                      SIARAN AKTIF DI PERANGKAT WARGA ({adminBroadcastList.length}):
+                    </span>
+                    <span className="text-[9px] text-slate-500 font-mono">
+                      Otomatis kadaluwarsa 48 Jam
+                    </span>
+                  </div>
+
+                  {adminBroadcastList.length === 0 ? (
+                    <div className="p-4 rounded-xl bg-slate-900/40 border border-slate-800/60 text-center">
+                      <p className="text-xs text-slate-500 font-mono">
+                        Tidak ada siaran aktif saat ini.
+                      </p>
+                    </div>
+                  ) : (
+                    <div className="space-y-2">
+                      {adminBroadcastList.map((bc) => (
+                        <div
+                          key={bc.id}
+                          className="p-3 rounded-xl bg-slate-900/80 border border-slate-700/60 flex items-start justify-between gap-3"
+                        >
+                          <div className="space-y-1 min-w-0">
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <span className={`text-[8px] font-bold px-1.5 py-0.5 rounded uppercase ${
+                                bc.level === 'CRITICAL' ? 'bg-red-500/20 text-red-300 border border-red-500/40' :
+                                bc.level === 'WARNING' ? 'bg-amber-500/20 text-amber-300 border border-amber-500/40' :
+                                'bg-cyan-500/20 text-cyan-300 border border-cyan-500/40'
+                              }`}>
+                                {bc.level}
+                              </span>
+                              <span className="text-[9px] text-white font-bold bg-slate-800 px-1.5 py-0.5 rounded">
+                                {bc.region}
+                              </span>
+                              <span className="text-[9px] text-slate-400">
+                                {new Date(bc.timestamp).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })}
+                              </span>
+                            </div>
+                            <h4 className="text-xs font-bold text-white truncate">
+                              {bc.title}
+                            </h4>
+                            <p className="text-[11px] text-slate-300 leading-snug line-clamp-2 font-sans">
+                              {bc.message}
+                            </p>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={async () => {
+                              await aegisApi.deleteAdminBroadcast(bc.id);
+                              setAdminBroadcastList(getAdminBroadcasts());
+                            }}
+                            className="shrink-0 px-2 py-1.5 rounded-lg bg-red-950/60 border border-red-500/40 hover:bg-red-900/60 text-red-300 text-[10px] font-bold flex items-center gap-1 transition-all"
+                            title="Tarik atau Hapus Siaran ini dari perangkat warga"
+                          >
+                            <Trash2 className="w-3 h-3" /> TARIK
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
                 </div>
               </div>
             </motion.div>

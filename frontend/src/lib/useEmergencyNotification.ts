@@ -23,6 +23,8 @@ export function useEmergencyNotification(tsunamiAlert: boolean) {
             title: "🚨 DARURAT TSUNAMI AKTIF",
             body: "Segera evakuasi ke titik kumpul terdekat!",
             id: 999, // Fixed ID agar menimpa notifikasi sebelumnya
+            channelId: 'critical_alerts',
+            sound: 'atlas_siren.wav',
             schedule: { every: 'second' },
             ongoing: true,
           }

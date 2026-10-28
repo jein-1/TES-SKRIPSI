@@ -18,25 +18,25 @@ import type { FamilyMember } from '../../types'
 // ── Storage helpers ────────────────────────────────────────────
 export function getMyAegisId(): string {
   const isNode01 = localStorage.getItem('atlas_is_node_01') === 'true'
-  if (isNode01) return 'NODE-01'
+  if (isNode01) return 'ARCHITECT 01'
 
+  const isWna = localStorage.getItem('atlas_is_wna') === 'true'
   const terminalId = localStorage.getItem('atlasTerminalId') || localStorage.getItem('aegisTerminalId')
   if (terminalId) {
-    if (terminalId.startsWith('NODE-01')) return terminalId
-    const pub = terminalId.replace(/^(AEGIS|ATLAS)-?/i, 'NODE-P')
-    return pub
+    if (terminalId === 'NODE-01' || terminalId.includes('ARCHITECT')) return 'ARCHITECT 01'
+    if (terminalId.includes('COMMAND')) return terminalId
+    if (terminalId === 'FOREIGN CITIZEN' || isWna) return 'FOREIGN CITIZEN'
+    return 'CITIZEN'
   }
 
   let id = localStorage.getItem('atlasId') || localStorage.getItem('aegisId')
   if (id) {
-    id = id.replace(/^(AEGIS|ATLAS)-?/i, 'NODE-P')
-  } else {
-    id = `NODE-P${Math.floor(Math.random() * 900 + 100)}`
+    if (id === 'NODE-01' || id.includes('ARCHITECT')) return 'ARCHITECT 01'
+    if (id.includes('COMMAND')) return id
+    if (id === 'FOREIGN CITIZEN' || isWna) return 'FOREIGN CITIZEN'
+    return 'CITIZEN'
   }
-  localStorage.setItem('atlasId', id)
-  localStorage.setItem('aegisId', id)
-  localStorage.setItem('atlasTerminalId', id)
-  return id
+  return isWna ? 'FOREIGN CITIZEN' : 'CITIZEN'
 }
 
 export function getMyName(): string {
@@ -773,6 +773,108 @@ function AddMemberModal({ onClose, onAdd }: { onClose: () => void; onAdd: (m: Fa
   )
 }
 
+// ── Reciprocal Role Assignment Modal (Two-Way Mutual Pairing) ──
+function ReciprocalRoleModal({
+  prompt,
+  onConfirm,
+  onCancel
+}: {
+  prompt: { fromId: string; fromName: string; nik?: string };
+  onConfirm: (role: string) => void;
+  onCancel: () => void;
+}) {
+  const [selectedRole, setSelectedRole] = useState('Keluarga')
+  const [customRole, setCustomRole] = useState('')
+  const PRESET_ROLES = ['Ayah', 'Ibu', 'Suami', 'Istri', 'Anak', 'Kakak', 'Adik', 'Keluarga', 'Kerabat']
+
+  return (
+    <motion.div
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      className="fixed inset-0 z-[3100] flex items-center justify-center bg-black/85 p-4 backdrop-blur-md"
+    >
+      <motion.div
+        initial={{ scale: 0.92, y: 20 }}
+        animate={{ scale: 1, y: 0 }}
+        exit={{ scale: 0.92, y: 20 }}
+        className="w-full max-w-sm rounded-2xl border-2 border-nerv-cyan/80 bg-[#0c121e] p-5 shadow-[0_0_50px_rgba(0,229,255,0.35)] relative font-sans text-slate-200"
+      >
+        <div className="flex items-center gap-3 mb-3 pb-3 border-b border-nerv-border">
+          <div className="w-12 h-12 rounded-xl bg-nerv-green/20 border border-nerv-green/60 flex items-center justify-center text-nerv-green shrink-0 shadow-[0_0_15px_rgba(34,197,94,0.4)]">
+            <CheckCircle className="w-6 h-6 animate-pulse" />
+          </div>
+          <div className="min-w-0">
+            <span className="text-[9px] font-mono font-bold text-nerv-cyan tracking-widest uppercase block">
+              AUTONOMOUS PAIRING DETECTED
+            </span>
+            <h3 className="text-sm font-bold text-white font-mono uppercase tracking-wide truncate">
+              PERANGKAT BERHASIL TERTAUT!
+            </h3>
+          </div>
+        </div>
+
+        <div className="p-3 rounded-xl bg-black/60 border border-slate-800 space-y-1 mb-3 font-mono">
+          <p className="text-[11px] text-slate-300">
+            <b className="text-white text-xs">{prompt.fromName}</b> baru saja memindai QR Code Anda dan menautkan Anda ke unitnya.
+          </p>
+          {prompt.nik && (
+            <p className="text-[10px] text-nerv-cyan font-bold">NIK: {prompt.nik}</p>
+          )}
+        </div>
+
+        <div className="space-y-2 mb-4">
+          <label className="text-[10px] text-slate-400 font-mono font-bold uppercase block tracking-wider">
+            APA HUBUNGAN / PERAN BELIAU BAGI ANDA?
+          </label>
+          <div className="grid grid-cols-3 gap-1.5 font-mono text-[11px]">
+            {PRESET_ROLES.map((role) => (
+              <button
+                key={role}
+                type="button"
+                onClick={() => {
+                  setSelectedRole(role)
+                  setCustomRole('')
+                }}
+                className={`py-1.5 px-2 rounded-lg font-bold border transition-all text-center truncate ${
+                  selectedRole === role && !customRole
+                    ? 'bg-nerv-cyan text-black border-nerv-cyan shadow-[0_0_10px_rgba(0,229,255,0.4)]'
+                    : 'bg-black/50 border-slate-800 text-slate-400 hover:text-white hover:border-slate-700'
+                }`}
+              >
+                {role}
+              </button>
+            ))}
+          </div>
+
+          <div className="pt-1">
+            <input
+              type="text"
+              value={customRole}
+              onChange={(e) => {
+                setCustomRole(e.target.value)
+                setSelectedRole(e.target.value)
+              }}
+              placeholder="Atau ketik peran khusus lainnya..."
+              className="w-full px-3 py-2 rounded-lg bg-black/60 border border-slate-800 text-xs text-white placeholder:text-slate-600 focus:border-nerv-cyan focus:outline-none font-mono"
+            />
+          </div>
+        </div>
+
+        <div className="flex gap-2 pt-1 font-mono">
+          <button
+            type="button"
+            onClick={() => onConfirm(customRole.trim() || selectedRole)}
+            className="flex-1 py-3 rounded-xl bg-nerv-cyan hover:bg-cyan-400 text-black font-bold text-xs uppercase tracking-wider transition-colors shadow-[0_0_15px_rgba(0,229,255,0.4)] cursor-pointer"
+          >
+            SIMPAN KE DAFTAR SAYA ✓
+          </button>
+        </div>
+      </motion.div>
+    </motion.div>
+  )
+}
+
 // ── Main FamilyPage ───────────────────────────────────────────
 interface Props {
   onBack: () => void
@@ -793,8 +895,21 @@ export default function FamilyPage({ onBack, onPingClear }: Props) {
   const [pinging, setPinging] = useState(false)
   const [pingBanner, setPingBanner] = useState('')
   const [, setTicker] = useState(0)
+  const [reciprocalPrompt, setReciprocalPrompt] = useState<{ fromId: string; fromName: string; nik?: string } | null>(null)
+  const [isOnline, setIsOnline] = useState(typeof navigator !== 'undefined' ? navigator.onLine : true)
 
-  const [incomingPing, setIncomingPing] = useState<{ fromId: string; fromName: string; nik?: string } | null>(() => {
+  useEffect(() => {
+    const handleOnline = () => setIsOnline(true)
+    const handleOffline = () => setIsOnline(false)
+    window.addEventListener('online', handleOnline)
+    window.addEventListener('offline', handleOffline)
+    return () => {
+      window.removeEventListener('online', handleOnline)
+      window.removeEventListener('offline', handleOffline)
+    }
+  }, [])
+
+  const [incomingPing, setIncomingPing] = useState<{ fromId: string; fromName: string; nik?: string; role?: string } | null>(() => {
     try {
       const raw = localStorage.getItem('atlas_pending_family_ping')
       if (raw) {
@@ -866,6 +981,33 @@ export default function FamilyPage({ onBack, onPingClear }: Props) {
     saveFamily(m)
   }, [])
 
+  const handleConfirmReciprocalRole = (role: string) => {
+    if (!reciprocalPrompt) return
+    const { fromId, fromName, nik } = reciprocalPrompt
+    const current = loadFamily()
+    const existingIdx = current.findIndex(m => m.id === fromId || (nik && m.nik === nik))
+    const newEntry: FamilyMember = {
+      id: fromId,
+      name: fromName,
+      role: role.trim() || 'Keluarga',
+      nik: nik || undefined,
+      initials: fromName.split(' ').map((w: string) => w[0]).join('').slice(0, 2).toUpperCase(),
+      status: 'unknown' as const,
+      location: 'Tertaut via QR scan timbal-balik',
+      updatedAgo: 'baru saja',
+      lastSeenTs: Date.now()
+    }
+    let updated: FamilyMember[]
+    if (existingIdx !== -1) {
+      updated = [...current]
+      updated[existingIdx] = { ...updated[existingIdx], role: newEntry.role, nik: newEntry.nik || updated[existingIdx].nik }
+    } else {
+      updated = [...current, newEntry]
+    }
+    save(updated)
+    setReciprocalPrompt(null)
+  }
+
   // Sync latest location of all family members from database on mount
   useEffect(() => {
     const fetchMemberLocations = async () => {
@@ -906,10 +1048,10 @@ export default function FamilyPage({ onBack, onPingClear }: Props) {
               aegisApi.broadcastLocation(myId, myName, deviceInfo, lat, lng, 100, myNik).catch(() => {})
             },
             () => {},
-            { enableHighAccuracy: false, timeout: 6000 }
+            { enableHighAccuracy: true, timeout: 8000, maximumAge: 0 }
           )
         }
-        watchId = await Geolocation.watchPosition({ enableHighAccuracy: true }, (pos, err) => {
+        watchId = await Geolocation.watchPosition({ enableHighAccuracy: true, maximumAge: 0 }, (pos, err) => {
           if (err || !pos) return
           const { latitude: lat, longitude: lng } = pos.coords
           saveMemberLoc(myId, lat, lng)
@@ -931,20 +1073,16 @@ export default function FamilyPage({ onBack, onPingClear }: Props) {
     if (event.type === 'FAMILY_JOIN' && event.toId === myId) {
       const fromId = event.fromId as string
       const fromName = event.fromName as string
-      const current = loadFamily()
-      if (!current.some(m => m.id === fromId)) {
-        const updated = [...current, {
-          id: fromId,
-          name: fromName,
-          role: 'Unit Personel',
-          initials: fromName.split(' ').map((w: string) => w[0]).join('').slice(0, 2).toUpperCase(),
-          status: 'unknown' as const,
-          location: 'Bergabung via QR scan',
-          updatedAgo: 'baru saja',
-          lastSeenTs: Date.now()
-        }]
-        save(updated)
-      }
+      const fromNik = (event as any).nik || ''
+      setShowQR(false)
+      setReciprocalPrompt({
+        fromId,
+        fromName,
+        nik: fromNik
+      })
+      try {
+        if ('vibrate' in navigator) navigator.vibrate([150, 80, 150])
+      } catch {}
     }
     if (event.type === 'LOCATION_UPDATE') {
       const id = event.id as string
@@ -956,9 +1094,14 @@ export default function FamilyPage({ onBack, onPingClear }: Props) {
       }
     }
     if (event.type === 'PING' && event.fromId !== myId) {
-      if (!event.role) {
-        setIncomingPing({ fromId: event.fromId as string, fromName: event.fromName as string, nik: event.nik })
-      }
+      const fromId = event.fromId as string
+      const role = (event as any).role || (fromId?.includes('ARCHITECT') ? 'ARCHITECT 01' : (fromId?.startsWith('COMMAND') ? fromId : undefined))
+      setIncomingPing({ 
+        fromId, 
+        fromName: event.fromName as string, 
+        nik: event.nik,
+        role
+      })
     }
     if (event.type === 'PING_REPLY' && event.toId === myId) {
       const current = loadFamily()
@@ -1059,17 +1202,41 @@ export default function FamilyPage({ onBack, onPingClear }: Props) {
               <div className="flex-1 min-w-0">
                 <div className="flex flex-wrap items-center gap-1.5">
                   <p className="text-sm font-mono font-bold text-white break-words">{myName} (Anda)</p>
-                  <span className="text-[8px] font-mono text-nerv-cyan uppercase px-1.5 py-0.5 rounded bg-nerv-cyan/10 border border-nerv-cyan/30 shrink-0 font-bold">
-                    UNIT UTAMA // PERANGKAT INI
+                  <span className={`text-[8px] font-mono uppercase px-1.5 py-0.5 rounded border shrink-0 font-bold ${
+                    myId === 'ARCHITECT 01'
+                      ? 'bg-amber-500/10 border-amber-500/40 text-amber-400'
+                      : myId.startsWith('COMMAND')
+                      ? 'bg-nerv-orange/10 border-nerv-orange/40 text-nerv-orange'
+                      : myId === 'FOREIGN CITIZEN'
+                      ? 'bg-purple-500/10 border-purple-500/40 text-purple-400'
+                      : 'bg-nerv-cyan/10 border-nerv-cyan/30 text-nerv-cyan'
+                  }`}>
+                    {myId === 'ARCHITECT 01'
+                      ? 'ARCHITECT 01 // PENGEMBANG'
+                      : myId.startsWith('COMMAND')
+                      ? `${myId} // KOMANDO`
+                      : myId === 'FOREIGN CITIZEN'
+                      ? 'FOREIGN CITIZEN // UNIT INI'
+                      : 'CITIZEN // UNIT INI'}
                   </span>
                 </div>
                 <p className="text-[10px] font-mono text-slate-400 mt-1 select-all">
-                  {myNik ? `NIK: ${myNik}` : `ID: #${myId}`}
+                  {myNik ? (myId === 'FOREIGN CITIZEN' ? `PASPOR: ${myNik}` : `NIK: ${myNik}`) : `STATUS: ${myId}`}
                 </p>
               </div>
-              <div className="flex items-center gap-1.5 px-2 py-0.5 rounded bg-nerv-green/10 border border-nerv-green/30 shrink-0">
-                <div className="w-1.5 h-1.5 rounded-full bg-nerv-green animate-pulse" />
-                <span className="text-[9px] font-mono font-bold text-nerv-green uppercase">ONLINE</span>
+              <div className={`flex items-center gap-1.5 px-2 py-0.5 rounded border shrink-0 ${
+                isOnline
+                  ? 'bg-nerv-green/10 border-nerv-green/30'
+                  : 'bg-amber-500/10 border-amber-500/30'
+              }`}>
+                <div className={`w-1.5 h-1.5 rounded-full ${
+                  isOnline ? 'bg-nerv-green animate-pulse' : 'bg-amber-500'
+                }`} />
+                <span className={`text-[9px] font-mono font-bold uppercase ${
+                  isOnline ? 'text-nerv-green' : 'text-amber-400'
+                }`}>
+                  {isOnline ? 'ONLINE' : 'OFFLINE'}
+                </span>
               </div>
             </div>
           </div>
@@ -1229,20 +1396,54 @@ export default function FamilyPage({ onBack, onPingClear }: Props) {
             >
               <div className="absolute inset-0 bg-nerv-orange/5 animate-pulse pointer-events-none" />
               <div className="relative z-10 flex flex-col items-center text-center font-mono">
-                <div className="w-14 h-14 bg-nerv-orange/20 rounded-full flex items-center justify-center mb-3 border border-nerv-orange">
-                  <Radio className="w-7 h-7 text-nerv-orange animate-ping" />
+                <div className={`w-14 h-14 rounded-full flex items-center justify-center mb-3 border ${
+                  incomingPing.role === 'ARCHITECT 01'
+                    ? 'bg-amber-500/20 border-amber-500 text-amber-400'
+                    : incomingPing.role?.startsWith('COMMAND')
+                    ? 'bg-nerv-orange/20 border-nerv-orange text-nerv-orange'
+                    : 'bg-nerv-cyan/20 border-nerv-cyan text-nerv-cyan'
+                }`}>
+                  <Radio className="w-7 h-7 animate-ping" />
                 </div>
-                <p className="text-[10px] text-nerv-orange font-bold uppercase tracking-widest mb-1">
+                <p className="text-[10px] font-bold uppercase tracking-widest mb-1 text-nerv-orange">
                   TACTICAL EMERGENCY PING
                 </p>
-                <h2 className="text-base font-bold text-white mb-2">PANGGILAN DARI UNIT</h2>
+                <h2 className="text-base font-bold text-white mb-2">
+                  {incomingPing.role === 'ARCHITECT 01'
+                    ? 'SINYAL OTORITAS PENGEMBANG'
+                    : incomingPing.role?.startsWith('COMMAND')
+                    ? 'PANGGILAN POSKO KOMANDO'
+                    : 'PANGGILAN DARI UNIT'}
+                </h2>
+
+                {/* Sinyal Authority Badge */}
+                {incomingPing.role === 'ARCHITECT 01' ? (
+                  <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded bg-amber-500/15 border border-amber-500/50 mb-3">
+                    <span className="text-[11px] font-bold text-amber-400 font-mono">
+                      [ARCHITECT 01] // {incomingPing.fromName}
+                    </span>
+                  </div>
+                ) : incomingPing.role?.startsWith('COMMAND') ? (
+                  <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded bg-nerv-orange/15 border border-nerv-orange/50 mb-3">
+                    <span className="text-[11px] font-bold text-nerv-orange font-mono">
+                      [{incomingPing.role}] • {incomingPing.fromName}
+                    </span>
+                  </div>
+                ) : (
+                  <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded bg-nerv-cyan/15 border border-nerv-cyan/40 mb-3">
+                    <span className="text-[11px] font-bold text-white font-mono">
+                      {incomingPing.fromName}
+                    </span>
+                  </div>
+                )}
+
                 <p className="text-xs text-slate-300 mb-1 font-sans leading-relaxed">
                   <b className="text-white font-mono">{incomingPing.fromName}</b> mengirimkan sinyal darurat. Segera
                   kirimkan konfirmasi keselamatan Anda.
                 </p>
                 {incomingPing.nik && (
                   <p className="text-[9px] text-nerv-cyan font-mono mb-4">
-                    NIK: {incomingPing.nik}
+                    {incomingPing.role === 'FOREIGN CITIZEN' ? `PASPOR: ${incomingPing.nik}` : `NIK: ${incomingPing.nik}`}
                   </p>
                 )}
                 <div className="w-full space-y-2.5">
@@ -1363,6 +1564,13 @@ export default function FamilyPage({ onBack, onPingClear }: Props) {
       </AnimatePresence>
 
       <AnimatePresence>
+        {reciprocalPrompt && (
+          <ReciprocalRoleModal
+            prompt={reciprocalPrompt}
+            onConfirm={handleConfirmReciprocalRole}
+            onCancel={() => setReciprocalPrompt(null)}
+          />
+        )}
         {showQR && <MyQRModal onClose={() => setShowQR(false)} />}
         {showAdd && <AddMemberModal onClose={() => setShowAdd(false)} onAdd={handleAdd} />}
         {viewMember && <MemberMapModal member={viewMember} onClose={() => setViewMember(null)} />}
