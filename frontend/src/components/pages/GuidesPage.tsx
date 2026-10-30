@@ -232,13 +232,13 @@ export const GLOSSARY_TERMS: GlossaryTerm[] = [
     examples: ['DEFCON 1: Tsunami hazard active / Evakuasi seketika', 'DEFCON 5: Monitoring telemetri damai']
   },
   {
-    term: 'TERMINAL (ARCHITECT 01 / COMMAND-01 / CITIZEN)',
-    code: 'DISTRIBUTED ARCHITECTURE',
+    term: 'IDENTITAS PERAN (MAYOR-01 / REGENT-01 / SAR-01 / SAR / CITIZEN / FOREIGN CITIZEN)',
+    code: 'DISTRIBUTED ROLE ARCHITECTURE',
     badge: 'IDENTITAS RESMI',
     badgeColor: 'bg-cyan-500/20 text-cyan-400 border-cyan-500/40',
-    summary: 'Pengenal taktis resmi perangkat dalam jaringan telemetri terdesentralisasi A.T.L.A.S.',
-    detail: 'Setiap instalasi aplikasi terikat secara kriptografis pada 1 perangkat fisik (1 HP = 1 Registrasi Resmi):\n\n• ARCHITECT 01: Master Terminal Pengembang Sentral / Arsitek Sistem A.T.L.A.S.\n\n• COMMAND-01: Terminal Petugas Administrator / Pusat Komando Evakuasi BPBD. Memiliki wewenang untuk mengelola shelter, menyiarkan peringatan darurat massal (ping broadcast), dan memantau status sensor daerah.\n\n• CITIZEN: Terminal Personel Warga Terdaftar. Berfungsi sebagai terminal evakuasi dan suar telemetri keselamatan keluarga.',
-    examples: ['ARCHITECT 01: Arsitek & Pengembang', 'COMMAND-01: Kepala Operasi / Admin Komando', 'CITIZEN: Terminal Personel Warga']
+    summary: 'Klasifikasi hierarki operasional dan identitas resmi unit terdaftar dalam jaringan A.T.L.A.S.',
+    detail: 'Setiap instalasi aplikasi terikat secara kriptografis pada 1 perangkat fisik (1 Perangkat = 1 Registrasi Resmi):\n\n• MAYOR-01 / MAYOR-02: Otoritas tertinggi Pemerintah Kota (Walikota & Wakil Walikota) pengendali kebijakan tanggap darurat.\n\n• REGENT-01 / REGENT-02: Otoritas tertinggi Pemerintah Kabupaten (Bupati & Wakil Bupati) untuk wilayah penyangga dan pesisir teluk.\n\n• SAR-01: Pemimpin Tertinggi Komando Lapangan Evakuasi & Penyelamatan Bencana.\n\n• SAR: Unit Taktis Tim Pencarian dan Penyelamatan Lapangan (Search and Rescue).\n\n• CITIZEN: Terminal Personel Warga Negara Indonesia Terdaftar. Berfungsi sebagai suar telemetri keselamatan keluarga dan panduan rute evakuasi mandiri.\n\n• FOREIGN CITIZEN: Terminal Resmi Warga Negara Asing / Tamu Internasional yang dilengkapi data domisili asal demi koordinasi evakuasi multinasional.',
+    examples: ['MAYOR-01: Pimpinan Kota', 'SAR-01: Pemimpin Lapangan Evakuasi', 'CITIZEN / FOREIGN CITIZEN: Unit Warga']
   },
   {
     term: 'ZRB (Zona Rawan Bencana Kota Palu)',
@@ -344,6 +344,118 @@ export const FEATURE_GUIDES: FeatureGuide[] = [
       { step: '03', instruction: 'Pilih algoritma rute: Dijkstra (rekomendasi rute jalan nyata aman) atau Haversine (jarak lurus geodetik).' },
       { step: '04', instruction: 'Periksa riwayat evakuasi dan catatan rilis pembaruan sistem pada menu Warta & Log.' }
     ]
+  }
+]
+
+export interface AuthorityRoleGuide {
+  code: string
+  title: string
+  rank: string
+  color: string
+  bgBadge: string
+  borderBadge: string
+  textBadge: string
+  desc: string
+  jurisdiction: string
+  authority: string
+}
+
+export const AUTHORITY_ROLES: AuthorityRoleGuide[] = [
+  {
+    code: 'MAYOR-01',
+    title: 'Walikota',
+    rank: 'Pimpinan Tertinggi Pemerintah Kota',
+    color: '#F59E0B',
+    bgBadge: 'bg-amber-500/15',
+    borderBadge: 'border-amber-500/40',
+    textBadge: 'text-amber-400',
+    desc: 'Otoritas tertinggi pengendali darurat bencana di wilayah perkotaan. Menetapkan status siaga kota, mengesahkan instruksi evakuasi massal, dan memimpin rapat koordinasi darurat seluruh instansi kota.',
+    jurisdiction: 'Kota Palu & Wilayah Urban Sekitarnya',
+    authority: 'Penetapan Status Darurat Kota, Siaran Resmi Walikota, & Komando Satgas Kota'
+  },
+  {
+    code: 'MAYOR-02',
+    title: 'Wakil Walikota',
+    rank: 'Wakil Pimpinan Pemerintah Kota',
+    color: '#FB923C',
+    bgBadge: 'bg-orange-500/15',
+    borderBadge: 'border-orange-500/40',
+    textBadge: 'text-orange-400',
+    desc: 'Wakil pengendali tanggap darurat perkotaan. Bertanggung jawab atas ketersediaan logistik bantuan warga, pengawasan fasilitas pengungsian darurat, dan koordinasi lapangan posko terpadu.',
+    jurisdiction: 'Kota Palu & Wilayah Pengungsian Kota',
+    authority: 'Koordinasi Logistik Pengungsi, Pengawasan Shelter Kota, & Bantuan Medis'
+  },
+  {
+    code: 'REGENT-01',
+    title: 'Bupati',
+    rank: 'Pimpinan Tertinggi Pemerintah Kabupaten',
+    color: '#06B6D4',
+    bgBadge: 'bg-cyan-500/15',
+    borderBadge: 'border-cyan-500/40',
+    textBadge: 'text-cyan-400',
+    desc: 'Otoritas tertinggi penanggulangan bencana di wilayah kabupaten penyangga pesisir dan dataran. Menetapkan koridor evakuasi lintas wilayah kabupaten dan memobilisasi armada penyelamatan regional.',
+    jurisdiction: 'Kabupaten Donggala / Sigi / Parigi Moutong',
+    authority: 'Penetapan Darurat Kabupaten, Siaran Jalur Lintas Wilayah, & Koordinasi Regional'
+  },
+  {
+    code: 'REGENT-02',
+    title: 'Wakil Bupati',
+    rank: 'Wakil Pimpinan Pemerintah Kabupaten',
+    color: '#38BDF8',
+    bgBadge: 'bg-sky-500/15',
+    borderBadge: 'border-sky-500/40',
+    textBadge: 'text-sky-400',
+    desc: 'Wakil pengendali tanggap darurat wilayah kabupaten. Mengoordinasikan mobilisasi evakuasi warga pedesaan pesisir menuju dataran tinggi aman serta distribusi logistik penampungan.',
+    jurisdiction: 'Kabupaten Penyangga & Pesisir Teluk',
+    authority: 'Penyediaan Lahan Pengungsian, Distribusi Pangan, & Keamanan Warga Pesisir'
+  },
+  {
+    code: 'SAR-01',
+    title: 'Komandan SAR Lapangan',
+    rank: 'Pimpinan Tertinggi Komando Evakuasi Lapangan',
+    color: '#FF5722',
+    bgBadge: 'bg-red-500/15',
+    borderBadge: 'border-red-500/40',
+    textBadge: 'text-red-400',
+    desc: 'Panglima taktis lapangan regu penyelamat gabungan (Basarnas, TNI, POLRI, BPBD). Menentukan penutupan jalur berbahaya, membuka koridor penyelamatan darurat, dan memimpin tim evakuasi di garis depan.',
+    jurisdiction: 'Seluruh Titik Garis Depan & Zona Merah Bahaya',
+    authority: 'Komando Eksekusi Penyelamatan Jiwa, Penutupan Akses Runtuhan, & Prioritas Darurat'
+  },
+  {
+    code: 'SAR-02',
+    title: 'Satuan Unit Lapangan SAR',
+    rank: 'Personel Regu Taktis Evakuasi Lapangan',
+    color: '#EA580C',
+    bgBadge: 'bg-orange-600/15',
+    borderBadge: 'border-orange-600/40',
+    textBadge: 'text-orange-500',
+    desc: 'Regu operasional penyelamat bergerak di darat dan perairan. Melakukan evakuasi korban reruntuhan struktur, evakuasi genangan air, dan pengawalan rombongan warga menuju shelter titik kumpul.',
+    jurisdiction: 'Sektor Operasional Lapangan Ditugaskan',
+    authority: 'Pertolongan Pertama Lapangan, Evakuasi Fisik Korban, & Panduan Shelter'
+  },
+  {
+    code: 'CITIZEN',
+    title: 'Warga Terdaftar',
+    rank: 'Unit Sipil Resmi Ber-NIK',
+    color: '#10B981',
+    bgBadge: 'bg-emerald-500/15',
+    borderBadge: 'border-emerald-500/40',
+    textBadge: 'text-emerald-400',
+    desc: 'Identitas resmi warga sipil ber-NIK 16 digit terverifikasi sistem kependudukan. Mengaktifkan fitur navigasi mandiri jalan nyata bebas hambatan, suar sinyal keselamatan, dan pelaporan status aman keluarga.',
+    jurisdiction: 'Ponsel Personal Pengguna Terverifikasi',
+    authority: 'Navigasi Mandiri, Penyiaran Status Selamat (I Am Safe), & Telemetri Keluarga'
+  },
+  {
+    code: 'FOREIGN CITIZEN',
+    title: 'Tamu Mancanegara',
+    rank: 'Unit Wisatawan / Diplomatik Internasional',
+    color: '#A855F7',
+    bgBadge: 'bg-purple-500/15',
+    borderBadge: 'border-purple-500/40',
+    textBadge: 'text-purple-400',
+    desc: 'Identitas resmi warga negara asing dan turis terdaftar dengan nomor paspor. Menyediakan panduan rute evakuasi berbahasa Inggris dan sinkronisasi koordinasi dengan posko perwakilan konsuler asing.',
+    jurisdiction: 'Ponsel Personal Tamu Mancanegara',
+    authority: 'Navigasi Darurat Bilingual, Laporan Lokasi Asing, & Koordinasi Diplomatik'
   }
 ]
 
@@ -567,6 +679,8 @@ export default function GuidesPage({ onNavigateMap, onBack }: { onNavigateMap: (
             ))}
           </div>
         )}
+
+
 
         {/* Action Button: Open Evacuation Map */}
         <button

@@ -2,7 +2,7 @@
 // GLOBAL TYPES — Semua tipe data yang digunakan di seluruh app
 // ═══════════════════════════════════════════════════════════════
 
-export type ActivePage = 'map' | 'history' | 'settings' | 'sensors' | 'status' | 'navigate' | 'family' | 'guides' | 'menu'
+export type ActivePage = 'map' | 'history' | 'settings' | 'sensors' | 'status' | 'navigate' | 'family' | 'guides' | 'menu' | 'profile' | 'landing'
 export type UserRole = 'admin' | 'user'
 export type AppUserRole = UserRole | null
 export type HistoryFilter = 'all' | 'real' | 'simulation'

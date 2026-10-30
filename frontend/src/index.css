@@ -10,16 +10,17 @@
 }
 
 html, body {
-  height: 100%;
   margin: 0;
   padding: 0;
+  min-height: 100%;
 }
 
 body {
   font-family: 'Inter', sans-serif;
   margin: 0;
   padding: 0;
-  overflow: hidden;
+  overflow-x: hidden;
+  overflow-y: auto;
   background: #07090E;
   color: #F8FAFC;
   -webkit-user-select: none;
@@ -57,11 +58,10 @@ body {
   border-left: 3px solid #FF5722;
 }
 
-/* Use dynamic viewport height — correctly handles mobile browser URL bar show/hide */
+/* App root container */
 #root {
-  height: 100dvh;
-  height: 100vh; /* fallback for older browsers */
-  overflow: hidden;
+  min-height: 100%;
+  width: 100%;
 }
 
 /* Remove 300ms tap delay on all interactive elements — makes app feel native */

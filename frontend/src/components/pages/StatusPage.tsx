@@ -57,28 +57,8 @@ function MiniMap({ userPosition }: { userPosition?: [number, number] | null }) {
     }
   }, [userPosition?.[0], userPosition?.[1]])
 
-  useEffect(() => {
-    if (!navigator.geolocation) return
-    const gId = navigator.geolocation.getCurrentPosition(
-      p => {
-        if (!userPosition) {
-          setPos([p.coords.longitude, p.coords.latitude])
-        }
-      },
-      () => {},
-      { enableHighAccuracy: true, timeout: 8000 }
-    )
-    const w = navigator.geolocation.watchPosition(
-      p => {
-        if (!userPosition) {
-          setPos([p.coords.longitude, p.coords.latitude])
-        }
-      },
-      () => {},
-      { enableHighAccuracy: true }
-    )
-    return () => navigator.geolocation.clearWatch(w)
-  }, [userPosition])
+  // Sinkronisasi posisi peta mini dikendalikan terpusat oleh mesin telemetri App.tsx via userPosition prop
+
 
   return (
     <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.25 }}
@@ -124,7 +104,7 @@ function MiniMap({ userPosition }: { userPosition?: [number, number] | null }) {
 }
 
 interface Props {
-  onNavigate: (page: 'navigate' | 'family' | 'guides') => void
+  onNavigate: (page: 'navigate' | 'family' | 'guides' | 'menu') => void
   userLocation: string
   onBack?: () => void
   userName?: string
@@ -157,6 +137,12 @@ export default function StatusPage({ onNavigate, userLocation, onBack, userName,
   const [broadcasts, setBroadcasts] = useState<AdminBroadcast[]>([])
   const [dismissedBroadcastIds, setDismissedBroadcastIds] = useState<string[]>([])
   const [showBroadcastHistory, setShowBroadcastHistory] = useState(false)
+  const [nowTs, setNowTs] = useState(() => Date.now())
+
+  useEffect(() => {
+    const timer = setInterval(() => setNowTs(Date.now()), 1000)
+    return () => clearInterval(timer)
+  }, [])
 
   const reloadBroadcasts = () => {
     setBroadcasts(getAdminBroadcasts())
@@ -365,7 +351,7 @@ export default function StatusPage({ onNavigate, userLocation, onBack, userName,
                   activeBroadcast.level === 'CRITICAL' ? 'text-red-400 animate-pulse' : activeBroadcast.level === 'WARNING' ? 'text-amber-400' : 'text-cyan-400'
                 }`} />
                 <span className="font-mono text-[9px] font-black tracking-wider text-white uppercase truncate">
-                  SIARAN RESMI KOMANDO // BEBAS HOAX
+                  SIARAN RESMI
                 </span>
               </div>
               <div className="flex items-center gap-1 shrink-0">
@@ -386,35 +372,65 @@ export default function StatusPage({ onNavigate, userLocation, onBack, userName,
 
             <div className="space-y-1">
               <div className="flex items-center justify-between text-[9px] font-mono text-slate-400">
-                <span className="text-white font-bold">{activeBroadcast.sender || 'COMMAND-01 (POSKO PUSAT)'}</span>
+                {/ARCHITECT/i.test(activeBroadcast.sender || '') || /ARCHITECT/i.test(activeBroadcast.role || '') ? (
+                  <span className="text-amber-400 font-mono font-black tracking-wider bg-amber-500/15 border border-amber-500/30 px-2 py-0.5 rounded shadow-[0_0_10px_rgba(245,158,11,0.2)]">
+                    {activeBroadcast.sender || 'ARCHITECT'}
+                  </span>
+                ) : (
+                  <span className="text-white font-bold">{activeBroadcast.sender || 'POSKO BENCANA'}</span>
+                )}
                 <span>{new Date(activeBroadcast.timestamp).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })} WITA</span>
               </div>
               <h3 className="text-xs font-bold text-white tracking-wide">
                 {activeBroadcast.title}
               </h3>
-              <p className="text-[11px] text-slate-200 leading-relaxed font-sans break-words bg-black/40 p-2.5 rounded-lg border border-white/5">
-                {activeBroadcast.message}
-              </p>
+              <div className="bg-black/40 p-2.5 rounded-lg border border-white/5 space-y-1.5">
+                <p className="text-[11px] text-slate-200 leading-relaxed font-sans break-words">
+                  {activeBroadcast.message.length > 130
+                    ? `${activeBroadcast.message.slice(0, 130)}...`
+                    : activeBroadcast.message}
+                </p>
+                {activeBroadcast.message.length > 130 && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      sessionStorage.setItem('atlas_menu_initial_view', 'broadcasts')
+                      onNavigate('menu')
+                    }}
+                    className="inline-flex items-center gap-1 text-[10px] font-mono font-bold text-amber-400 hover:text-amber-300 underline underline-offset-2 active:scale-95 transition-all pt-0.5"
+                  >
+                    <span>BACA SELENGKAPNYA →</span>
+                  </button>
+                )}
+              </div>
             </div>
 
             <div className="mt-2.5 pt-2 border-t border-white/10 flex items-center justify-between gap-2">
-              <button
-                type="button"
-                onClick={() => setShowBroadcastHistory(true)}
-                className="text-[10px] font-mono text-slate-400 hover:text-white underline underline-offset-2 transition-colors"
-              >
-                Riwayat Pesan ({relevantBroadcasts.length})
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  markBroadcastAsRead(activeBroadcast.id);
-                  setDismissedBroadcastIds(prev => [...prev, activeBroadcast.id]);
-                }}
-                className="px-2.5 py-1 rounded bg-white/10 hover:bg-white/20 active:scale-95 text-white font-mono text-[10px] font-bold flex items-center gap-1 transition-all"
-              >
-                <Check className="w-3 h-3 text-emerald-400" /> SAYA MENGERTI & MEMATUHI
-              </button>
+              <div className="flex items-center gap-1.5 flex-wrap">
+                {activeBroadcast.expiresAt && activeBroadcast.expiresAt > nowTs && (() => {
+                  const remaining = Math.max(0, activeBroadcast.expiresAt - nowTs)
+                  const h = Math.floor(remaining / 3600000)
+                  const m = Math.floor((remaining % 3600000) / 60000)
+                  const s = Math.floor((remaining % 60000) / 1000)
+                  return (
+                    <div className="flex items-center gap-1 text-[9px] font-mono text-amber-300 bg-amber-950/60 border border-amber-500/40 px-2 py-0.5 rounded">
+                      <span className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse" />
+                      <span>SISA: {String(h).padStart(2, '0')}:{String(m).padStart(2, '0')}:{String(s).padStart(2, '0')}</span>
+                    </div>
+                  )
+                })()}
+                <button
+                  type="button"
+                  onClick={() => setShowBroadcastHistory(true)}
+                  className="text-[10px] font-mono text-slate-400 hover:text-white underline underline-offset-2 transition-colors flex items-center gap-1.5"
+                >
+                  <span>Riwayat ({relevantBroadcasts.length})</span>
+                </button>
+              </div>
+              <div className="flex items-center gap-1 text-[9px] font-mono text-emerald-400 font-bold px-2 py-0.5 rounded bg-emerald-950/60 border border-emerald-500/40 shrink-0">
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                <span>INSTRUKSI AKTIF</span>
+              </div>
             </div>
           </motion.div>
         )}
@@ -428,7 +444,7 @@ export default function StatusPage({ onNavigate, userLocation, onBack, userName,
           >
             <div className="flex items-center gap-2">
               <Megaphone className="w-3.5 h-3.5 animate-pulse" />
-              <span>SIARAN RESMI POSKO KOMANDO ({relevantBroadcasts.length} PESAN)</span>
+              <span>SIARAN RESMI ({relevantBroadcasts.length} PESAN)</span>
             </div>
             <span className="text-white text-[9px] bg-nerv-cyan/20 px-1.5 py-0.5 rounded">
               BUKA INSTRUKSI
@@ -646,7 +662,7 @@ export default function StatusPage({ onNavigate, userLocation, onBack, userName,
                 <div className="flex items-center gap-2">
                   <Megaphone className="w-4 h-4 text-nerv-cyan animate-pulse" />
                   <span className="text-xs font-mono font-black text-nerv-cyan tracking-wider">
-                    SIARAN RESMI POSKO KOMANDO
+                    SIARAN RESMI
                   </span>
                 </div>
                 <button
@@ -675,7 +691,13 @@ export default function StatusPage({ onNavigate, userLocation, onBack, userName,
                       }`}
                     >
                       <div className="flex items-center justify-between text-[9px] font-mono">
-                        <span className="text-nerv-cyan font-bold">{b.sender || 'COMMAND-01'}</span>
+                        {/ARCHITECT/i.test(b.sender || '') || /ARCHITECT/i.test(b.role || '') ? (
+                          <span className="text-amber-400 font-mono font-black tracking-wider bg-amber-500/15 border border-amber-500/30 px-1.5 py-0.5 rounded shadow-[0_0_8px_rgba(245,158,11,0.2)]">
+                            {b.sender || 'ARCHITECT'}
+                          </span>
+                        ) : (
+                          <span className="text-nerv-cyan font-bold">{b.sender || 'POSKO PUSAT'}</span>
+                        )}
                         <span className="text-slate-400">{new Date(b.timestamp).toLocaleString('id-ID')} WITA</span>
                       </div>
                       <div className="flex items-center gap-1.5">

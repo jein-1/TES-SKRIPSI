@@ -13,6 +13,7 @@ import {
 import { useLanguage } from '../../lib/i18n'
 import { fetchClientIp } from '../../lib/geocode'
 import { supabase } from '../../lib/supabaseClient'
+import { INDONESIA_REGIONS } from '../../constants/regions'
 
 interface Props {
   onComplete: (name: string, nik: string, citizenship?: CitizenshipType) => void
@@ -47,6 +48,8 @@ export default function FirstVisitModal({ onComplete }: Props) {
   const [citizenship, setCitizenship] = useState<CitizenshipType>('WNI')
   const [name, setName] = useState('')
   const [idNumber, setIdNumber] = useState('')
+  const [userCity, setUserCity] = useState('Kota Palu')
+  const [foreignStayCity, setForeignStayCity] = useState('Kota Palu')
   const [error, setError] = useState('')
   const [declineWarning, setDeclineWarning] = useState(false)
   const [{ device, mobile, browser }] = useState(detectDevice)
@@ -145,10 +148,10 @@ export default function FirstVisitModal({ onComplete }: Props) {
           : `Letter combination in "${w}" is not a valid name`
       }
 
-      if (/^([a-z]{2,4})\1+$/.test(word)) {
+      if (/^([a-z]{2,4})\1{2,}$/.test(word)) {
         return lang === 'id'
-          ? `Kata "${w}" terdeteksi sebagai pengulangan acak`
-          : `Word "${w}" detected as repeated syllable spam`
+          ? `Kata "${w}" terdeteksi sebagai pengulangan acak berlebihan`
+          : `Word "${w}" detected as excessive repeated syllable spam`
       }
     }
 
@@ -255,6 +258,8 @@ export default function FirstVisitModal({ onComplete }: Props) {
     }
 
     localStorage.setItem('atlas_is_wna', citizenship === 'WNA' ? 'true' : 'false')
+    localStorage.setItem('atlas_citizenship', citizenship)
+    localStorage.setItem('atlas_user_city', citizenship === 'WNI' ? (userCity.trim() || 'Kota Palu') : (userCity.trim() ? `${userCity.trim()} (Domisili: ${foreignStayCity.trim() || 'Kota Palu'})` : 'Kota Palu'))
     if (citizenship === 'WNA') {
       localStorage.setItem('atlasTerminalId', 'FOREIGN CITIZEN')
       localStorage.setItem('aegisTerminalId', 'FOREIGN CITIZEN')
@@ -507,7 +512,7 @@ export default function FirstVisitModal({ onComplete }: Props) {
                   }`}
                 >
                   <Globe className="w-3.5 h-3.5" />
-                  <span>WNA (FOREIGNER)</span>
+                  <span>FOREIGN CITIZEN</span>
                 </button>
               </div>
             </div>
@@ -588,6 +593,59 @@ export default function FirstVisitModal({ onComplete }: Props) {
                   ? (lang === 'id' ? 'Wajib tepat 16 digit angka KTP resmi Indonesia.' : 'Must be exactly 16 numeric digits of Indonesian ID.')
                   : (lang === 'id' ? 'Nomor paspor resmi turis atau ekspatriat (6-15 karakter alfanumerik).' : 'Official passport number for foreign nationals (6-15 chars).')}
               </p>
+            </div>
+
+            {/* Input Wilayah / Kota Domisili */}
+            <div className="mb-4 relative">
+              <label className="text-[10px] text-slate-300 font-mono uppercase tracking-widest font-bold mb-1.5 block">
+                {citizenship === 'WNI'
+                  ? (lang === 'id' ? 'Kota / Wilayah Domisili' : 'City / Region of Residence')
+                  : (lang === 'id' ? 'Kota & Negara Asal' : 'City & Country of Origin')}
+              </label>
+              <input
+                type="text"
+                value={userCity}
+                onChange={e => setUserCity(e.target.value)}
+                placeholder={citizenship === 'WNI' ? 'Cth: Kota Palu / Kab. Sigi' : 'E.g., Melbourne, Australia'}
+                className="w-full px-3 py-2 rounded bg-black/60 border border-nerv-border text-white placeholder-slate-600 font-mono text-xs focus:outline-none focus:border-nerv-orange transition-all"
+              />
+              {/* Autocomplete suggestions for Indonesian regions */}
+              {citizenship === 'WNI' && userCity.trim().length >= 2 && (
+                (() => {
+                  const query = userCity.trim().toLowerCase();
+                  const matches = INDONESIA_REGIONS.filter(r => !r.includes('SEMUA') && r.toLowerCase().includes(query)).slice(0, 5);
+                  if (matches.length === 0 || (matches.length === 1 && matches[0].toLowerCase() === query)) return null;
+                  return (
+                    <div className="absolute left-0 right-0 top-full mt-1 bg-[#0c1525] border border-nerv-orange/50 rounded-lg shadow-xl z-50 overflow-hidden divide-y divide-slate-800">
+                      {matches.map(m => (
+                        <button
+                          key={m}
+                          type="button"
+                          onClick={() => setUserCity(m)}
+                          className="w-full text-left px-3 py-1.5 text-xs font-mono text-slate-200 hover:bg-nerv-orange/20 hover:text-nerv-orange transition-colors flex items-center justify-between"
+                        >
+                          <span>{m}</span>
+                          <span className="text-[9px] text-slate-500 font-sans">Pilih</span>
+                        </button>
+                      ))}
+                    </div>
+                  );
+                })()
+              )}
+              {citizenship === 'WNA' && (
+                <div className="mt-2">
+                  <label className="text-[10px] text-slate-300 font-mono uppercase tracking-widest font-bold mb-1 block">
+                    {lang === 'id' ? 'Kota Singgah / Menginap di Indonesia' : 'Current City of Stay in Indonesia'}
+                  </label>
+                  <input
+                    type="text"
+                    value={foreignStayCity}
+                    onChange={e => setForeignStayCity(e.target.value)}
+                    placeholder="Cth: Kota Palu / Posko Evakuasi"
+                    className="w-full px-3 py-2 rounded bg-black/60 border border-nerv-border text-nerv-cyan placeholder-slate-600 font-mono text-xs focus:outline-none focus:border-nerv-cyan transition-all"
+                  />
+                </div>
+              )}
             </div>
 
             {/* Error Message */}

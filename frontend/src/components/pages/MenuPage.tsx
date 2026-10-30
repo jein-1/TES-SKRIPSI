@@ -15,8 +15,8 @@ import { Haptics, ImpactStyle } from '@capacitor/haptics'
 import { NativeSettings } from '../../lib/nativeSettings'
 import { LocalNotifications } from '@capacitor/local-notifications'
 import { useLanguage } from '../../lib/i18n'
-import { GLOSSARY_TERMS, FEATURE_GUIDES } from './GuidesPage'
-import { getAdminBroadcasts, markBroadcastAsRead, type AdminBroadcast } from '../../lib/broadcastStorage'
+import { GLOSSARY_TERMS, FEATURE_GUIDES, AUTHORITY_ROLES } from './GuidesPage'
+import { getAdminBroadcasts, markBroadcastAsRead, markAllBroadcastsAsRead, type AdminBroadcast } from '../../lib/broadcastStorage'
 
 export type MenuView =
   | 'hub'
@@ -32,6 +32,7 @@ export type MenuView =
   | 'news'
   | 'changelog'
   | 'broadcasts'
+  | 'authority'
   | 'remarks'
   | 'terms'
   | 'privacy'
@@ -45,7 +46,7 @@ export type TestCategoryType =
   | 'heavy_rain'
   | 'civil'
 
-export const LATEST_NEWS_VERSION = 'v1.1.0'
+export const LATEST_NEWS_VERSION = 'v1.0.0'
 export const LATEST_WARTA_VERSION = LATEST_NEWS_VERSION
 
 export interface EarthquakeNewsItem {
@@ -81,12 +82,22 @@ interface Props {
   onBack: () => void
   onNavigateHistory?: () => void
   onCalibrateCompass?: () => void
+  onNavigateLanding?: () => void
   userLocation?: string
 }
 
-export default function MenuPage({ onBack, onNavigateHistory, onCalibrateCompass, userLocation = '' }: Props) {
+export default function MenuPage({ onBack, onNavigateHistory, onCalibrateCompass, onNavigateLanding, userLocation = '' }: Props) {
   const { lang, setLanguage, t } = useLanguage()
-  const [view, setView] = useState<MenuView>('hub')
+  const [view, setView] = useState<MenuView>(() => {
+    try {
+      const init = sessionStorage.getItem('atlas_menu_initial_view') as MenuView | null
+      if (init) {
+        sessionStorage.removeItem('atlas_menu_initial_view')
+        return init
+      }
+    } catch {}
+    return 'hub'
+  })
   const [selectedCategory, setSelectedCategory] = useState<TestCategoryType>('eew')
   const [glossarySearch, setGlossarySearch] = useState('')
   const [expandedGlossary, setExpandedGlossary] = useState<string>('DEFCON (Defense Readiness Condition)')
@@ -151,7 +162,16 @@ export default function MenuPage({ onBack, onNavigateHistory, onCalibrateCompass
 
   const handleOpenBroadcasts = () => {
     setView('broadcasts')
+    markAllBroadcastsAsRead()
+    setBroadcastList(getAdminBroadcasts())
   }
+
+  useEffect(() => {
+    if (view === 'broadcasts') {
+      markAllBroadcastsAsRead()
+      setBroadcastList(getAdminBroadcasts())
+    }
+  }, [view])
   
   // Settings States (stored in localStorage for persistence)
   const [themeMode, setThemeMode] = useState<'dark' | 'light'>(() => {
@@ -403,13 +423,13 @@ export default function MenuPage({ onBack, onNavigateHistory, onCalibrateCompass
 
   // Sub-category names
   const categoryTitles: Record<TestCategoryType, string> = {
-    eew: 'Earthquake Early Warning',
-    earthquake_info: 'Earthquake Information',
-    tsunami: 'Tsunami Warnings',
-    volcano: 'Volcanic Eruption Alerts',
-    weather: 'Weather Warnings',
-    heavy_rain: 'Heavy Rain Risk Alerts',
-    civil: 'Civil Protection Information',
+    eew: lang === 'id' ? 'Peringatan Dini Gempa Bumi' : 'Earthquake Early Warning',
+    earthquake_info: lang === 'id' ? 'Informasi Gempa Terkini' : 'Earthquake Information',
+    tsunami: lang === 'id' ? 'Peringatan Dini Tsunami' : 'Tsunami Warnings',
+    volcano: lang === 'id' ? 'Peringatan Erupsi Gunung Api' : 'Volcanic Eruption Alerts',
+    weather: lang === 'id' ? 'Peringatan Cuaca Ekstrem' : 'Weather Warnings',
+    heavy_rain: lang === 'id' ? 'Peringatan Hujan Lebat & Banjir' : 'Heavy Rain Risk Alerts',
+    civil: lang === 'id' ? 'Informasi Perlindungan Sipil' : 'Civil Protection Information',
   }
 
   return (
@@ -541,17 +561,18 @@ export default function MenuPage({ onBack, onNavigateHistory, onCalibrateCompass
             <h1 className="text-sm font-bold text-white tracking-wide font-mono uppercase">
               {view === 'hub' && (lang === 'id' ? 'MENU & PENGATURAN' : 'MENU & SETTINGS')}
               {view === 'app_guide' && (lang === 'id' ? 'BUKU PANDUAN APLIKASI & GLOSARIUM' : 'APP MANUAL & GLOSSARY')}
-              {view === 'appearance' && (lang === 'id' ? 'TAMPILAN // APPEARANCE' : 'APPEARANCE & DISPLAY')}
-              {view === 'notifications' && (lang === 'id' ? 'NOTIFIKASI // NOTIFICATIONS' : 'EMERGENCY NOTIFICATIONS')}
+              {view === 'appearance' && (lang === 'id' ? 'TAMPILAN & AKSESIBILITAS' : 'APPEARANCE & DISPLAY')}
+              {view === 'notifications' && (lang === 'id' ? 'NOTIFIKASI DARURAT' : 'EMERGENCY NOTIFICATIONS')}
               {view === 'local_notifications' && (lang === 'id' ? 'PENGATURAN NOTIFIKASI LOKAL' : 'LOCAL NOTIFICATION SETTINGS')}
               {view === 'dnd_access' && (lang === 'id' ? 'AKSES JANGAN GANGGU' : 'DO NOT DISTURB ACCESS')}
               {view === 'test_notifications' && (lang === 'id' ? 'UJI COBA NOTIFIKASI' : 'TEST NOTIFICATIONS')}
               {view === 'test_category' && categoryTitles[selectedCategory]}
               {view === 'live_updates' && (lang === 'id' ? 'PEMBARUAN LANGSUNG & PROTOKOL' : 'LIVE UPDATES & PRECAUTIONS')}
-              {view === 'license' && (lang === 'id' ? 'INFORMASI LISENSI // HAK CIPTA' : 'LICENSE INFORMATION // COPYRIGHT')}
-              {view === 'news' && (lang === 'id' ? 'NEWS GEMPA SISTEM' : 'EARTHQUAKE TELEMETRY NEWS')}
+              {view === 'license' && (lang === 'id' ? 'INFORMASI LISENSI' : 'LICENSE INFORMATION')}
+              {view === 'news' && (lang === 'id' ? 'RIWAYAT GEMPA' : 'EARTHQUAKE HISTORY')}
               {view === 'changelog' && (lang === 'id' ? 'LOG PEMBARUAN SISTEM' : 'SYSTEM RELEASE CHANGELOG')}
-              {view === 'broadcasts' && (lang === 'id' ? 'SIARAN DARURAT POSKO KOMANDO' : 'COMMAND DISPATCH BROADCASTS')}
+              {view === 'broadcasts' && (lang === 'id' ? 'SIARAN RESMI' : 'OFFICIAL DISPATCH BROADCASTS')}
+              {view === 'authority' && (lang === 'id' ? 'OTORITAS' : 'AUTHORITY')}
               {view === 'remarks' && (lang === 'id' ? 'KETERANGAN SISTEM' : 'SYSTEM REMARKS')}
               {view === 'terms' && (lang === 'id' ? 'KETENTUAN LAYANAN' : 'TERMS OF SERVICE')}
               {view === 'privacy' && (lang === 'id' ? 'KEBIJAKAN PRIVASI' : 'PRIVACY POLICY')}
@@ -573,7 +594,7 @@ export default function MenuPage({ onBack, onNavigateHistory, onCalibrateCompass
             {/* Group 0: Language & Locale / Bahasa Sistem */}
             <div>
               <p className="text-[11px] font-mono font-bold text-slate-500 uppercase tracking-widest px-2 mb-2">
-                {lang === 'id' ? 'BAHASA SISTEM // SYSTEM LANGUAGE' : 'SYSTEM LANGUAGE'}
+                {lang === 'id' ? 'BAHASA SISTEM' : 'SYSTEM LANGUAGE'}
               </p>
               <div className="bg-[#0D121F] border border-[#1A2333] rounded-xl p-3 flex items-center justify-between">
                 <div className="flex items-center gap-3">
@@ -615,7 +636,7 @@ export default function MenuPage({ onBack, onNavigateHistory, onCalibrateCompass
             {/* Group 1: Settings */}
             <div>
               <p className="text-[11px] font-mono font-bold text-slate-500 uppercase tracking-widest px-2 mb-2">
-                {lang === 'id' ? 'PENGATURAN SISTEM // SETTINGS' : 'SYSTEM SETTINGS'}
+                {lang === 'id' ? 'PENGATURAN SISTEM' : 'SYSTEM SETTINGS'}
               </p>
               <div className="bg-[#0D121F] border border-[#1A2333] rounded-xl divide-y divide-[#1A2333] overflow-hidden">
                 <button
@@ -625,7 +646,7 @@ export default function MenuPage({ onBack, onNavigateHistory, onCalibrateCompass
                   <div className="flex items-center gap-3">
                     <Palette className="w-4 h-4 text-nerv-cyan" />
                     <span className="text-xs font-medium text-slate-200">
-                      {lang === 'id' ? 'Tampilan & Aksesibilitas (Appearance)' : 'Appearance & Accessibility'}
+                      {lang === 'id' ? 'Tampilan & Aksesibilitas' : 'Appearance & Accessibility'}
                     </span>
                   </div>
                   <ChevronRight className="w-4 h-4 text-slate-500" />
@@ -638,7 +659,7 @@ export default function MenuPage({ onBack, onNavigateHistory, onCalibrateCompass
                   <div className="flex items-center gap-3">
                     <Bell className="w-4 h-4 text-nerv-orange" />
                     <span className="text-xs font-medium text-slate-200">
-                      {lang === 'id' ? 'Notifikasi Darurat & Uji Suara (Notifications)' : 'Emergency Notifications & Sirens'}
+                      {lang === 'id' ? 'Notifikasi Darurat & Uji Suara' : 'Emergency Notifications & Sirens'}
                     </span>
                   </div>
                   <ChevronRight className="w-4 h-4 text-slate-500" />
@@ -651,7 +672,7 @@ export default function MenuPage({ onBack, onNavigateHistory, onCalibrateCompass
                   <div className="flex items-center gap-3">
                     <Activity className="w-4 h-4 text-nerv-green" />
                     <span className="text-xs font-medium text-slate-200">
-                      {lang === 'id' ? 'Pembaruan Langsung & Protokol (Live Updates)' : 'Live Updates & Directives'}
+                      {lang === 'id' ? 'Pembaruan Langsung & Protokol' : 'Live Updates & Directives'}
                     </span>
                   </div>
                   <ChevronRight className="w-4 h-4 text-slate-500" />
@@ -665,7 +686,7 @@ export default function MenuPage({ onBack, onNavigateHistory, onCalibrateCompass
                     <BookOpen className="w-4 h-4 text-amber-400" />
                     <div className="text-left">
                       <span className="text-xs font-medium text-slate-200 block">
-                        {lang === 'id' ? 'Buku Panduan Aplikasi & Glosarium' : 'App Manual & Tactical Glossary'}
+                        {lang === 'id' ? 'Buku Panduan Aplikasi' : 'App Manual & Guide'}
                       </span>
                       <span className="text-[10px] text-slate-500 font-sans block">
                         {lang === 'id' ? 'Tata cara penggunaan fitur, panduan navigasi, dan arti istilah' : 'User guide, feature operations, and system terminology'}
@@ -683,7 +704,7 @@ export default function MenuPage({ onBack, onNavigateHistory, onCalibrateCompass
                     <div className="flex items-center gap-3">
                       <Navigation2 className="w-4 h-4 text-purple-400" />
                       <span className="text-xs font-medium text-slate-200">
-                        {lang === 'id' ? 'Arsip Telemetri Evakuasi (Archive)' : 'Evacuation Telemetry Archive'}
+                        {lang === 'id' ? 'Riwayat Jalur Evakuasi' : 'Evacuation Route History'}
                       </span>
                     </div>
                     <ChevronRight className="w-4 h-4 text-slate-500" />
@@ -696,14 +717,14 @@ export default function MenuPage({ onBack, onNavigateHistory, onCalibrateCompass
             {/* Group 2: About This App */}
             <div>
               <p className="text-[11px] font-mono font-bold text-slate-500 uppercase tracking-widest px-2 mb-2">
-                {lang === 'id' ? 'TENTANG SISTEM // ABOUT THIS APP' : 'ABOUT THIS APP'}
+                {lang === 'id' ? 'TENTANG SISTEM' : 'ABOUT THIS APP'}
               </p>
               <div className="bg-[#0D121F] border border-[#1A2333] rounded-xl divide-y divide-[#1A2333] overflow-hidden">
                 <div className="px-4 py-3 flex items-center justify-between">
                   <div className="flex items-center gap-3">
                     <Info className="w-4 h-4 text-slate-400" />
                     <span className="text-xs font-medium text-slate-200">
-                      {lang === 'id' ? 'Versi Sistem (Version)' : 'System Version'}
+                      {lang === 'id' ? 'Versi Sistem' : 'System Version'}
                     </span>
                   </div>
                   <span className="font-mono text-xs font-bold text-nerv-cyan">{LATEST_NEWS_VERSION.replace('v', '')}</span>
@@ -718,10 +739,10 @@ export default function MenuPage({ onBack, onNavigateHistory, onCalibrateCompass
                     <Radio className="w-4 h-4 text-nerv-orange shrink-0" />
                     <div className="text-left">
                       <span className="text-xs font-medium text-slate-200 block">
-                        {lang === 'id' ? 'News Gempa Sistem' : 'System Earthquake Feed (News)'}
+                        {lang === 'id' ? 'Riwayat Gempa' : 'Earthquake History'}
                       </span>
                       <span className="text-[10px] text-slate-500 font-sans block">
-                        {lang === 'id' ? 'Riwayat warta telemetri gempa masuk' : 'Live seismic telemetry news archive'}
+                        {lang === 'id' ? 'Catatan riwayat gempa bumi terkini' : 'Recorded earthquake history'}
                       </span>
                     </div>
                   </div>
@@ -768,10 +789,10 @@ export default function MenuPage({ onBack, onNavigateHistory, onCalibrateCompass
                     <Megaphone className="w-4 h-4 text-amber-400 shrink-0" />
                     <div className="text-left">
                       <span className="text-xs font-medium text-slate-200 block">
-                        {lang === 'id' ? 'Pesan Siaran Komando' : 'Command Post Broadcasts'}
+                        {lang === 'id' ? 'Pesan Siaran Darurat' : 'Emergency Advisories'}
                       </span>
                       <span className="text-[10px] text-slate-500 font-sans block">
-                        {lang === 'id' ? 'Instruksi resmi penanganan darurat dari Posko Komando' : 'Official emergency instructions & tactical advisories'}
+                        {lang === 'id' ? 'Instruksi resmi penanganan darurat dari Posko Siaga' : 'Official emergency instructions & safety advisories'}
                       </span>
                     </div>
                   </div>
@@ -789,6 +810,41 @@ export default function MenuPage({ onBack, onNavigateHistory, onCalibrateCompass
                   </div>
                 </button>
 
+                {/* 4. OTORITAS: Struktur Otoritas & Peran Sistem */}
+                <button
+                  onClick={() => setView('authority')}
+                  className="w-full px-4 py-3.5 flex items-center justify-between hover:bg-white/[0.03] transition-colors"
+                >
+                  <div className="flex items-center gap-3">
+                    <Shield className="w-4 h-4 text-amber-400 shrink-0" />
+                    <span className="text-xs font-medium text-slate-200 block">
+                      {lang === 'id' ? 'Otoritas' : 'Authority'}
+                    </span>
+                  </div>
+                  <ChevronRight className="w-4 h-4 text-slate-500" />
+                </button>
+
+                {/* 5. PORTAL PROMOSI RESMI (Apple Design Showcase) */}
+                {onNavigateLanding && (
+                  <button
+                    onClick={onNavigateLanding}
+                    className="w-full px-4 py-3.5 flex items-center justify-between hover:bg-white/[0.03] transition-colors group"
+                  >
+                    <div className="flex items-center gap-3">
+                      <ExternalLink className="w-4 h-4 text-orange-400 shrink-0 group-hover:scale-110 transition-transform" />
+                      <div className="text-left">
+                        <span className="text-xs font-medium text-slate-200 block">
+                          {lang === 'id' ? 'Portal Promosi & Pengenalan Resmi' : 'Official Showcase Portal'}
+                        </span>
+                        <span className="text-[10px] text-slate-500 font-sans block">
+                          {lang === 'id' ? 'Pengalaman interaktif, simulasi gempa, & pusat unduhan' : 'Interactive experience, earthquake simulator, & download hub'}
+                        </span>
+                      </div>
+                    </div>
+                    <ChevronRight className="w-4 h-4 text-slate-500" />
+                  </button>
+                )}
+
                 <button
                   onClick={() => setView('remarks')}
                   className="w-full px-4 py-3.5 flex items-center justify-between hover:bg-white/[0.03] transition-colors"
@@ -796,7 +852,7 @@ export default function MenuPage({ onBack, onNavigateHistory, onCalibrateCompass
                   <div className="flex items-center gap-3">
                     <Shield className="w-4 h-4 text-slate-400" />
                     <span className="text-xs font-medium text-slate-200">
-                      {lang === 'id' ? 'Keterangan Sistem (Remarks)' : 'System Architecture Remarks'}
+                      {lang === 'id' ? 'Keterangan Sistem' : 'System Remarks'}
                     </span>
                   </div>
                   <ChevronRight className="w-4 h-4 text-slate-500" />
@@ -809,7 +865,7 @@ export default function MenuPage({ onBack, onNavigateHistory, onCalibrateCompass
                   <div className="flex items-center gap-3">
                     <FileText className="w-4 h-4 text-slate-400" />
                     <span className="text-xs font-medium text-slate-200">
-                      {lang === 'id' ? 'Ketentuan Layanan (Terms of Service)' : 'Terms of Service'}
+                      {lang === 'id' ? 'Ketentuan Layanan' : 'Terms of Service'}
                     </span>
                   </div>
                   <ChevronRight className="w-4 h-4 text-slate-500" />
@@ -822,7 +878,7 @@ export default function MenuPage({ onBack, onNavigateHistory, onCalibrateCompass
                   <div className="flex items-center gap-3">
                     <Shield className="w-4 h-4 text-slate-400" />
                     <span className="text-xs font-medium text-slate-200">
-                      {lang === 'id' ? 'Kebijakan Privasi (Privacy Policy)' : 'Privacy Policy'}
+                      {lang === 'id' ? 'Kebijakan Privasi' : 'Privacy Policy'}
                     </span>
                   </div>
                   <ChevronRight className="w-4 h-4 text-slate-500" />
@@ -835,7 +891,7 @@ export default function MenuPage({ onBack, onNavigateHistory, onCalibrateCompass
                   <div className="flex items-center gap-3">
                     <FileText className="w-4 h-4 text-slate-400" />
                     <span className="text-xs font-medium text-slate-200">
-                      {lang === 'id' ? 'Informasi Lisensi (License Information)' : 'License Information'}
+                      {lang === 'id' ? 'Informasi Lisensi' : 'License Information'}
                     </span>
                   </div>
                   <ChevronRight className="w-4 h-4 text-slate-500" />
@@ -881,7 +937,7 @@ export default function MenuPage({ onBack, onNavigateHistory, onCalibrateCompass
                   <div className="flex items-center gap-1.5">
                     <span className="w-2 h-2 rounded-full bg-nerv-cyan animate-pulse" />
                     <h3 className="text-xs font-bold text-nerv-cyan uppercase tracking-wider">
-                      {lang === 'id' ? 'GLOSARIUM ISTILAH SISTEM A.T.L.A.S' : 'TACTICAL SYSTEM GLOSSARY'}
+                      {lang === 'id' ? 'PANDUAN & ISTILAH SISTEM A.T.L.A.S' : 'SYSTEM GLOSSARY'}
                     </h3>
                   </div>
                   <p className="text-[10px] text-slate-400 font-sans mt-0.5">
@@ -1069,7 +1125,7 @@ export default function MenuPage({ onBack, onNavigateHistory, onCalibrateCompass
                   </div>
                   <div className="flex items-center justify-between">
                     <span className="text-xs font-bold text-white font-mono">
-                      {lang === 'id' ? 'DARK (TAKTIKAL)' : 'DARK (TACTICAL)'}
+                      {lang === 'id' ? 'DARK (TEMA GELAP)' : 'DARK (TACTICAL)'}
                     </span>
                     {contrast === 'standard' && <Check className="w-3.5 h-3.5 text-nerv-orange" />}
                   </div>
@@ -1114,7 +1170,7 @@ export default function MenuPage({ onBack, onNavigateHistory, onCalibrateCompass
                 {/* Contrast */}
                 <div className="px-4 py-3.5 flex items-center justify-between">
                   <span className="text-xs font-medium text-slate-200">
-                    {lang === 'id' ? 'Kontras (Contrast)' : 'Contrast'}
+                    {lang === 'id' ? 'Kontras' : 'Contrast'}
                   </span>
                   <div className="flex items-center gap-1 border border-[#1A2333] bg-black/60 rounded-lg p-0.5">
                     <button
@@ -1149,7 +1205,7 @@ export default function MenuPage({ onBack, onNavigateHistory, onCalibrateCompass
                   className="w-full px-4 py-3.5 flex items-center justify-between hover:bg-white/[0.03] transition-colors text-left"
                 >
                   <span className="text-xs font-medium text-slate-200">
-                    {lang === 'id' ? 'Penglihatan warna (Colour vision)' : 'Colour vision'}
+                    {lang === 'id' ? 'Penglihatan Warna' : 'Colour Vision'}
                   </span>
                   <div className="flex items-center gap-1.5 text-slate-400 font-sans">
                     <span className="text-xs capitalize font-medium text-slate-300">
@@ -1166,11 +1222,11 @@ export default function MenuPage({ onBack, onNavigateHistory, onCalibrateCompass
                   className="w-full px-4 py-3.5 flex items-center justify-between hover:bg-white/[0.03] transition-colors text-left"
                 >
                   <span className="text-xs font-medium text-slate-200">
-                    {lang === 'id' ? 'Ukuran font (Font size)' : 'Font size'}
+                    {lang === 'id' ? 'Ukuran Font' : 'Font Size'}
                   </span>
                   <div className="flex items-center gap-1.5 text-slate-400 font-sans">
                     <span className="text-xs capitalize font-medium text-slate-300">
-                      {fontSize === 'device' ? (lang === 'id' ? 'Pengaturan perangkat' : 'Device setting') : fontSize}
+                      {fontSize === 'device' ? (lang === 'id' ? 'Pengaturan Perangkat' : 'Device Setting') : fontSize}
                     </span>
                     <ChevronRight className="w-4 h-4 text-slate-500" />
                   </div>
@@ -1183,11 +1239,11 @@ export default function MenuPage({ onBack, onNavigateHistory, onCalibrateCompass
                   className="w-full px-4 py-3.5 flex items-center justify-between hover:bg-white/[0.03] transition-colors text-left"
                 >
                   <span className="text-xs font-medium text-slate-200">
-                    {lang === 'id' ? 'Ketebalan font (Font thickness)' : 'Font thickness'}
+                    {lang === 'id' ? 'Ketebalan Font' : 'Font Thickness'}
                   </span>
                   <div className="flex items-center gap-1.5 text-slate-400 font-sans">
                     <span className="text-xs capitalize font-medium text-slate-300">
-                      {fontThickness === 'device' ? (lang === 'id' ? 'Pengaturan perangkat' : 'Device setting') : fontThickness}
+                      {fontThickness === 'device' ? (lang === 'id' ? 'Pengaturan Perangkat' : 'Device Setting') : fontThickness}
                     </span>
                     <ChevronRight className="w-4 h-4 text-slate-500" />
                   </div>
@@ -1195,10 +1251,10 @@ export default function MenuPage({ onBack, onNavigateHistory, onCalibrateCompass
               </div>
             </div>
 
-            {/* Screen Reader (TalkBack) Radio Section (Gambar 4 Reference) */}
+            {/* Screen Reader (TalkBack) Radio Section */}
             <div>
               <p className="text-[11px] font-mono font-bold text-slate-500 uppercase tracking-widest px-2 mb-2">
-                {lang === 'id' ? 'PEMBACA LAYAR (TALKBACK)' : 'SCREEN READER (TALKBACK)'}
+                {lang === 'id' ? 'PEMBACA LAYAR' : 'SCREEN READER'}
               </p>
               <div className="space-y-2.5">
                 {/* Default Layout Option */}
@@ -1223,7 +1279,7 @@ export default function MenuPage({ onBack, onNavigateHistory, onCalibrateCompass
                   </div>
                   <div className="flex-1">
                     <p className="text-xs font-bold text-white mb-0.5">
-                      {lang === 'id' ? 'Standar (Default)' : 'Default'}
+                      {lang === 'id' ? 'Standar' : 'Default'}
                     </p>
                     <p className="text-[11px] text-slate-400 leading-relaxed font-sans">
                       {lang === 'id'
@@ -1276,13 +1332,17 @@ export default function MenuPage({ onBack, onNavigateHistory, onCalibrateCompass
           <div className="p-4 space-y-6">
             <div>
               <p className="text-[11px] font-mono font-bold text-slate-500 uppercase tracking-widest px-2 mb-2">
-                PENGATURAN NOTIFIKASI DARURAT
+                {lang === 'id' ? 'PENGATURAN NOTIFIKASI DARURAT' : 'EMERGENCY NOTIFICATION SETTINGS'}
               </p>
               <div className="bg-[#0D121F] border border-[#1A2333] rounded-xl divide-y divide-[#1A2333] overflow-hidden">
                 <div className="px-4 py-3 flex items-center justify-between">
                   <div>
-                    <p className="text-xs font-medium text-white">Notifikasi Umum (Notifications)</p>
-                    <p className="text-[10px] text-slate-400">Aktifkan seluruh push alert kebencanaan</p>
+                    <p className="text-xs font-medium text-white">
+                      {lang === 'id' ? 'Notifikasi Umum' : 'General Notifications'}
+                    </p>
+                    <p className="text-[10px] text-slate-400">
+                      {lang === 'id' ? 'Aktifkan seluruh push alert kebencanaan' : 'Enable all disaster push notifications'}
+                    </p>
                   </div>
                   <input
                     type="checkbox"
@@ -1297,8 +1357,12 @@ export default function MenuPage({ onBack, onNavigateHistory, onCalibrateCompass
                   className="px-4 py-3.5 flex items-center justify-between hover:bg-white/[0.03] cursor-pointer transition-colors"
                 >
                   <div>
-                    <p className="text-xs font-medium text-white">Notifikasi Lokasi Presisi (Local Notifications)</p>
-                    <p className="text-[10px] text-slate-400">Peringatan otomatis sesuai zona radius pengguna</p>
+                    <p className="text-xs font-medium text-white">
+                      {lang === 'id' ? 'Notifikasi Lokasi Presisi' : 'Precise Location Notifications'}
+                    </p>
+                    <p className="text-[10px] text-slate-400">
+                      {lang === 'id' ? 'Peringatan otomatis sesuai zona radius pengguna' : 'Automatic alert based on user distance radius'}
+                    </p>
                   </div>
                   <div className="flex items-center gap-2">
                     <span className="text-[10px] font-mono text-nerv-cyan font-bold">{notifLocal ? 'ON' : 'OFF'}</span>
@@ -1313,9 +1377,13 @@ export default function MenuPage({ onBack, onNavigateHistory, onCalibrateCompass
                   <div>
                     <div className="flex items-center gap-1.5">
                       <span className="w-2 h-2 rounded-full bg-red-500 animate-pulse" />
-                      <p className="text-xs font-bold text-red-400 font-mono">Peringatan Kritis (Critical Alerts)</p>
+                      <p className="text-xs font-bold text-red-400 font-mono">
+                        {lang === 'id' ? 'Peringatan Kritis' : 'Critical Alerts'}
+                      </p>
                     </div>
-                    <p className="text-[10px] text-slate-400">Akses bypass mode Jangan Ganggu (DND) / hening</p>
+                    <p className="text-[10px] text-slate-400">
+                      {lang === 'id' ? 'Akses bypass mode Jangan Ganggu / hening' : 'Bypass Do Not Disturb / silent mode'}
+                    </p>
                   </div>
                   <div className="flex items-center gap-2">
                     <span className="text-[10px] font-mono text-red-400 font-bold">{notifCritical ? 'ON' : 'OFF'}</span>
@@ -1325,8 +1393,12 @@ export default function MenuPage({ onBack, onNavigateHistory, onCalibrateCompass
 
                 <div className="px-4 py-3 flex items-center justify-between">
                   <div>
-                    <p className="text-xs font-medium text-white">Pembaruan Langsung (Live Updates)</p>
-                    <p className="text-[10px] text-slate-400">Hitungan mundur gelombang di lock screen</p>
+                    <p className="text-xs font-medium text-white">
+                      {lang === 'id' ? 'Pembaruan Langsung' : 'Live Updates'}
+                    </p>
+                    <p className="text-[10px] text-slate-400">
+                      {lang === 'id' ? 'Hitungan mundur gelombang di lock screen' : 'Wave countdown on lock screen'}
+                    </p>
                   </div>
                   <input
                     type="checkbox"
@@ -1338,8 +1410,12 @@ export default function MenuPage({ onBack, onNavigateHistory, onCalibrateCompass
 
                 <div className="px-4 py-3 flex items-center justify-between">
                   <div>
-                    <p className="text-xs font-medium text-white">Informasi Cuaca Ekstrem (Weather Info)</p>
-                    <p className="text-[10px] text-slate-400">Peringatan hujan lebat dan angin kencang BMKG</p>
+                    <p className="text-xs font-medium text-white">
+                      {lang === 'id' ? 'Informasi Cuaca Ekstrem' : 'Extreme Weather Information'}
+                    </p>
+                    <p className="text-[10px] text-slate-400">
+                      {lang === 'id' ? 'Peringatan hujan lebat dan angin kencang BMKG' : 'BMKG heavy rain and strong wind warnings'}
+                    </p>
                   </div>
                   <input
                     type="checkbox"
@@ -1355,7 +1431,7 @@ export default function MenuPage({ onBack, onNavigateHistory, onCalibrateCompass
             <div>
               <p className="text-[11px] font-mono font-bold text-nerv-cyan uppercase tracking-widest px-2 mb-2 flex items-center gap-1.5">
                 <Shield className="w-3.5 h-3.5 text-nerv-cyan" />
-                {lang === 'id' ? 'LAYANAN LATAR BELAKANG // SENTINEL SERVICE' : 'BACKGROUND SENTINEL SERVICE'}
+                {lang === 'id' ? 'LAYANAN LATAR BELAKANG SENTINEL' : 'BACKGROUND SENTINEL SERVICE'}
               </p>
               <div className="bg-[#0D121F] border border-[#1A2333] rounded-xl divide-y divide-[#1A2333] overflow-hidden">
                 <div className="px-4 py-3.5 flex items-center justify-between">
@@ -1392,7 +1468,7 @@ export default function MenuPage({ onBack, onNavigateHistory, onCalibrateCompass
                 >
                   <div className="pr-3">
                     <p className="text-xs font-medium text-white">
-                      {lang === 'id' ? 'Nonaktifkan Penghemat Baterai (Unrestricted)' : 'Disable Battery Optimization (Unrestricted)'}
+                      {lang === 'id' ? 'Nonaktifkan Penghemat Baterai' : 'Disable Battery Optimization'}
                     </p>
                     <p className="text-[10px] text-slate-400 mt-0.5 leading-relaxed">
                       {lang === 'id'
@@ -1408,7 +1484,7 @@ export default function MenuPage({ onBack, onNavigateHistory, onCalibrateCompass
             {/* Test Notifications Hub Entry */}
             <div>
               <p className="text-[11px] font-mono font-bold text-slate-500 uppercase tracking-widest px-2 mb-2">
-                SIMULATOR UJI COBA SUARA & NOTIFIKASI
+                {lang === 'id' ? 'SIMULATOR UJI COBA SUARA & NOTIFIKASI' : 'SIREN & NOTIFICATION SIMULATOR'}
               </p>
               <div className="bg-[#0D121F] border border-[#1A2333] rounded-xl overflow-hidden">
                 <button
@@ -1421,10 +1497,10 @@ export default function MenuPage({ onBack, onNavigateHistory, onCalibrateCompass
                     </div>
                     <div>
                       <p className="text-xs font-bold text-white font-mono uppercase">
-                        Uji Coba Notifikasi & Sirine (Test Notifications)
+                        {lang === 'id' ? 'Uji Coba Notifikasi & Sirine' : 'Test Notifications & Sirens'}
                       </p>
                       <p className="text-[10px] text-slate-300">
-                        Kenali bunyi sirine dan simulasi notifikasi banner berjenjang
+                        {lang === 'id' ? 'Kenali bunyi sirine dan simulasi notifikasi banner berjenjang' : 'Listen to warning sirens and multi-tier banner alerts'}
                       </p>
                     </div>
                   </div>
@@ -1435,7 +1511,12 @@ export default function MenuPage({ onBack, onNavigateHistory, onCalibrateCompass
 
             {/* Warning disclosure */}
             <div className="p-3.5 rounded-xl bg-black/40 border border-[#1A2333] text-[11px] text-slate-400 leading-relaxed font-sans">
-              <span className="text-nerv-orange font-bold font-mono">⚠️ PERHATIAN KEBIJAKAN SUARA:</span> Peringatan Kritis (Critical Alerts) diatur agar tetap membunyikan sirine pada volume penuh saat ancaman tsunami mendesak terdeteksi, meskipun ponsel Anda dalam kondisi mode hening (*silent mode*).
+              <span className="text-nerv-orange font-bold font-mono">
+                {lang === 'id' ? '⚠️ PERHATIAN KEBIJAKAN SUARA:' : '⚠️ SOUND POLICY NOTICE:'}
+              </span>{' '}
+              {lang === 'id'
+                ? 'Peringatan Kritis diatur agar tetap membunyikan sirine pada volume penuh saat ancaman tsunami mendesak terdeteksi, meskipun ponsel Anda dalam kondisi mode hening (silent mode).'
+                : 'Critical alerts are configured to play emergency sirens at full volume upon imminent tsunami threats, even when your device is in silent mode.'}
             </div>
           </div>
         )}
@@ -1448,8 +1529,12 @@ export default function MenuPage({ onBack, onNavigateHistory, onCalibrateCompass
             <div className="bg-[#0D121F] border border-[#1A2333] rounded-xl divide-y divide-[#1A2333] overflow-hidden">
               <div className="px-4 py-3.5 flex items-center justify-between">
                 <div>
-                  <p className="text-xs font-medium text-white">Local Notifications</p>
-                  <p className="text-[10px] text-slate-400">Peringatan berbasis lokasi berkala di latar belakang</p>
+                  <p className="text-xs font-medium text-white">
+                    {lang === 'id' ? 'Notifikasi Lokasi Presisi' : 'Local Notifications'}
+                  </p>
+                  <p className="text-[10px] text-slate-400">
+                    {lang === 'id' ? 'Peringatan berbasis lokasi berkala di latar belakang' : 'Periodic location-based background alerts'}
+                  </p>
                 </div>
                 <input
                   type="checkbox"
@@ -1464,8 +1549,12 @@ export default function MenuPage({ onBack, onNavigateHistory, onCalibrateCompass
                 className="px-4 py-3.5 flex items-center justify-between hover:bg-white/[0.03] cursor-pointer transition-colors"
               >
                 <div>
-                  <p className="text-xs font-medium text-white">Location Permissions</p>
-                  <p className="text-[10px] text-nerv-cyan font-mono">Always Allow</p>
+                  <p className="text-xs font-medium text-white">
+                    {lang === 'id' ? 'Izin Akses Lokasi' : 'Location Permissions'}
+                  </p>
+                  <p className="text-[10px] text-nerv-cyan font-mono">
+                    {lang === 'id' ? 'Izinkan Sepanjang Waktu' : 'Always Allow'}
+                  </p>
                 </div>
                 <ChevronRight className="w-4 h-4 text-slate-500" />
               </div>
@@ -1473,36 +1562,40 @@ export default function MenuPage({ onBack, onNavigateHistory, onCalibrateCompass
 
             {/* Configure Guidance Card */}
             <div className="p-4 rounded-xl bg-[#111927] border border-[#1A2333] space-y-3">
-              <p className="text-xs text-slate-300 leading-relaxed">
-                To receive local notifications, set your location permissions to "Always Allow".
+              <p className="text-xs text-slate-300 leading-relaxed font-sans">
+                {lang === 'id'
+                  ? 'Untuk menerima notifikasi darurat berbasis lokasi presisi, atur izin lokasi aplikasi menjadi "Izinkan Sepanjang Waktu".'
+                  : 'To receive local notifications, set your location permissions to "Always Allow".'}
               </p>
               <button
                 onClick={() => NativeSettings.openAppDetails().catch(() => {})}
                 className="px-5 py-2 rounded-full border border-nerv-cyan text-nerv-cyan hover:bg-nerv-cyan hover:text-black font-mono font-bold text-xs transition-all shadow-[0_0_12px_rgba(0,229,255,0.2)]"
               >
-                [ Configure ]
+                {lang === 'id' ? '[ Buka Pengaturan ]' : '[ Configure ]'}
               </button>
             </div>
 
             {/* Local Notification Conditions */}
             <div className="p-4 rounded-xl bg-[#0D121F] border border-[#1A2333] space-y-2">
               <p className="text-[11px] font-mono font-bold text-white uppercase tracking-wider">
-                Local Notification Conditions
+                {lang === 'id' ? 'KETENTUAN NOTIFIKASI LOKASI' : 'LOCAL NOTIFICATION CONDITIONS'}
               </p>
-              <p className="text-xs text-slate-400 leading-relaxed">
-                Calculates estimated shaking and tsunami arrival based on your location at the time of the earthquake.
-                Location information is updated periodically in the background to ensure you are alerted accurately inside danger zones.
+              <p className="text-xs text-slate-400 leading-relaxed font-sans">
+                {lang === 'id'
+                  ? 'Menghitung estimasi guncangan gempa dan waktu tiba gelombang tsunami berdasarkan lokasi posisi Anda saat gempa terjadi. Informasi lokasi diperbarui secara berkala di latar belakang untuk memastikan peringatan akurat di dalam zona bahaya.'
+                  : 'Calculates estimated shaking and tsunami arrival based on your location at the time of the earthquake. Location information is updated periodically in the background to ensure you are alerted accurately inside danger zones.'}
               </p>
             </div>
 
             {/* Your Privacy */}
             <div className="p-4 rounded-xl bg-[#0D121F] border border-[#1A2333] space-y-2">
               <p className="text-[11px] font-mono font-bold text-white uppercase tracking-wider">
-                Your Privacy
+                {lang === 'id' ? 'KEBIJAKAN PRIVASI KOORDINAT' : 'YOUR PRIVACY'}
               </p>
-              <p className="text-xs text-slate-400 leading-relaxed">
-                When calculating whether your location is in an alert area, location coordinates are converted into an area code on your device.
-                Specific latitude and longitude coordinates are never stored on public servers without encryption.
+              <p className="text-xs text-slate-400 leading-relaxed font-sans">
+                {lang === 'id'
+                  ? 'Saat menghitung apakah lokasi Anda berada di area terdampak bencana, koordinat posisi diproses secara lokal di perangkat Anda. Titik garis bujur dan lintang spesifik tidak pernah disebarkan tanpa enkripsi.'
+                  : 'When calculating whether your location is in an alert area, location coordinates are converted into an area code on your device. Specific latitude and longitude coordinates are never stored on public servers without encryption.'}
               </p>
             </div>
           </div>
@@ -1522,35 +1615,40 @@ export default function MenuPage({ onBack, onNavigateHistory, onCalibrateCompass
                 <div className="flex items-center gap-2">
                   <span className="w-2 h-2 rounded-full bg-red-500 animate-pulse" />
                   <p className="text-xs font-bold text-white font-mono uppercase">
-                    Do Not Disturb Access: {notifCritical ? 'ON' : 'OFF'}
+                    {lang === 'id' ? 'Akses Jangan Ganggu' : 'Do Not Disturb Access'}: {notifCritical ? (lang === 'id' ? 'AKTIF' : 'ON') : (lang === 'id' ? 'NONAKTIF' : 'OFF')}
                   </p>
                 </div>
                 <ChevronRight className="w-4 h-4 text-slate-400" />
               </div>
 
-              <p className="text-xs text-slate-300 leading-relaxed">
-                To allow the phone to sound when receiving critical alerts, even when it is set to silent or Do Not Disturb mode, please set "Silent mode exception" to ON.
+              <p className="text-xs text-slate-300 leading-relaxed font-sans">
+                {lang === 'id'
+                  ? 'Agar ponsel dapat membunyikan sirine darurat ketika menerima peringatan kritis bencana, meskipun ponsel diatur ke mode hening atau Jangan Ganggu, aktifkan pengecualian mode hening.'
+                  : 'To allow the phone to sound when receiving critical alerts, even when it is set to silent or Do Not Disturb mode, please set "Silent mode exception" to ON.'}
               </p>
 
               <button
                 onClick={() => NativeSettings.openDndAccess().catch(() => {})}
                 className="px-5 py-2 rounded-full border border-nerv-cyan text-nerv-cyan hover:bg-nerv-cyan hover:text-black font-mono font-bold text-xs transition-all shadow-[0_0_12px_rgba(0,229,255,0.2)]"
               >
-                [ Configure ]
+                {lang === 'id' ? '[ Buka Pengaturan ]' : '[ Configure ]'}
               </button>
             </div>
 
             {/* About Critical Alerts */}
             <div className="p-4 rounded-xl bg-[#0D121F] border border-[#1A2333] space-y-2">
               <p className="text-[11px] font-mono font-bold text-white uppercase tracking-wider">
-                About Critical Alerts
+                {lang === 'id' ? 'TENTANG PERINGATAN KRITIS' : 'ABOUT CRITICAL ALERTS'}
               </p>
-              <p className="text-xs text-slate-400 leading-relaxed">
-                Critical alerts will be sent to users who are in the area closest to the disaster, regardless of whether they have registered their location.
-                Users who have registered but are not in the target area will receive a regular notification.
+              <p className="text-xs text-slate-400 leading-relaxed font-sans">
+                {lang === 'id'
+                  ? 'Peringatan kritis dikirimkan kepada seluruh warga yang berada di area terdekat dengan episentrum atau ancaman bahaya bencana, terlepas dari apakah telah mengatur lokasi tetap atau bergerak.'
+                  : 'Critical alerts will be sent to users who are in the area closest to the disaster, regardless of whether they have registered their location.'}
               </p>
               <p className="text-[11px] text-nerv-orange font-mono">
-                ※ To receive critical alerts, you need to set "Local Notifications" to ON.
+                {lang === 'id'
+                  ? '※ Untuk menerima peringatan kritis, pastikan "Notifikasi Lokasi Presisi" dalam keadaan AKTIF.'
+                  : '※ To receive critical alerts, you need to set "Local Notifications" to ON.'}
               </p>
             </div>
 
@@ -1561,13 +1659,15 @@ export default function MenuPage({ onBack, onNavigateHistory, onCalibrateCompass
                 className="flex items-center justify-between cursor-pointer border-b border-[#1A2333] pb-2"
               >
                 <p className="text-xs font-bold text-white font-mono uppercase">
-                  Do Not Disturb Bypass: {notifCritical ? 'ON' : 'OFF'}
+                  {lang === 'id' ? 'Bypass Jangan Ganggu' : 'Do Not Disturb Bypass'}: {notifCritical ? (lang === 'id' ? 'AKTIF' : 'ON') : (lang === 'id' ? 'NONAKTIF' : 'OFF')}
                 </p>
                 <ChevronRight className="w-4 h-4 text-slate-400" />
               </div>
 
-              <p className="text-xs text-slate-400 leading-relaxed">
-                If you enable "Silent mode exception", critical alerts will play sound at maximum emergency volume.
+              <p className="text-xs text-slate-400 leading-relaxed font-sans">
+                {lang === 'id'
+                  ? 'Jika Anda mengaktifkan pengecualian mode hening, peringatan kritis akan membunyikan nada sirine evakuasi pada volume darurat maksimal.'
+                  : 'If you enable "Silent mode exception", critical alerts will play sound at maximum emergency volume.'}
               </p>
             </div>
           </div>
@@ -1579,18 +1679,46 @@ export default function MenuPage({ onBack, onNavigateHistory, onCalibrateCompass
         {view === 'test_notifications' && (
           <div className="p-4 space-y-4">
             <p className="text-[11px] font-mono font-bold text-slate-500 uppercase tracking-widest px-2">
-              PILIH KATEGORI UJI COBA PERINGATAN
+              {lang === 'id' ? 'PILIH KATEGORI UJI COBA PERINGATAN' : 'SELECT ALERT TEST CATEGORY'}
             </p>
 
             <div className="bg-[#0D121F] border border-[#1A2333] rounded-xl divide-y divide-[#1A2333] overflow-hidden">
               {[
-                { id: 'eew' as TestCategoryType, label: 'Earthquake Early Warning', sub: 'Peringatan Dini Gempa Bumi BMKG' },
-                { id: 'earthquake_info' as TestCategoryType, label: 'Earthquake Information', sub: 'Laporan Cepat Seismik & Episentrum' },
-                { id: 'tsunami' as TestCategoryType, label: 'Tsunami Warnings', sub: lang === 'id' ? 'Sirine Ancaman Tsunami Wilayah Pesisir' : 'Coastal Tsunami Threat Warning Sirens' },
-                { id: 'volcano' as TestCategoryType, label: 'Volcanic Eruption Alerts', sub: 'Peringatan Erupsi Gunung Api & Abu' },
-                { id: 'weather' as TestCategoryType, label: 'Weather Warnings', sub: 'Peringatan Darurat Cuaca Ekstrem' },
-                { id: 'heavy_rain' as TestCategoryType, label: 'Heavy Rain Risk Alerts', sub: 'Risiko Hujan Lebat & Banjir Bandang' },
-                { id: 'civil' as TestCategoryType, label: 'Civil Protection Information', sub: 'Informasi Perlindungan Sipil & Evakuasi' },
+                {
+                  id: 'eew' as TestCategoryType,
+                  label: lang === 'id' ? 'Peringatan Dini Gempa Bumi' : 'Earthquake Early Warning',
+                  sub: lang === 'id' ? 'Sistem Peringatan Dini Seismik BMKG' : 'BMKG Early Seismic Warning Alert',
+                },
+                {
+                  id: 'earthquake_info' as TestCategoryType,
+                  label: lang === 'id' ? 'Informasi Gempa Terkini' : 'Earthquake Information',
+                  sub: lang === 'id' ? 'Laporan Cepat Seismik & Episentrum' : 'Quick Seismic & Epicenter Report',
+                },
+                {
+                  id: 'tsunami' as TestCategoryType,
+                  label: lang === 'id' ? 'Peringatan Dini Tsunami' : 'Tsunami Warnings',
+                  sub: lang === 'id' ? 'Sirine Ancaman Tsunami Wilayah Pesisir' : 'Coastal Tsunami Threat Warning Sirens',
+                },
+                {
+                  id: 'volcano' as TestCategoryType,
+                  label: lang === 'id' ? 'Peringatan Erupsi Gunung Api' : 'Volcanic Eruption Alerts',
+                  sub: lang === 'id' ? 'Aktivitas Vulkanik & Sebaran Abu' : 'Volcanic Activity & Ash Dispersion',
+                },
+                {
+                  id: 'weather' as TestCategoryType,
+                  label: lang === 'id' ? 'Peringatan Cuaca Ekstrem' : 'Weather Warnings',
+                  sub: lang === 'id' ? 'Peringatan Darurat Cuaca BMKG' : 'Emergency Severe Weather Alerts',
+                },
+                {
+                  id: 'heavy_rain' as TestCategoryType,
+                  label: lang === 'id' ? 'Peringatan Hujan Lebat & Banjir' : 'Heavy Rain Risk Alerts',
+                  sub: lang === 'id' ? 'Risiko Hujan Lebat & Banjir Bandang' : 'Severe Rain & Flash Flood Threats',
+                },
+                {
+                  id: 'civil' as TestCategoryType,
+                  label: lang === 'id' ? 'Informasi Perlindungan Sipil' : 'Civil Protection Information',
+                  sub: lang === 'id' ? 'Protokol Perlindungan Sipil & Evakuasi' : 'Civil Protection & Evacuation Protocols',
+                },
               ].map(({ id, label, sub }) => (
                 <button
                   key={id}
@@ -1610,7 +1738,9 @@ export default function MenuPage({ onBack, onNavigateHistory, onCalibrateCompass
             </div>
 
             <div className="p-3 rounded-lg bg-black/60 border border-[#1A2333] text-[10px] text-slate-400 leading-relaxed font-sans">
-              Tekan salah satu kategori di atas untuk menguji bunyi nada simulasi peringatan dini dan memeriksa tampilan banner notifikasi yang muncul di ponsel Anda.
+              {lang === 'id'
+                ? 'Tekan salah satu kategori di atas untuk menguji nada sirine simulasi peringatan dini dan memeriksa tampilan banner notifikasi yang muncul di ponsel Anda.'
+                : 'Tap any category above to test emergency sirens and inspect banner alerts on your device.'}
             </div>
           </div>
         )}
@@ -2050,7 +2180,7 @@ export default function MenuPage({ onBack, onNavigateHistory, onCalibrateCompass
             <div className="p-4 space-y-4">
               <div className="flex items-center justify-between px-2">
                 <p className="text-[11px] font-mono font-bold text-slate-500 uppercase tracking-widest">
-                  {lang === 'id' ? 'NEWS GEMPA SISTEM' : 'SYSTEM SEISMIC TELEMETRY NEWS'}
+                  {lang === 'id' ? 'RIWAYAT GEMPA' : 'EARTHQUAKE HISTORY'}
                 </p>
               </div>
 
@@ -2058,7 +2188,7 @@ export default function MenuPage({ onBack, onNavigateHistory, onCalibrateCompass
                 <div className="p-6 rounded-xl bg-[#0D121F] border border-[#1A2333] text-center space-y-2">
                   <Activity className="w-8 h-8 text-slate-600 mx-auto" />
                   <p className="text-xs text-slate-400 font-mono">
-                    {lang === 'id' ? 'Belum ada warta gempa baru dalam 7 hari terakhir' : 'No seismic telemetry events recorded in the last 7 days'}
+                    {lang === 'id' ? 'Belum ada riwayat gempa dalam 7 hari terakhir' : 'No earthquake records in the last 7 days'}
                   </p>
                 </div>
               ) : (
@@ -2140,13 +2270,13 @@ export default function MenuPage({ onBack, onNavigateHistory, onCalibrateCompass
         })()}
 
         {/* ══════════════════════════════════════════════════════════
-            VIEW: BROADCASTS (SIARAN DARURAT POSKO KOMANDO)
+            VIEW: BROADCASTS (SIARAN RESMI)
         ══════════════════════════════════════════════════════════ */}
         {view === 'broadcasts' && (
           <div className="p-4 space-y-4">
             <div className="flex items-center justify-between px-2">
               <p className="text-[11px] font-mono font-bold text-slate-500 uppercase tracking-widest">
-                {lang === 'id' ? 'PESAN SIARAN RESMI KOMANDO' : 'OFFICIAL COMMAND DISPATCHES'}
+                {lang === 'id' ? 'PESAN SIARAN RESMI' : 'OFFICIAL DISPATCHES'}
               </p>
               <span className="text-[10px] font-mono text-amber-400 font-bold bg-amber-500/10 px-2 py-0.5 rounded border border-amber-500/30">
                 DEFCON DISPATCH
@@ -2157,10 +2287,10 @@ export default function MenuPage({ onBack, onNavigateHistory, onCalibrateCompass
               <div className="p-6 rounded-xl bg-[#0D121F] border border-[#1A2333] text-center space-y-2">
                 <Megaphone className="w-8 h-8 text-slate-600 mx-auto" />
                 <p className="text-xs text-slate-400 font-mono">
-                  {lang === 'id' ? 'Belum ada pesan siaran darurat aktif dari Posko Komando' : 'No active emergency dispatches from Command Post'}
+                  {lang === 'id' ? 'Belum ada pesan siaran resmi aktif saat ini' : 'No active official dispatches at this time'}
                 </p>
                 <p className="text-[10px] text-slate-600 font-mono">
-                  {lang === 'id' ? 'Instruksi resmi komando akan disiarkan langsung ke seluruh unit saat siaga' : 'Official command instructions will be broadcasted to all units in real-time'}
+                  {lang === 'id' ? 'Instruksi resmi penanggulangan akan disiarkan langsung ke seluruh unit saat siaga' : 'Official emergency instructions will be broadcasted to all units in real-time'}
                 </p>
               </div>
             ) : (
@@ -2197,8 +2327,15 @@ export default function MenuPage({ onBack, onNavigateHistory, onCalibrateCompass
                     </div>
 
                     <div>
-                      <div className="text-[10px] font-mono text-slate-400 mb-0.5">
-                        DARI: <span className="text-white font-bold">{item.sender}</span>
+                      <div className="text-[10px] font-mono text-slate-400 mb-0.5 flex items-center gap-1.5 flex-wrap">
+                        <span>DARI:</span>
+                        {/ARCHITECT/i.test(item.sender || '') || /ARCHITECT/i.test(item.role || '') ? (
+                          <span className="text-amber-400 font-mono font-black tracking-wider bg-amber-500/15 border border-amber-500/30 px-2 py-0.5 rounded shadow-[0_0_10px_rgba(245,158,11,0.2)]">
+                            {item.sender || 'ARCHITECT'}
+                          </span>
+                        ) : (
+                          <span className="text-white font-bold">{item.sender}</span>
+                        )}
                       </div>
                       <h3 className="text-sm font-bold text-white tracking-wide">
                         {item.title}
@@ -2242,463 +2379,31 @@ export default function MenuPage({ onBack, onNavigateHistory, onCalibrateCompass
 
             <div className="space-y-3">
               {[
-          {
-                    "version": "v1.1.0",
-                    "timestamp": {
-                              "id": "2026.10.29 (Kamis) 02:15 PM WITA",
-                              "en": "2026.10.29 (Thu) 02:15 PM WITA"
-                    },
-                    "title": {
-                              "id": "Pusat Siaran Komando Darurat & Informasi Maklumat Keselamatan Warga",
-                              "en": "Emergency Command Broadcast Center & Civil Safety Advisories"
-                    },
-                    "details": {
-                              "id": [
-                                        "Pusat Siaran Darurat Posko Komando: Penambahan menu khusus Pesan Siaran Komando di antarmuka warga, memungkinkan masyarakat menerima instruksi keselamatan resmi, arahan evakuasi darurat, dan maklumat situasi bencana langsung dari posko komando secara seketika.",
-                                        "Peringatan Darurat Bertingkat & Penanda Siaga: Setiap maklumat siaran dilengkapi lencana tingkat bahaya (Info Siaga, Peringatan Waspada, Evakuasi Segera) dengan penghitung jumlah pesan baru agar warga langsung mengetahui instruksi yang paling mendesak."
-                              ],
-                              "en": [
-                                        "Command Emergency Broadcast Center: Added dedicated Command Broadcasts menu for citizens, enabling immediate reception of official safety instructions, evacuation directives, and critical alerts directly from command posts.",
-                                        "Graduated Emergency Badges & Threat Indicators: Broadcast advisories are categorized with clear urgency levels (Advisory, Warning, Immediate Evacuation) alongside unread counters for quick comprehension."
-                              ]
-                    }
-          },
-          {
-                    "version": "v1.0.9",
-                    "timestamp": {
-                              "id": "2026.10.28 (Rabu) 08:30 AM WITA",
-                              "en": "2026.10.28 (Wed) 08:30 AM WITA"
-                    },
-                    "title": {
-                              "id": "Penyimpanan Telemetri Luar Jaringan (Offline Queue) & Penyempurnaan Alarm Bahaya",
-                              "en": "Offline Telemetry Storage Queue & Emergency Siren Sound Refinement"
-                    },
-                    "details": {
-                              "id": [
-                                        "Mekanisme Telemetri Luar Jaringan (Offline Queue): Sistem otomatis menyimpan data telemetri dan status keselamatan pengguna saat jaringan internet terputus di tengah bencana, lalu langsung mengirimkannya secara kilat begitu sinyal seluler kembali terhubung.",
-                                        "Penyempurnaan Suara Sirine Bahaya A.T.L.A.S: Mengganti nada bawaan alarm ponsel dengan nada sirine peringatan dini A.T.L.A.S yang lebih lantang, tegas, dan khas agar warga langsung mengenali tanda bahaya bencana.",
-                                        "Keterangan Panduan SMS SOS Terbaca Utuh: Merapikan tata letak tulisan panduan pada jendela SMS Darurat sehingga seluruh petunjuk keselamatan terbaca lengkap dan jelas di semua ukuran layar ponsel.",
-                                        "Pembaruan Masa Simpan Riwayat Warta Gempa: Riwayat berita gempa kini tersimpan rapi selama 1 minggu (7 hari) lengkap dengan penghitung waktu mundur otomatis pada tiap kartu berita."
-                              ],
-                              "en": [
-                                        "Offline Telemetry Storage Mechanism (Offline Queue): Automatically buffers user telemetry and safety reports during network loss, transmitting them immediately once cellular connectivity resumes.",
-                                        "A.T.L.A.S Distinct Emergency Siren Sound: Replaced standard device alarm tones with loud, clear, dual-tone disaster wailing sirens for instant recognition.",
-                                        "Complete SMS SOS Guide Text Readability: Optimized text formatting in the emergency SMS window, ensuring all safety instructions are displayed without cutoffs across all phone displays.",
-                                        "Seismic News Retention Extension: Earthquake reports are now maintained for 1 week (7 days) with dynamic countdown badges on each news card."
-                              ]
-                    }
-          },
-          {
-                    "version": "v1.0.8",
-                    "timestamp": {
-                              "id": "2026.10.27 (Selasa) 11:45 PM WITA",
-                              "en": "2026.10.27 (Tue) 11:45 PM WITA"
-                    },
-                    "title": {
-                              "id": "Perapian Tata Letak Navigasi Taktis & Penyeragaman Identitas Unit",
-                              "en": "Tactical Navigation HUD Optimization & Unit Nomenclature Alignment"
-                    },
-                    "details": {
-                              "id": [
-                                        "Perapian Layar Navigasi Darurat: Tombol pembatalan rute dipindahkan langsung ke dalam kartu shelter terpilih dan memperbaiki pemilihan rute otomatis agar layar navigasi tetap tenang dan tidak memaksakan rute sebelum shelter ditentukan pengguna.",
-                                        "Penyeragaman Nama Unit & Hierarki Komando: Menyeragamkan seluruh sebutan perangkat menjadi Unit di lapangan, menegaskan hierarki identitas (COMMAND-01 untuk Posko Komando Utama, COMMAND-XX untuk Posko Lapangan, serta Warga Mandiri), disertai pembedaan nada sinyal bahaya.",
-                                        "Penautan Anggota Keluarga Timbal-Balik & Dukungan WNA: Mempermudah penautan keluarga via kode QR 6-digit secara otomatis dua arah, registrasi paspor resmi untuk warga negara asing, serta pengiriman cepat status keselamatan SAYA AMAN ✓."
-                              ],
-                              "en": [
-                                        "Tactical Navigation Screen Optimization: Moved route cancellation directly into the active shelter card and prevented premature auto-routing until a shelter is selected.",
-                                        "Unit Nomenclature Standardization & Command Hierarchy: Transitioned all device labels to Unit in the field, formalized authority identification (COMMAND-01 for Primary Control, COMMAND-XX for Regional Posts, and Citizens), paired with distinct tactical alert tones.",
-                                        "Reciprocal Family Unit Pairing Protocol & Foreign Citizen Support: Two-way family pairing with 6-digit verification code, official passport registration for foreign nationals, and instant transmission of I AM SAFE ✓ safety status."
-                              ]
-                    }
-          },
-          {
-                    "version": "v1.0.7",
-                    "timestamp": {
-                              "id": "2026.10.25 (Minggu) 04:20 PM WITA",
-                              "en": "2026.10.25 (Sun) 04:20 PM WITA"
-                    },
-                    "title": {
-                              "id": "Penyelarasan Lokasi Satelit Presisi & Akses Rute Evakuasi Bebas Bahaya",
-                              "en": "High-Precision Satellite Positioning & Hazard-Free Evacuation Access"
-                    },
-                    "details": {
-                              "id": [
-                                        "Penyelarasan & Penstabilan Mesin Lokasi Satelit (Sharelock Tactical Grade): Menghilangkan lonjakan titik koordinat yang melompat-lompat dan meningkatkan akurasi posisi pengguna hingga setara standar pelacakan taktis militer yang sangat presisi.",
-                                        "Pembukaan Jalur Evakuasi Mandiri pada Mode Siaga: Pengguna dapat melihat dan mempelajari rute penyelamatan menuju seluruh shelter aman kapan saja dalam kondisi normal untuk latihan kesiapsiagaan mandiri.",
-                                        "Pembaruan Rute Evakuasi Menghindari Zona Bahaya (ZRB): Jalur penyelamatan otomatis mengarahkan warga menyusuri jalan raya yang aman dan menjauhi area pantai serta zona rawan bencana."
-                              ],
-                              "en": [
-                                        "GPS Telemetry Recalibration (Sharelock Tactical Grade): Real-time drift filtering to eliminate coordinate jumps and elevate location accuracy to high-precision tactical standards.",
-                                        "Standby Evacuation Route Access in Normal Mode: Users can now view and practice evacuation routes to safe shelters in normal conditions without waiting for an active disaster alert.",
-                                        "Evacuation Routing Restructuring & Hazard-Zone Avoidance (ZRB): Safety routes guide citizens along safe road networks while strictly avoiding shorelines and high-risk hazard zones."
-                              ]
-                    }
-          },
-          {
-                    "version": "v1.0.6",
-                    "timestamp": {
-                              "id": "2026.10.22 (Kamis) 08:35 AM WITA",
-                              "en": "2026.10.22 (Thu) 08:35 AM WITA"
-                    },
-                    "title": {
-                              "id": "Penguatan Jalur Evakuasi Multijalur & Verifikasi Shelter Aman",
-                              "en": "Multi-Route Evacuation Reinforcement & Shelter Verification"
-                    },
-                    "details": {
-                              "id": [
-                                        "Kalkulasi Jalur Alternatif: Menyediakan pilihan rute penyelamatan cadangan jika jalur utama terhalang atau mengalami kemacetan saat bencana.",
-                                        "Verifikasi Koordinat Shelter Resmi: Memastikan seluruh titik kumpul evakuasi di Kota Palu telah tervalidasi berada di daratan tinggi yang aman dari gelombang."
-                              ],
-                              "en": [
-                                        "Alternative Route Calculation: Provides backup evacuation corridors in case primary roads are blocked or congested during emergencies.",
-                                        "Official Safe Shelter Verification: Validated that all assembly zones in Palu are geocoded on certified safe elevations."
-                              ]
-                    }
-          },
-          {
-                    "version": "v1.0.5",
-                    "timestamp": {
-                              "id": "2026.10.19 (Senin) 10:15 PM WITA",
-                              "en": "2026.10.19 (Mon) 10:15 PM WITA"
-                    },
-                    "title": {
-                              "id": "Optimasi Peta Responsif, Panel Riwayat & Pemisahan Warta Gempa",
-                              "en": "Responsive Map Optimization, History Panel & Seismic News Separation"
-                    },
-                    "details": {
-                              "id": [
-                                        "Navigasi Peta Responsif: Pergerakan peta lebih halus dan otomatis menyesuaikan orientasi pengguna di lapangan.",
-                                        "Pencatatan Riwayat Evakuasi: Menyimpan catatan simulasi dan jarak evakuasi yang pernah ditempuh pengguna.",
-                                        "Pemisahan Warta Berita Gempa: Warta gempa memiliki kartu tersendiri dengan hitungan mundur waktu kedaluwarsa terpisah dari catatan pembaruan sistem."
-                              ],
-                              "en": [
-                                        "Responsive Map Navigation: Smooth map panning that dynamically aligns with user orientation on the ground.",
-                                        "Evacuation History Logging: Stores recorded simulation logs and travel distances completed by the user.",
-                                        "Seismic News Stream Separation: Earthquake events are displayed in dedicated cards with countdown expiration separate from release logs."
-                              ]
-                    }
-          },
-          {
-                    "version": "v1.0.3",
-                    "timestamp": {
-                              "id": "2026.10.14 (Rabu) 01:20 PM WITA",
-                              "en": "2026.10.14 (Wed) 01:20 PM WITA"
-                    },
-                    "title": {
-                              "id": "Pelacakan Unit Keluarga, Sinyal Darurat & Navigasi Cerdas",
-                              "en": "Family Unit Tracking, Emergency Signals & Smart Navigation"
-                    },
-                    "details": {
-                              "id": [
-                                        "Pemantauan Keselamatan Keluarga: Memungkinkan anggota keluarga saling melihat posisi di peta secara real-time saat keadaan darurat.",
-                                        "Tombol Sinyal Darurat (Emergency Ping): Membunyikan nada dan getaran khusus di ponsel keluarga untuk meminta perhatian atau bantuan cepat.",
-                                        "Navigasi Cerdas Otomatis: Aplikasi langsung menentukan shelter terdekat yang paling aman berdasarkan posisi warga saat itu."
-                              ],
-                              "en": [
-                                        "Family Safety Monitoring: Allows family members to track each other's live locations on the map during emergencies.",
-                                        "Emergency Signal Ping: Triggers distinctive alert sounds and vibrations on family phones to request urgent attention.",
-                                        "Automated Smart Navigation: The system instantly computes the safest and nearest assembly shelter from the user's location."
-                              ]
-                    }
-          },
-          {
-                    "version": "v1.0.2",
-                    "timestamp": {
-                              "id": "2026.10.11 (Minggu) 09:10 AM WITA",
-                              "en": "2026.10.11 (Sun) 09:10 AM WITA"
-                    },
-                    "title": {
-                              "id": "Pilihan Bahasa Antarmuka & Tanda Berita Pembaruan",
-                              "en": "Interface Language Selection & News Update Indicators"
-                    },
-                    "details": {
-                              "id": [
-                                        "Pilihan Bahasa Antarmuka: Menyediakan opsi pergantian bahasa instan antara Bahasa Indonesia dan Bahasa Inggris pada menu pengaturan aplikasi.",
-                                        "Tanda Pengingat Berita Baru: Titik merah pemberitahuan otomatis muncul saat ada warta sistem terbaru dan langsung hilang setelah menu News dibuka."
-                              ],
-                              "en": [
-                                        "Interface Language Selection: Direct toggle between Indonesian and English interface languages in System Settings.",
-                                        "News Update Indicators: Dynamic red indicator dot alerts users of new announcements and clears once the News section is reviewed."
-                              ]
-                    }
-          },
-          {
-                    "version": "v1.0.1",
-                    "timestamp": {
-                              "id": "2026.10.06 (Selasa) 08:45 PM WITA",
-                              "en": "2026.10.06 (Tue) 08:45 PM WITA"
-                    },
-                    "title": {
-                              "id": "Penyempurnaan Notifikasi Darurat & Kemudahan Tampilan",
-                              "en": "Emergency Notification Refinement & Display Accessibility"
-                    },
-                    "details": {
-                              "id": [
-                                        "Notifikasi Tanggap Cepat: Panel peringatan bahaya kini dapat ditutup cepat dengan usapan jari ke atas jika situasi telah kondusif.",
-                                        "Penyesuaian Tampilan Nyaman: Opsi tema gelap dan terang dengan kontras tajam yang nyaman di mata saat evakuasi malam hari.",
-                                        "Penerobosan Mode Hening: Suara alarm darurat bencana tetap dapat berbunyi nyaring meskipun ponsel disetel dalam mode senyap."
-                              ],
-                              "en": [
-                                        "Quick Dismiss Notifications: Emergency alert panels can be dismissed swiftly with a swipe-up gesture.",
-                                        "Comfortable Display Themes: High-contrast Dark and Light themes for clear readability during night-time evacuations.",
-                                        "Silent Mode Override: Crucial disaster alerts sound audibly even if the mobile device is set to silent mode."
-                              ]
-                    }
-          },
-          {
-                    "version": "v1.0.0",
-                    "timestamp": {
-                              "id": "2026.10.02 (Jumat) 07:25 AM WITA",
-                              "en": "2026.10.02 (Fri) 07:25 AM WITA"
-                    },
-                    "title": {
-                              "id": "Peluncuran Sistem Pertahanan & Telemetri Mandiri A.T.L.A.S",
-                              "en": "Launch of A.T.L.A.S Multi-Threat Telemetry System"
-                    },
-                    "details": {
-                              "id": [
-                                        "Pendaftaran Identitas Warga Resmi: Pencatatan nomor identitas kependudukan yang aman untuk memastikan keabsahan data bantuan evakuasi.",
-                                        "Uji Coba Sirine Nyata: Fasilitas pengujian suara sirine bencana untuk memastikan ponsel warga siap berbunyi saat terjadi gempa dan tsunami.",
-                                        "Status Keselamatan Cepat: Tombol pilihan instan SAYA AMAN ✓ dan BUTUH BANTUAN DARURAT untuk melapor ke keluarga dan posko."
-                              ],
-                              "en": [
-                                        "Protected Citizen Identity Registration: Secure identification verifying users for authorized evacuation manifest coordination.",
-                                        "Live Siren Testing Pipeline: Sound verification ensuring mobile devices ring clearly during simulated emergency drills.",
-                                        "Rapid Safety Status: Instant toggle between I AM SAFE ✓ and NEED HELP for emergency reporting."
-                              ]
-                    }
-          },
-          {
-                    "version": "v0.9.8",
-                    "timestamp": {
-                              "id": "2026.09.25 (Jumat) 11:15 PM WITA",
-                              "en": "2026.09.25 (Fri) 11:15 PM WITA"
-                    },
-                    "title": {
-                              "id": "Sinkronisasi Posisi Real-Time & Penghemat Daya Baterai",
-                              "en": "Real-Time Location Synchronization & Battery Optimization"
-                    },
-                    "details": {
-                              "id": [
-                                        "Sinkronisasi Data Posisi Cepat: Memastikan perubahan koordinat lokasi terkirim cepat dengan konsumsi baterai yang sangat hemat.",
-                                        "Pemulihan Sesi Mandiri: Masuk kembali secara otomatis dengan identitas yang sama tanpa perlu mendaftar ulang jika aplikasi dibersihkan."
-                              ],
-                              "en": [
-                                        "Rapid Location Sync: Efficient coordinate telemetry transmission preserving device battery during field movement.",
-                                        "Smart Session Recovery: Reopening the app automatically restores identity without requiring redundant registration."
-                              ]
-                    }
-          },
-          {
-                    "version": "v0.9.7",
-                    "timestamp": {
-                              "id": "2026.09.21 (Senin) 02:40 PM WITA",
-                              "en": "2026.09.21 (Mon) 02:40 PM WITA"
-                    },
-                    "title": {
-                              "id": "Penyaringan Gangguan Sinyal Satelit & Peningkatan Akurasi",
-                              "en": "Satellite Signal Noise Filtering & Accuracy Enhancement"
-                    },
-                    "details": {
-                              "id": [
-                                        "Peredaman Akurasi Melompat: Meredam gangguan sinyal satelit di sekitar gedung bertingkat agar titik posisi pengguna tidak melompat.",
-                                        "Penguncian Titik Koordinat Nyata: Hanya memperbarui rute saat pengguna benar-benar berpindah posisi nyata di lapangan."
-                              ],
-                              "en": [
-                                        "Noise Damping: Filters urban multipath satellite interference to keep user marker coordinates stable.",
-                                        "True Movement Detection: Triggers route recomputation only upon genuine physical positional shifts."
-                              ]
-                    }
-          },
-          {
-                    "version": "v0.9.6",
-                    "timestamp": {
-                              "id": "2026.09.16 (Rabu) 10:50 AM WITA",
-                              "en": "2026.09.16 (Wed) 10:50 AM WITA"
-                    },
-                    "title": {
-                              "id": "Visualisasi Panduan Jalur Evakuasi & Deteksi Kedatangan",
-                              "en": "Evacuation Guidance Visualization & Safe Arrival Detection"
-                    },
-                    "details": {
-                              "id": [
-                                        "Garis Panduan Evakuasi Dinamis: Menampilkan garis bercahaya di jalan raya menuju shelter yang otomatis terpotong saat dilewati.",
-                                        "Deteksi Tiba di Lokasi Aman: Memberikan konfirmasi getaran sukses dan ringkasan evakuasi ketika pengguna telah sampai di shelter tujuan."
-                              ],
-                              "en": [
-                                        "Dynamic Path Guidance: Renders an active route guide along streets, dynamically advancing as users walk.",
-                                        "Safe Arrival Confirmation: Vibrates and displays an arrival summary modal once reaching the safe shelter radius."
-                              ]
-                    }
-          },
-          {
-                    "version": "v0.9.5",
-                    "timestamp": {
-                              "id": "2026.09.11 (Jumat) 05:15 PM WITA",
-                              "en": "2026.09.11 (Fri) 05:15 PM WITA"
-                    },
-                    "title": {
-                              "id": "Penghindaran Jalur Bahaya Pantai & Zona Rawan Bencana",
-                              "en": "Shoreline Hazard Avoidance & Disaster Risk Zone Bypassing"
-                    },
-                    "details": {
-                              "id": [
-                                        "Penghindaran Zona Merah Bahaya: Rute penyelamatan otomatis menjauhkan warga dari garis pantai Teluk Palu dan area genangan air.",
-                                        "Prioritas Jalur Menanjak: Menghitung jalur evakuasi yang secara bertahap membawa pengguna menuju dataran yang lebih tinggi."
-                              ],
-                              "en": [
-                                        "Red Zone Hazard Avoidance: Routing actively directs pedestrians away from the Palu Bay coastline and potential surge zones.",
-                                        "Elevated Path Prioritization: Prioritizes streets with positive incline leading toward high safe ground."
-                              ]
-                    }
-          },
-          {
-                    "version": "v0.9.0",
-                    "timestamp": {
-                              "id": "2026.08.29 (Sabtu) 08:20 AM WITA",
-                              "en": "2026.08.29 (Sat) 08:20 AM WITA"
-                    },
-                    "title": {
-                              "id": "Pemetaan Jaringan Jalan Raya Resmi Kota Palu",
-                              "en": "Official Road Network Graph Integration for Palu City"
-                    },
-                    "details": {
-                              "id": [
-                                        "Rute Berbasis Jalan Nyata: Navigasi evakuasi sepenuhnya mengikuti jalan raya resmi dan jembatan penyeberangan, bukan garis lurus melompati sungai.",
-                                        "Penyimpanan Jaringan Jalan Offline: Peta jalan raya tersimpan di dalam ponsel sehingga rute tetap bisa dihitung tanpa koneksi internet."
-                              ],
-                              "en": [
-                                        "True Street-Network Routing: Navigation strictly follows mapped roads and bridge crossings rather than straight lines across rivers.",
-                                        "Offline Road Graph Storage: Street network data is embedded locally for instant route calculation without data connections."
-                              ]
-                    }
-          },
-          {
-                    "version": "v0.8.0",
-                    "timestamp": {
-                              "id": "2026.07.24 (Jumat) 09:15 AM WITA",
-                              "en": "2026.07.24 (Fri) 09:15 AM WITA"
-                    },
-                    "title": {
-                              "id": "Perenderan Peta Cepat Tanpa Jeda & Rotasi 3D Halus",
-                              "en": "Hardware-Accelerated Fluid Map Rendering & 3D Compass Rotation"
-                    },
-                    "details": {
-                              "id": [
-                                        "Peta Halus Tanpa Patah-Patah: Menggunakan akselerasi grafis perangkat keras sehingga geser dan perbesaran peta terasa sangat ringan dan lancar.",
-                                        "Rotasi 3D Dinamis: Peta dapat diputar mengikuti arah hadap kompas pengguna di lapangan dengan mulus."
-                              ],
-                              "en": [
-                                        "Hardware-Accelerated Rendering: Ultra-smooth map interactions, eliminating visual lag during pan and zoom gestures.",
-                                        "Dynamic 3D Compass Rotation: Map rotates seamlessly in sync with the user's heading."
-                              ]
-                    }
-          },
-          {
-                    "version": "v0.7.5",
-                    "timestamp": {
-                              "id": "2026.06.18 (Kamis) 03:40 PM WITA",
-                              "en": "2026.06.18 (Thu) 03:40 PM WITA"
-                    },
-                    "title": {
-                              "id": "Pemberdayaan Chipset Sensor Satelit & Kelancaran Pelacakan",
-                              "en": "Direct Satellite Sensor Acquisition & Telemetry Optimization"
-                    },
-                    "details": {
-                              "id": [
-                                        "Penguncian Sinyal Satelit Langsung: Menghubungkan aplikasi langsung ke sensor satelit bawaan ponsel untuk mendapatkan koordinat pengguna yang akurat dan stabil.",
-                                        "Optimalisasi Kinerja dan Baterai: Menstabilkan proses pemantauan posisi agar aplikasi tetap lancar, tidak mudah terputus, dan hemat konsumsi baterai."
-                              ],
-                              "en": [
-                                        "Direct Satellite Sensor Interfacing: Interfacing directly with phone satellite sensors for stable and accurate positioning.",
-                                        "Performance & Battery Optimization: Stabilized position monitoring listeners for smooth tracking and minimal battery draw."
-                              ]
-                    }
-          },
-          {
-                    "version": "v0.6.0",
-                    "timestamp": {
-                              "id": "2026.04.22 (Rabu) 10:30 PM WITA",
-                              "en": "2026.04.22 (Wed) 10:30 PM WITA"
-                    },
-                    "title": {
-                              "id": "Sinkronisasi Telemetri Lintas Perangkat & Perbaikan Tampilan Peta",
-                              "en": "Cross-Device Telemetry Synchronization & Map Viewport Stabilization"
-                    },
-                    "details": {
-                              "id": [
-                                        "Perbaikan Tampilan Layar Peta: Memastikan peta langsung terbuka penuh dan tidak berlayar abu-abu saat pertama kali dijalankan di ponsel.",
-                                        "Penyaluran Status Darurat Seketika: Memastikan perubahan status keselamatan antar perangkat terkirim dan diterima secara langsung tanpa jeda."
-                              ],
-                              "en": [
-                                        "Map Display Optimization: Resolves grey blank viewport glitches ensuring maps open full-screen instantly on mobile devices.",
-                                        "Instant Emergency Status Broadcast: Real-time emergency state synchronization delivered across devices without delay."
-                              ]
-                    }
-          },
-          {
-                    "version": "v0.4.0",
-                    "timestamp": {
-                              "id": "2026.02.16 (Senin) 08:15 AM WITA",
-                              "en": "2026.02.16 (Mon) 08:15 AM WITA"
-                    },
-                    "title": {
-                              "id": "Penentuan Titik Kumpul Aman & Verifikasi Lapangan",
-                              "en": "Safe Assembly Shelter Calibration & Field Coordinates Logging"
-                    },
-                    "details": {
-                              "id": [
-                                        "Pemetaan Lokasi Pengungsian Aman: Memasukkan titik kumpul resmi seperti Lapangan Imanuel, Gelanggang Remaja, dan Kompas I ke dalam radar sistem.",
-                                        "Penghitungan Estimasi Jarak: Menghitung perkiraan jarak tempuh dari posisi pengguna ke tempat evakuasi yang dituju."
-                              ],
-                              "en": [
-                                        "Safe Shelter Geolocation Logging: Verified coordinates for official assembly grounds including Imanuel Field, Youth Arena, and Kompas I.",
-                                        "Distance Estimation: Computes approximate travel distance from user position to chosen evacuation grounds."
-                              ]
-                    }
-          },
-          {
-                    "version": "v0.2.0",
-                    "timestamp": {
-                              "id": "2025.11.26 (Rabu) 04:45 PM WITA",
-                              "en": "2025.11.26 (Wed) 04:45 PM WITA"
-                    },
-                    "title": {
-                              "id": "Uji Coba Rute Darat & Evaluasi Penghalang Muara Sungai",
-                              "en": "Ground Routing Trials & Palu River Natural Barrier Audit"
-                    },
-                    "details": {
-                              "id": [
-                                        "Audit Rintangan Lapangan: Menemukan dan mengatasi kelemahan rute lurus yang membelah pemukiman dan muara Sungai Palu yang tidak bisa diseberangi tanpa jembatan.",
-                                        "Uji Coba Sensor Lokasi: Menguji ketahanan sinyal penentu posisi di dalam maupun di luar ruangan."
-                              ],
-                              "en": [
-                                        "Natural Obstacle Audit: Identified navigation barriers such as river estuaries and impassable areas that require bridge routing.",
-                                        "Sensor Reliability Trials: Tested device location stability in both indoor and outdoor settings."
-                              ]
-                    }
-          },
-          {
-                    "version": "v0.1.0",
-                    "timestamp": {
-                              "id": "2025.09.18 (Kamis) 09:20 AM WITA",
-                              "en": "2025.09.18 (Thu) 09:20 AM WITA"
-                    },
-                    "title": {
-                              "id": "Awal Riset Lapangan & Perancangan Sistem Evakuasi Pesisir Palu",
-                              "en": "Field Research Inception & Palu Coastal Evacuation System Architecture"
-                    },
-                    "details": {
-                              "id": [
-                                        "Perancangan Sistem Penyelamatan Mandiri: Penyusunan cetak biru sistem navigasi penyelamatan diri warga pesisir Teluk Palu menghadapi ancaman tsunami.",
-                                        "Pendataan Titik Kumpul Aman: Pengumpulan koordinat ruang terbuka hijau, lapangan, dan gedung evakuasi vertikal di sekitar pesisir."
-                              ],
-                              "en": [
-                                        "Self-Evacuation System Architecture: Conceptual blueprint for real-time coastal tsunami evacuation navigation in Palu Bay.",
-                                        "Safe Assembly Zone Mapping: Documenting elevated open fields, parks, and vertical evacuation buildings."
-                              ]
-                    }
-          }
+                {
+                  "version": "v1.0.0",
+                  "timestamp": {
+                    "id": "2026.10.30 (Jumat) 08:00 AM WITA",
+                    "en": "2026.10.30 (Fri) 08:00 AM WITA"
+                  },
+                  "title": {
+                    "id": "Peluncuran Perdana Resmi A.T.L.A.S // (Sistem Pertahanan Sipil Mandiri)",
+                    "en": "Official Inaugural Release of A.T.L.A.S // (Autonomous Civil Defense System)"
+                  },
+                  "details": {
+                    "id": [
+                      "Penyelarasan & Penstabilan Mesin Lokasi Satelit (Sharelock Presisi Tinggi): Pelacakan posisi warga berstandar taktis dengan pembaruan seketika (0 milidetik jeda) untuk memastikan ketepatan koordinat perlindungan saat darurat.",
+                      "Pembukaan Akses Jalur Penyelamatan Mandiri & Penghindaran Zona Bahaya (ZRB): Jalur evakuasi mandiri dapat dipelajari sewaktu-waktu dan secara otomatis memandu masyarakat menjauhi garis pantai serta kawasan rawan terdampak.",
+                      "Ketahanan Siaran Darurat Otoritas & Mekanisme Luar Jaringan: Petunjuk keselamatan resmi dari Posko Komando tersinkronisasi persisten selama 7 hari dan tetap dapat diakses dengan aman tanpa bergantung kestabilan jaringan internet.",
+                      "Penyelarasan Bahasa Antarmuka & Validasi Identitas Sipil: Antarmuka yang bersih dan mudah dipahami seluruh kalangan masyarakat dengan dukungan pendaftaran nama kependudukan resmi serta pengujian nada sirine bahaya."
+                    ],
+                    "en": [
+                      "High-Precision Satellite Positioning Alignment (Tactical Sharelock Grade): Real-time location tracking with zero stale cache to guarantee pinpoint coordinate precision during emergency operations.",
+                      "Autonomous Evacuation Corridor Access & Hazard-Zone Avoidance: Citizen self-rescue routes accessible anytime, autonomously routing people away from shorelines and hazardous impact zones.",
+                      "Command Advisory Resilience & Autonomous Offline Data Storage: Official safety directives from the Command Center persist across 7 days and remain fully readable without cellular connection.",
+                      "Civil Interface Language Alignment & Verified Registry Onboarding: Clean, accessible interface with verified civil registry name validation and loud dual-tone emergency siren testing."
+                    ]
+                  }
+                }
               ].map(({ version, timestamp, title, details }) => {
                 const itemTimestamp = typeof timestamp === 'string' ? timestamp : (timestamp[lang] || timestamp.id)
                 const itemTitle = typeof title === 'string' ? title : (title[lang] || title.id)
@@ -2728,6 +2433,77 @@ export default function MenuPage({ onBack, onNavigateHistory, onCalibrateCompass
                   </div>
                 )
               })}
+            </div>
+          </div>
+        )}
+
+        {/* ══════════════════════════════════════════════════════════
+            VIEW: AUTHORITY (Struktur Kode & Peran Otoritas Resmi)
+        ══════════════════════════════════════════════════════════ */}
+        {view === 'authority' && (
+          <div className="p-4 space-y-4">
+            <div className="p-4 rounded-xl bg-[#0D121F] border border-amber-500/30 space-y-2 shadow-[0_0_20px_rgba(245,158,11,0.08)]">
+              <div className="flex items-center gap-2">
+                <Shield className="w-4 h-4 text-amber-400 shrink-0" />
+                <h3 className="text-xs font-bold text-amber-400 font-mono uppercase tracking-wider">
+                  {lang === 'id' ? 'HIERARKI OTORITAS & IDENTITAS SISTEM' : 'OFFICIAL SYSTEM AUTHORITY HIERARCHY'}
+                </h3>
+              </div>
+              <p className="text-xs text-slate-300 leading-relaxed font-sans">
+                {lang === 'id'
+                  ? 'Struktur hierarki komando penanggulangan darurat bencana dan hak akses terminal terdaftar pada ekosistem A.T.L.A.S.'
+                  : 'Emergency command chain of command and registered terminal credentials within the A.T.L.A.S ecosystem.'}
+              </p>
+            </div>
+
+            <div className="space-y-3">
+              {AUTHORITY_ROLES.map((role) => (
+                <div
+                  key={role.code}
+                  className="rounded-xl bg-[#0D121F] border border-[#1A2333] p-4 space-y-3 hover:border-slate-700 transition-colors"
+                >
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="space-y-1">
+                      <div className="flex items-center gap-2">
+                        <span
+                          className={`px-2.5 py-1 rounded text-xs font-mono font-black border ${role.bgBadge} ${role.borderBadge} ${role.textBadge}`}
+                        >
+                          {role.code}
+                        </span>
+                        <h4 className="text-sm font-bold text-white tracking-wide">
+                          {role.title}
+                        </h4>
+                      </div>
+                      <p className="text-[11px] font-mono text-slate-400">
+                        {role.rank}
+                      </p>
+                    </div>
+                  </div>
+
+                  <p className="text-xs text-slate-300 leading-relaxed font-sans">
+                    {role.desc}
+                  </p>
+
+                  <div className="grid grid-cols-1 gap-2 pt-1 font-sans">
+                    <div className="text-[11px] bg-black/40 border border-[#1A2333] p-2.5 rounded-lg space-y-1">
+                      <span className="text-slate-500 font-mono font-bold uppercase text-[9px] block tracking-wider">
+                        {lang === 'id' ? 'WILAYAH YURISDIKSI' : 'JURISDICTION'}
+                      </span>
+                      <span className="text-slate-200 block font-medium">
+                        {role.jurisdiction}
+                      </span>
+                    </div>
+                    <div className="text-[11px] bg-black/40 border border-[#1A2333] p-2.5 rounded-lg space-y-1">
+                      <span className="text-slate-500 font-mono font-bold uppercase text-[9px] block tracking-wider">
+                        {lang === 'id' ? 'WEWENANG & MANDAT' : 'AUTHORITY & MANDATE'}
+                      </span>
+                      <span className="text-slate-200 block font-medium">
+                        {role.authority}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              ))}
             </div>
           </div>
         )}

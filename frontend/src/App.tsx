@@ -44,6 +44,7 @@ import NavigatePage from "./components/pages/NavigatePage";
 import FamilyPage from "./components/pages/FamilyPage";
 import GuidesPage from "./components/pages/GuidesPage";
 import MenuPage, { LATEST_NEWS_VERSION } from "./components/pages/MenuPage";
+import LandingPage from "./components/pages/LandingPage";
 import { fetchLocationName, fetchIpLocation } from "./lib/geocode";
 import { useLanguage } from "./lib/i18n";
 import { useAegisSync, aegisApi } from "./lib/useAegisSync";
@@ -797,7 +798,19 @@ function App() {
       const isRealTsunami = localStorage.getItem("aegisRealTsunami") === "true";
       if (isSimulating || isRealTsunami) return "navigate";
     }
-    if (!isAdminURL) return "status";
+    if (!isAdminURL) {
+      if (typeof window !== "undefined") {
+        const isNative = Capacitor.isNativePlatform();
+        if (!isNative) {
+          const p = new URLSearchParams(window.location.search);
+          if (p.has("app") || window.location.hash === "#app") {
+            return "status";
+          }
+          return "landing";
+        }
+      }
+      return "status";
+    }
     const role = sessionStorage.getItem("aegisRole") as UserRole;
     return role === "user" ? "status" : "map";
   });
@@ -1237,8 +1250,8 @@ function App() {
 
   // â”€â”€ GPS â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   const startGpsTracking = useCallback(async () => {
-    // Admin dashboard tidak boleh meminta lokasi atau melacak GPS-nya sendiri
-    if (isAdminURL) return;
+    // Admin dashboard dan website landing page tidak boleh meminta lokasi atau melacak GPS
+    if (isAdminURL || activePage === "landing") return;
 
     // Clear any existing watch first to prevent duplicate watchers
     if (gpsWatchRef.current !== null) {
@@ -1643,9 +1656,9 @@ function App() {
     setGpsTracking(false);
   }, []);
 
-  // Auto-start GPS on load for all clients
+  // Auto-start GPS on load only for native mobile app (Capacitor), NEVER on web browser
   useEffect(() => {
-    if (settings.autoStartGPS && !gpsAutoStartedRef.current) {
+    if (Capacitor.isNativePlatform() && settings.autoStartGPS && !gpsAutoStartedRef.current) {
       gpsAutoStartedRef.current = true;
       const t = setTimeout(() => startGpsTracking(), 600);
       return () => clearTimeout(t);
@@ -2121,18 +2134,21 @@ function App() {
       }
     }).catch(() => {});
 
-    // Inisialisasi izin & pelacakan secara tertib agar tidak memicu race condition pada dialog Android
-    if (!isAdminURL) {
+    // Inisialisasi izin & pelacakan HANYA untuk aplikasi native Android (Capacitor)
+    // Website peramban TIDAK PERNAH secara otomatis meminta izin lokasi
+    if (!isAdminURL && Capacitor.isNativePlatform()) {
       setTimeout(() => {
         startGpsTracking();
       }, 700);
     }
 
-    // Izin notifikasi darurat dijalankan setelah inisialisasi awal
-    setTimeout(() => {
-      requestNotifPermission();
-      registerWebPush().catch(() => {});
-    }, 2500);
+    // Izin notifikasi darurat HANYA untuk aplikasi native Android (Capacitor)
+    if (Capacitor.isNativePlatform()) {
+      setTimeout(() => {
+        requestNotifPermission();
+        registerWebPush().catch(() => {});
+      }, 2500);
+    }
     // 4b. Load custom shelters dari Supabase & Road Network
     loadRoadNetwork().then(success => setNetworkFailed(!success));
     aegisApi.fetchCustomShelters().then(data => {
@@ -2241,6 +2257,12 @@ function App() {
 
   // â”€â”€ PUBLIC USER layout â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   // Pages use fixed inset-0 z-[1800]; nav uses fixed z-[1900]
+  if (activePage === "landing") {
+    return (
+      <LandingPage />
+    );
+  }
+
   if (userRole === "user") {
     return (
       <>

@@ -145,28 +145,43 @@ export default function ProfileModal({ isOpen, onClose, userName, userNik, termi
                     <span className={`text-xs font-black tracking-wider ${
                       isArchitect01 
                         ? 'text-amber-400 font-mono' 
-                        : (terminalId && terminalId.startsWith('COMMAND') ? 'text-nerv-orange font-mono' : (terminalId === 'FOREIGN CITIZEN' ? 'text-purple-300 font-mono' : 'text-nerv-cyan font-mono'))
+                        : (terminalId && (terminalId.startsWith('MAYOR') || terminalId.startsWith('SAR') || terminalId.startsWith('REGENT'))
+                            ? 'text-nerv-orange font-mono'
+                            : (terminalId === 'FOREIGN CITIZEN' || (typeof window !== 'undefined' && localStorage.getItem('atlas_citizenship') === 'WNA')
+                                ? 'text-purple-300 font-mono'
+                                : 'text-nerv-cyan font-mono'))
                     }`}>
                       {isArchitect01 
                         ? 'ARCHITECT 01 // PENGEMBANG' 
-                        : (terminalId && terminalId.startsWith('COMMAND')
-                            ? `${terminalId} // KOMANDO`
-                            : (terminalId === 'FOREIGN CITIZEN' ? 'FOREIGN CITIZEN' : 'CITIZEN'))}
+                        : (terminalId && (terminalId.startsWith('MAYOR') || terminalId.startsWith('SAR') || terminalId.startsWith('REGENT'))
+                            ? `${terminalId} // OTORITAS`
+                            : ((terminalId === 'FOREIGN CITIZEN' || (typeof window !== 'undefined' && localStorage.getItem('atlas_citizenship') === 'WNA'))
+                                ? 'FOREIGN CITIZEN'
+                                : 'CITIZEN'))}
                     </span>
                     <span className={`text-[8px] font-bold px-1.5 py-0.5 rounded uppercase font-mono ${
                       isArchitect01 
                         ? 'bg-amber-500/20 border border-amber-500/50 text-amber-300'
-                        : (terminalId && terminalId.startsWith('COMMAND')
+                        : (terminalId && (terminalId.startsWith('MAYOR') || terminalId.startsWith('SAR') || terminalId.startsWith('REGENT'))
                             ? 'bg-nerv-orange/20 border border-nerv-orange/50 text-nerv-orange'
-                            : (terminalId === 'FOREIGN CITIZEN' ? 'bg-purple-500/20 border border-purple-500/50 text-purple-300' : 'bg-nerv-cyan/20 border border-nerv-cyan/40 text-nerv-cyan'))
+                            : ((terminalId === 'FOREIGN CITIZEN' || (typeof window !== 'undefined' && localStorage.getItem('atlas_citizenship') === 'WNA'))
+                                ? 'bg-purple-500/20 border border-purple-500/50 text-purple-300'
+                                : 'bg-nerv-cyan/20 border border-nerv-cyan/40 text-nerv-cyan'))
                     }`}>
                       {isArchitect01 
                         ? (lang === 'id' ? 'DEVELOPER UTAMA' : 'LEAD ARCHITECT')
-                        : (terminalId && terminalId.startsWith('COMMAND')
-                            ? (lang === 'id' ? 'OPERATOR KOMANDO' : 'COMMAND OPERATOR')
-                            : (terminalId === 'FOREIGN CITIZEN' ? (lang === 'id' ? 'WARGA ASING (PASPOR)' : 'FOREIGN CITIZEN') : (lang === 'id' ? 'WARGA SIPIL' : 'CIVILIAN UNIT')))}
+                        : (terminalId && (terminalId.startsWith('MAYOR') || terminalId.startsWith('SAR') || terminalId.startsWith('REGENT'))
+                            ? (lang === 'id' ? 'PEJABAT KOMANDO' : 'COMMAND OFFICER')
+                            : ((terminalId === 'FOREIGN CITIZEN' || (typeof window !== 'undefined' && localStorage.getItem('atlas_citizenship') === 'WNA'))
+                                ? (lang === 'id' ? 'WARGA ASING (PASPOR)' : 'FOREIGN CITIZEN')
+                                : (lang === 'id' ? 'WARGA SIPIL' : 'CIVILIAN UNIT')))}
                     </span>
                   </div>
+                  {typeof window !== 'undefined' && localStorage.getItem('atlas_user_city') && (
+                    <p className="text-[9px] text-slate-400 font-mono mt-0.5">
+                      Wilayah: {localStorage.getItem('atlas_user_city')}
+                    </p>
+                  )}
                 </div>
 
                 <div className="text-right">
@@ -178,7 +193,7 @@ export default function ProfileModal({ isOpen, onClose, userName, userNik, termi
                 </div>
               </div>
 
-              {/* Node-01 / Architect Verification */}
+              {/* Node-01 / Authority Transfer */}
               {!isArchitect01 && (
                 <div className="pt-2 border-t border-white/5 flex items-center justify-between">
                   <span className="text-[9px] text-slate-500">
@@ -190,7 +205,7 @@ export default function ProfileModal({ isOpen, onClose, userName, userNik, termi
                       onClick={() => setShowClaimPin(true)}
                       className="text-[9px] font-mono text-nerv-orange hover:underline font-bold"
                     >
-                      {lang === 'id' ? '[ Verifikasi ARCHITECT / KOMANDO ]' : '[ Verify ARCHITECT / COMMAND ]'}
+                      {lang === 'id' ? '[ Verifikasi Otoritas Dinas ]' : '[ Verify Official Authority ]'}
                     </button>
                   ) : (
                     <div className="flex items-center gap-1.5">

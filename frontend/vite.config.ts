@@ -11,7 +11,8 @@ export default defineConfig({
   },
   server: {
     port: 5173,
-    host: '0.0.0.0',
+    strictPort: true,
+    host: 'localhost',
     allowedHosts: true,
     // Proxy /api/* to Express server in dev mode
     proxy: {

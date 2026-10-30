@@ -161,6 +161,21 @@ export const aegisApi = {
     });
     const { saveAdminBroadcast } = await import("./broadcastStorage");
     saveAdminBroadcast(broadcast);
+
+    // Persist to Supabase disaster_events so offline/newly installed apps receive active broadcasts
+    try {
+      await supabase.from("disaster_events").upsert({
+        id: `bc-${broadcast.id}`,
+        source: "ATLAS_COMMAND",
+        type: "broadcast",
+        title: broadcast.title,
+        location: broadcast.region,
+        payload: broadcast,
+        report_datetime: new Date(broadcast.timestamp).toISOString(),
+      });
+    } catch (e) {
+      console.warn("[AegisSync] Broadcast cloud persistence note:", e);
+    }
   },
 
   /** Admin: recall/delete active emergency broadcast */
@@ -172,6 +187,9 @@ export const aegisApi = {
     });
     const { removeAdminBroadcast } = await import("./broadcastStorage");
     removeAdminBroadcast(id);
+    try {
+      await supabase.from("disaster_events").delete().eq("id", `bc-${id}`);
+    } catch {}
   },
 
   /** Broadcast user location (Supabase Upsert & Broadcast) */
@@ -705,6 +723,29 @@ export function useAegisSync(onEvent: SyncEventHandler) {
         tsunami: state,
       });
     });
+
+    // Cloud Broadcast Sync: fetch active broadcasts for new installs / app restarts
+    try {
+      supabase
+        .from("disaster_events")
+        .select("payload")
+        .eq("source", "ATLAS_COMMAND")
+        .order("report_datetime", { ascending: false })
+        .limit(20)
+        .then(({ data }) => {
+          if (data && data.length > 0) {
+            import("./broadcastStorage").then(({ saveAdminBroadcast }) => {
+              const now = Date.now();
+              const sevenDaysMs = 7 * 24 * 60 * 60 * 1000;
+              data.forEach((row: any) => {
+                if (row.payload && (now - (row.payload.timestamp || now)) < sevenDaysMs) {
+                  saveAdminBroadcast(row.payload, false);
+                }
+              });
+            });
+          }
+        });
+    } catch {}
 
     return () => {
       listeners.delete(handler);

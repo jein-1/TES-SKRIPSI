@@ -808,9 +808,11 @@ export default function NavigatePage({
                     }}>
                       🏠
                     </div>
-                    <div className="mt-1 bg-black/85 text-[9px] font-mono font-bold text-white px-2 py-0.5 rounded border border-slate-700/80 whitespace-nowrap shadow-md pointer-events-none">
-                      {s.name}
-                    </div>
+                    {isSelected && (
+                      <div className="mt-1 bg-black/85 text-[9px] font-mono font-bold text-white px-2 py-0.5 rounded border border-slate-700/80 whitespace-nowrap shadow-md pointer-events-none z-30">
+                        {s.name}
+                      </div>
+                    )}
                   </div>
                 </MarkerContent>
               </MapMarker>
